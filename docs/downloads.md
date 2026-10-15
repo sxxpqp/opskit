@@ -39,8 +39,17 @@ macOS 可用 `shasum -a 256`，Windows PowerShell 可用 `Get-FileHash -Algorith
 ## 发布与维护
 
 - tag 发布时，工作流按实际版本生成主 / 备用下载表并加入 Release 说明。不会修改 Nexus 仓库设置，也不预先上传安装包。
-- 首页使用固定版本链接。更新首页版本时修改 `downloads.json` 的 `version`，运行 `python3 scripts/download_links.py --readme`；不要填写尚未发布完成的版本。
+- 正式 Release 发布成功后，工作流直接查询 GitHub 的最新已发布版本，更新 `downloads.json` 和 README 下载表，并提交到 main。较旧 tag 即使晚完成，也不会把首页降级为旧版本。
+- 首页直接指向 `/releases/download/<版本>/...`，不使用 Nexus 可能缓存的 `/releases/latest/download/...`。新版本是新地址，不会命中旧版本文件的缓存。
+- 页面已打开时不会实时变化，新版本发布后刷新仓库首页即可。已打开的历史 Release 始终下载其对应版本。
+- 自动更新失败时，Actions 会显示失败；可在修复后重新运行 `update-downloads` 作业。手动修复也可运行 `python3 scripts/download_links.py --tag <已发布版本> --readme --update-version`。
 - 可单独生成某个版本的下载表：`python3 scripts/download_links.py --tag v0.1.5`。
 - 使用固定版本而非 `latest`，避免代理缓存让主 / 备用入口对应不同版本。已有 Release 的说明不会自动改写；v0.1.5 已单独补充同版本备用下载表。
 
 当前已验证 v0.1.5 校验文件和 Release 配置模板可匿名下载，Linux amd64 安装包已实际下载并通过 SHA-256 校验。Nexus 是代理缓存，首次获取仍依赖上游；未缓存文件在上游不可达时可能下载失败，不能将它视作独立离线镜像。源码代理当前请求返回错误，因此首页模板备用链接使用已验证的 Release 代理路径。
+
+## “最新版本”与代理缓存
+
+最新指 GitHub 标记的最新正式 Release，构建通过并成功发布后才切换，不包括 PR 或 main 的临时构建。链接中的明确版本保证不因 Nexus 的 latest 路径缓存而下载到上一版本；相同版本仍可由 Nexus 缓存提供，这不会变成旧版本。不要覆盖已有版本的资产，修改后发布新 tag。
+
+此方案不修改 Nexus 缓存设置，不宣称每次下载都绕过缓存，也不依赖 `?timestamp=` 等查询参数。GitHub、Nexus、网络不可用时仍可能下载失败。

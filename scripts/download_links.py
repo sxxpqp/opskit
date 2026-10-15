@@ -33,7 +33,7 @@ def render(config, tag):
             lines.append(f'| {label} | {cpu} | [下载]({primary}{filename}) | [备用下载]({mirror}{filename}) |')
     lines += ['', f'校验文件：[GitHub]({primary}checksums.txt) · [Nexus]({mirror}checksums.txt)', '',
               f'配置模板：[GitHub]({primary}config.example.yaml) · [Nexus]({mirror}config.example.yaml)', '',
-              'Nexus 为上游代理缓存，首次请求需回源；不是独立备份。使用固定版本路径，避免 latest 缓存造成版本混淆。']
+              'Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首页链接随正式发布自动更新为最新版本的固定路径，避免 latest 缓存造成版本混淆。']
     return '\n'.join(lines) + '\n'
 
 
@@ -42,9 +42,16 @@ def main():
     parser.add_argument('--tag', help='override downloads.json version for a release')
     parser.add_argument('--output', type=Path, help='write Markdown to this file')
     parser.add_argument('--readme', action='store_true', help='update the marked README download table')
+    parser.add_argument('--update-version', action='store_true', help='persist the verified published version in downloads.json')
     args = parser.parse_args()
     config = json.loads((ROOT / 'downloads.json').read_text())
-    text = render(config, args.tag or config['version'])
+    tag = args.tag or config['version']
+    text = render(config, tag)
+    if args.update_version:
+        if not args.tag:
+            parser.error('--update-version requires --tag')
+        config['version'] = tag
+        (ROOT / 'downloads.json').write_text(json.dumps(config, indent=2, ensure_ascii=False) + '\n')
     if args.readme:
         path = ROOT / 'README.md'
         content = path.read_text()

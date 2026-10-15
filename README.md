@@ -88,7 +88,7 @@ chmod +x opskit
 
 **[下载最新版本](https://github.com/sxxpqp/opskit/releases/latest)** · [查看历史版本与更新说明](https://github.com/sxxpqp/opskit/releases)
 
-公开附件无需登录 GitHub，选好系统和 CPU 架构即可下载。GitHub 下载不便时，可使用下表的 **Nexus 备用下载**。
+公开附件无需登录 GitHub，选好系统和 CPU 架构即可下载。GitHub 下载不便时，可使用下表的 **Nexus 备用下载**。每次正式发布完成后，工作流自动将下表更新到 GitHub 标记的最新版本；使用版本专属地址，不经过 Nexus 的 latest 别名。
 
 <!-- DOWNLOAD_LINKS_START -->
 ### v0.1.5 下载：GitHub / Nexus 备用
@@ -108,7 +108,7 @@ chmod +x opskit
 
 配置模板：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/config.example.yaml) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/config.example.yaml)
 
-Nexus 为上游代理缓存，首次请求需回源；不是独立备份。使用固定版本路径，避免 latest 缓存造成版本混淆。
+Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首页链接随正式发布自动更新为最新版本的固定路径，避免 latest 缓存造成版本混淆。
 <!-- DOWNLOAD_LINKS_END -->
 
 这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。请使用上表同版本的 SHA-256 校验文件核对完整性。
@@ -235,7 +235,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
-| main（发布流程更新） | 新增 Nexus 代理备用下载，后续 Release 自动附带同版本主 / 备用链接 |
+| main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页随正式发布自动切换最新版本 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |
 | [v0.1.3](https://github.com/sxxpqp/opskit/releases/tag/v0.1.3) | 模板预填 kubeadm 证书路径，补充 MinIO/S3 字段说明与示例 |
