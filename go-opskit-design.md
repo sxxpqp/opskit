@@ -301,4 +301,4 @@ GitHub 发布工作流在实施时确定；代码检查与构建通过后才能�
 
 ## 13. 2026-10-15 实施补充
 
-GitHub 仓库：https://github.com/sxxpqp/opskit 。按阶段逐步完善，以 README 当前实现列表为准。首批支持 etcdctl snapshot save、S3 兼容上传与清单；etcd 不按 SQL 逻辑导出或额外 gzip。etcdutl 校验与隔离恢复演练仍需实测。交付范围扩为 Windows/Linux/macOS amd64、arm64；main 提交生成 Actions 安装包，v* 标签生成草稿 Release，正式发布由用户确认。
+GitHub 仓库：https://github.com/sxxpqp/opskit 。按阶段逐步完善，以 README 当前实现列表为准。首批支持 etcdctl snapshot save、S3 兼容上传与清单；etcd 不按 SQL 逻辑导出或额外 gzip。etcdutl 校验与隔离恢复演练仍需实测。交付范围扩为 Windows/Linux/macOS amd64、arm64；main 提交生成 Actions 安装包，v* 标签在检查与构建通过后自动发布公开 Release，按操作系统和架构提供下载附件。
