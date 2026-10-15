@@ -1,0 +1,5 @@
+{
+  "version": "v0.1.5",
+  "github_repository": "sxxpqp/opskit",
+  "nexus_release_base": "https://nexus.ihome.sxxpqp.top:8443/repository/raw-github"
+}

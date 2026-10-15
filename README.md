@@ -88,15 +88,30 @@ chmod +x opskit
 
 **[下载最新版本](https://github.com/sxxpqp/opskit/releases/latest)** · [查看历史版本与更新说明](https://github.com/sxxpqp/opskit/releases)
 
-公开附件无需登录 GitHub，选好系统和 CPU 架构即可下载。
+公开附件无需登录 GitHub，选好系统和 CPU 架构即可下载。GitHub 下载不便时，可使用下表的 **Nexus 备用下载**。
 
-| 系统 | x86_64 / amd64（Intel、AMD 64 位） | ARM64 / aarch64 |
-|---|---|---|
-| Windows | [下载 EXE](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_amd64.exe) | [下载 EXE](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_arm64.exe) |
-| Linux | [下载二进制](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64) | [下载二进制](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_arm64) |
-| macOS | [Intel 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_amd64) | [Apple 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_arm64) |
+<!-- DOWNLOAD_LINKS_START -->
+### v0.1.5 下载：GitHub / Nexus 备用
 
-这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
+同一行的主链接与备用链接指向同一版本。按系统和 CPU 架构下载，无需解压。
+
+| 系统 | CPU 架构 | GitHub | Nexus 备用 |
+|---|---|---|---|
+| Windows | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_windows_amd64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_windows_amd64.exe) |
+| Windows | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_windows_arm64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_windows_arm64.exe) |
+| Linux | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_linux_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_linux_amd64) |
+| Linux | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_linux_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_linux_arm64) |
+| macOS | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_darwin_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_darwin_amd64) |
+| macOS | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/opskit_darwin_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/opskit_darwin_arm64) |
+
+校验文件：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/checksums.txt) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/checksums.txt)
+
+配置模板：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.5/config.example.yaml) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.5/config.example.yaml)
+
+Nexus 为上游代理缓存，首次请求需回源；不是独立备份。使用固定版本路径，避免 latest 缓存造成版本混淆。
+<!-- DOWNLOAD_LINKS_END -->
+
+这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。请使用上表同版本的 SHA-256 校验文件核对完整性。
 
 ## 配置文件
 
@@ -214,10 +229,13 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 完整思路见 [设计文档](go-opskit-design.md)。设计文档描述目标，以上清单反映当前实现。
 
+备用地址在 [downloads.json](downloads.json) 集中配置，接入说明见 [Nexus 下载指南](docs/downloads.md)。
+
 ## 近期更新
 
 | 功能版本 | 变化 |
 |---|---|
+| main（发布流程更新） | 新增 Nexus 代理备用下载，后续 Release 自动附带同版本主 / 备用链接 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |
 | [v0.1.3](https://github.com/sxxpqp/opskit/releases/tag/v0.1.3) | 模板预填 kubeadm 证书路径，补充 MinIO/S3 字段说明与示例 |

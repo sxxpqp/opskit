@@ -12,3 +12,5 @@
 - 涉及配置时同步维护 config.example.yaml 和 docs 下的使用指南。
 
 功能版本记录使用实际标签；未通过发布流水线的版本不得宣称已发布。纯文档改动无需单独发布版本。只说明实际验证过的能力。
+
+发布功能版本时同步维护 downloads.json 中的首页下载版本，并运行 `python3 scripts/download_links.py --readme` 更新主/备用链接；Release 说明会使用实际 tag 生成对应链接。不得将代理缓存宣传为已独立镜像。

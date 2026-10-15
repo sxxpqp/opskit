@@ -54,13 +54,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: opskit-packages
           path: dist
+      - name: Generate primary and Nexus download links
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/download_links.py --tag "$TAG" --output /tmp/opskit-download-links.md
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" dist/* --verify-tag --generate-notes --title "$TAG"
+        run: gh release create "$TAG" dist/* --verify-tag --generate-notes --notes-file /tmp/opskit-download-links.md --title "$TAG"
