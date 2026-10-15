@@ -39,7 +39,7 @@ macOS 可用 `shasum -a 256`，Windows PowerShell 可用 `Get-FileHash -Algorith
 ## 发布与维护
 
 - tag 发布时，工作流按实际版本生成主 / 备用下载表并加入 Release 说明。不会修改 Nexus 仓库设置，也不预先上传安装包。
-- 正式 Release 发布成功后，工作流直接查询 GitHub 的最新已发布版本，更新 `downloads.json` 和 README 下载表，并提交到 main。较旧 tag 即使晚完成，也不会把首页降级为旧版本。
+- 正式 Release 发布成功后，工作流直接查询 GitHub 的最新已发布版本，更新 `downloads.json`，同步 README 顶部版本摘要、近期更新入口与下载表，并提交到 main。较旧 tag 即使晚完成，也不会把首页降级为旧版本。
 - 首页直接指向 `/releases/download/<版本>/...`，不使用 Nexus 可能缓存的 `/releases/latest/download/...`。新版本是新地址，不会命中旧版本文件的缓存。
 - 页面已打开时不会实时变化，新版本发布后刷新仓库首页即可。已打开的历史 Release 始终下载其对应版本。
 - 自动更新失败时，Actions 会显示失败；可在修复后重新运行 `update-downloads` 作业。手动修复也可运行 `python3 scripts/download_links.py --tag <已发布版本> --readme --update-version`。

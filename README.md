@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
-  集群健康检查 · MinIO / AWS 厂家配置 · 六种平台构建
+  集群健康检查 · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
 </p>
 
 <p align="center">
@@ -25,11 +25,19 @@
   <a href="https://github.com/sxxpqp/opskit/issues/new/choose">反馈与建议</a>
 </p>
 
+<!-- LATEST_RELEASE_START -->
+**当前最新正式版：[v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5)**
+
+新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum。
+
+→ [选择系统与架构下载](#下载) · [使用 Nexus 备用入口](#下载) · [查看近期更新](#近期更新)
+<!-- LATEST_RELEASE_END -->
+
 ## 为什么做 opskit
 
 备份 etcd、记录校验信息、再把文件传到对象存储，这些日常操作经常散落在不同脚本里。opskit 希望把它们收进一套清楚、可重复执行的命令中，让服务器、个人电脑和自动化任务使用同一个入口。
 
-项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。网络排查、更多数据库备份和保留策略将逐步加入。
+项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。安装包提供 GitHub 与 Nexus 双入口，首页版本摘要、近期更新入口和下载表随正式发布自动刷新。网络排查、更多数据库备份和保留策略将逐步加入。
 
 ## 现在能做什么
 
@@ -44,12 +52,13 @@
 | S3 上传 | 内置 Go SDK，支持配置凭据、环境变量或默认凭据链 |
 | 失败保留 | 上传失败仍保留完整本地快照，便于排查和重试 |
 | 跨平台交付 | Windows / Linux / macOS，amd64 与 arm64，直接下载可执行文件 |
+| 备用下载 | GitHub / Nexus 同版本双入口，发布成功后自动刷新首页版本与链接 |
 
 S3 兼容服务的后端能力需实际验证。etcd 备份需要单独安装匹配版本的 `etcdctl`；当前尚未完成真实环境的恢复验收。
 
 ## 快速上手
 
-以 Linux x86_64 为例，下载后运行；其他平台见下方下载表。
+以 Linux x86_64 为例，下载后运行；其他平台及 **Nexus 备用下载**见[下载表](#下载)。首页随正式发布切换版本，刷新页面后选择对应链接即可。
 
 ```sh
 curl -fL https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64 -o opskit
@@ -218,6 +227,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 - [x] S3 兼容上传与远端 metadata 验证
 - [x] S3 桶连通性与 etcd 集群成员 / 健康检查
 - [x] Windows / Linux / macOS 双架构构建与自动发布
+- [x] GitHub / Nexus 双下载入口，发布后自动同步首页版本与下载表
 - [x] 当前目录 YAML 配置、内置注释模板与命令行覆盖
 - [x] MinIO / AWS / custom 厂家选择及独立凭据
 - [ ] 真实 etcd / S3 集成测试与隔离恢复演练
@@ -235,7 +245,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
-| main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页随正式发布自动切换最新版本 |
+| main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |
 | [v0.1.3](https://github.com/sxxpqp/opskit/releases/tag/v0.1.3) | 模板预填 kubeadm 证书路径，补充 MinIO/S3 字段说明与示例 |

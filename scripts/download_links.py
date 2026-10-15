@@ -37,6 +37,36 @@ def render(config, tag):
     return '\n'.join(lines) + '\n'
 
 
+def update_homepage(content, config, tag, links):
+    before, separator, rest = content.partition(START)
+    _, end, after = rest.partition(END)
+    if not separator or not end:
+        raise ValueError('README download markers missing')
+    content = before + START + '\n' + links + END + after
+    release_url = f"https://github.com/{config['github_repository']}/releases/tag/{quote(tag)}"
+    history_header = '| 功能版本 | 变化 |\n|---|---|'
+    if history_header not in content:
+        raise ValueError('README release history table missing')
+    pattern = r'^\| \[' + re.escape(tag) + r'\]\([^)]*\) \| (.*?) \|$'
+    match = re.search(pattern, content, re.MULTILINE)
+    if match:
+        highlights = match.group(1)
+    else:
+        highlights = '新版本已发布，详细变化见对应 Release 说明'
+        content = content.replace(history_header,
+                                  history_header + f'\n| [{tag}]({release_url}) | {highlights} |', 1)
+    summary = (f'**当前最新正式版：[{tag}]({release_url})**\n\n'
+               f'{highlights}。\n\n'
+               '→ [选择系统与架构下载](#下载) · [使用 Nexus 备用入口](#下载) · '
+               '[查看近期更新](#近期更新)\n')
+    start, finish = '<!-- LATEST_RELEASE_START -->', '<!-- LATEST_RELEASE_END -->'
+    before, separator, rest = content.partition(start)
+    _, end, after = rest.partition(finish)
+    if not separator or not end:
+        raise ValueError('README latest release markers missing')
+    return before + start + '\n' + summary + finish + after
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tag', help='override downloads.json version for a release')
@@ -55,11 +85,7 @@ def main():
     if args.readme:
         path = ROOT / 'README.md'
         content = path.read_text()
-        before, separator, rest = content.partition(START)
-        _, end, after = rest.partition(END)
-        if not separator or not end:
-            raise ValueError('README download markers missing')
-        path.write_text(before + START + '\n' + text + END + after)
+        path.write_text(update_homepage(content, config, tag, text))
     elif args.output:
         args.output.write_text(text)
     else:
