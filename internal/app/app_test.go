@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv("OPSKIT_FAKE_ETCD") == "1" {
 		if os.Getenv("OPSKIT_FAKE_FAIL") == "1" {
+			fmt.Fprintln(os.Stderr, "sensitive-test-password=must-not-leak")
 			os.Exit(7)
 		}
 		if err := os.WriteFile(os.Args[len(os.Args)-1], []byte("snapshot-content"), 0600); err != nil {
@@ -99,4 +100,15 @@ func TestS3ConditionalAndVerification(t *testing.T) {
 	if err := s.upload(context.Background(), file, "wrong"); err == nil {
 		t.Fatal("verification mismatch accepted")
 	}
+}
+
+func TestBackupFailureDoesNotLeakEtcdStderr(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil { t.Fatal(err) }
+	t.Setenv("OPSKIT_FAKE_ETCD", "1")
+	t.Setenv("OPSKIT_FAKE_FAIL", "1")
+	var out bytes.Buffer
+	code, runErr := Run(context.Background(), []string{"etcd", "backup", "--etcdctl", exe, "--directory", t.TempDir()}, &out, &out, "test")
+	if code == 0 || runErr == nil { t.Fatalf("expected failure, got code=%d err=%v", code, runErr) }
+	if strings.Contains(out.String()+runErr.Error(), "sensitive-test-password") { t.Fatal("etcdctl stderr leaked into diagnostics") }
 }

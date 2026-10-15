@@ -173,9 +173,11 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	a = append(a, "snapshot", "save", partial)
 	cmd := exec.CommandContext(ctx, *binary, a...)
 	cmd.Stdout = diag
-	cmd.Stderr = diag
+	// etcdctl diagnostics can include credential-bearing endpoint URLs or user info.
+	// Do not forward raw stderr into logs or terminal output.
+	cmd.Stderr = io.Discard
 	if err = cmd.Run(); err != nil {
-		return taskError(ctx, fmt.Errorf("snapshot failed (partial retained at %s): %w", partial, err))
+		return taskError(ctx, fmt.Errorf("snapshot failed (partial retained at %s); check etcd connectivity, TLS credentials and permissions", partial))
 	}
 	if err = os.Chmod(partial, 0600); err != nil {
 		return 1, err
