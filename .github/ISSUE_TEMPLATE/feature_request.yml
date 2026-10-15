@@ -1,0 +1,22 @@
+name: 功能建议
+description: 分享真实场景，帮助确定迭代方向。
+title: '[Feature] '
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景与问题
+      description: 你正在做什么，现有方式遇到了什么困难？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+      description: 可以提供命令示例或预期输出，请勿包含凭据。
+    validations:
+      required: true
+  - type: textarea
+    id: alternative
+    attributes:
+      label: 当前解决方式（可选）

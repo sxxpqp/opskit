@@ -1,0 +1,30 @@
+name: Bug 报告
+description: 提供复现步骤，帮助定位问题。
+title: '[Bug] '
+body:
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: opskit 版本、操作系统、CPU 架构；相关 etcdctl / S3 服务版本。
+      placeholder: opskit v0.1.1 / Ubuntu / amd64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤与命令
+      description: 请移除密码、密钥和业务数据。
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志（可选）
+      render: text

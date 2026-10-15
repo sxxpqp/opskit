@@ -1,10 +1,66 @@
-# opskit
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="opskit：运维工具，随取随用" width="100%">
+</p>
 
-逐步完善的 Go 运维工具箱。首批实现 etcd 快照备份和 S3 兼容存储上传，支持 Windows、Linux、macOS 的 amd64 / arm64。
+<p align="center">
+  <a href="https://github.com/sxxpqp/opskit/actions/workflows/ci.yml"><img src="https://github.com/sxxpqp/opskit/actions/workflows/ci.yml/badge.svg" alt="Build and tests"></a>
+  <a href="https://github.com/sxxpqp/opskit/releases/latest"><img src="https://img.shields.io/github/v/release/sxxpqp/opskit" alt="Latest release"></a>
+  <a href="https://github.com/sxxpqp/opskit/releases"><img src="https://img.shields.io/github/downloads/sxxpqp/opskit/total" alt="Release downloads"></a>
+  <a href="https://github.com/sxxpqp/opskit/stargazers"><img src="https://img.shields.io/github/stars/sxxpqp/opskit?style=flat" alt="GitHub stars"></a>
+</p>
 
-## 安装与构建
+<p align="center">
+  <strong>一个 Go 运维工具箱，从 etcd 备份到 S3 归档。</strong><br>
+  下载即用 · 六种平台构建 · 本地备份可追踪
+</p>
 
-直接在 [最新版本](https://github.com/sxxpqp/opskit/releases/latest) 下载，无需登录 GitHub；在 [全部版本](https://github.com/sxxpqp/opskit/releases) 选择历史版本，展开 Assets 下载对应安装包。
+<p align="center">
+  <a href="#快速上手">快速上手</a> ·
+  <a href="#下载">下载</a> ·
+  <a href="#etcd-备份">使用指南</a> ·
+  <a href="#路线图">路线图</a> ·
+  <a href="https://github.com/sxxpqp/opskit/issues/new/choose">反馈与建议</a>
+</p>
+
+## 为什么做 opskit
+
+备份 etcd、记录校验信息、再把文件传到对象存储，这些日常操作经常散落在不同脚本里。opskit 希望把它们收进一套清楚、可重复执行的命令中，让服务器、个人电脑和自动化任务使用同一个入口。
+
+项目正在早期迭代，当前重点是 **etcd 快照与 S3 上传**。网络排查、更多数据库备份和保留策略将逐步加入。
+
+## 现在能做什么
+
+| 能力 | 当前行为 |
+|---|---|
+| etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
+| 备份清单 | 为每次任务生成独立目录，记录文件大小、SHA-256 和上传状态 |
+| S3 上传 | 内置 Go SDK，支持自定义 endpoint、region 和 path-style |
+| 失败保留 | 上传失败仍保留完整本地快照，便于排查和重试 |
+| 跨平台交付 | Windows / Linux / macOS，amd64 与 arm64，直接下载可执行文件 |
+
+S3 兼容服务的后端能力需实际验证。etcd 备份需要单独安装匹配版本的 `etcdctl`；当前尚未完成真实环境的恢复验收。
+
+## 快速上手
+
+以 Linux x86_64 为例，下载后运行；其他平台见下方下载表。
+
+```sh
+curl -fL https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64 -o opskit
+chmod +x opskit
+./opskit version
+./opskit etcd backup --help
+
+# 本地开发环境示例：先安装 etcdctl，并确认 etcd 已在该地址运行
+./opskit etcd backup --endpoint http://127.0.0.1:2379 --directory ./backups
+```
+
+生产环境的 TLS 连接和 S3 上传示例见下文。下载文件可先按 Release 附带的 `checksums.txt` 校验。
+
+## 下载
+
+**[下载最新版本](https://github.com/sxxpqp/opskit/releases/latest)** · [查看历史版本与更新说明](https://github.com/sxxpqp/opskit/releases)
+
+公开附件无需登录 GitHub，选好系统和 CPU 架构即可下载。
 
 | 系统 | x86_64 / amd64（Intel、AMD 64 位） | ARM64 / aarch64 |
 |---|---|---|
@@ -14,28 +70,6 @@
 
 这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
 
-每次 main 提交自动测试并打包，开发包位于 Actions 的 `opskit-packages`。维护者推送 `v*` 标签后，三平台测试与六架构构建全部通过才自动发布公开 Release，安装包分别作为附件提供。
-
-### 发布版本
-
-提交代码后创建并推送新标签，即可自动构建并公开发布。标签必须以 `v` 开头，且指向包含此工作流的提交；无需在网页手动创建 Release。
-
-```sh
-git tag v0.1.2
-git push origin v0.1.2
-```
-
-仅在本地创建标签不会触发。每个版本使用新标签，已有版本不重复发布。
-
-### 从源码构建
-
-```sh
-go build -o opskit ./cmd/opskit
-./opskit version
-./opskit etcd backup --help
-```
-
-Go 版本见 go.mod。二进制内置 S3 SDK；etcd 备份需另行安装与服务端匹配的 `etcdctl`，恢复和结构校验使用 `etcdutl`。
 
 ## etcd 备份
 
@@ -73,15 +107,46 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 快照流程依据 [etcd 官方恢复文档](https://etcd.io/docs/v3.6/op-guide/recovery/)。本项目尚未完成真实 etcd/MinIO 环境的恢复验收，生产使用前应进行恢复演练并核对业务数据。
 
-## 开发与迭代
+## 路线图
+
+下面是演进方向，未勾选的功能尚未实现。欢迎在 Issue 中分享使用场景，帮助确定优先级。
+
+- [x] etcd 快照、SHA-256 清单、失败保留
+- [x] S3 兼容上传与远端 metadata 验证
+- [x] Windows / Linux / macOS 双架构构建与自动发布
+- [ ] 真实 etcd / S3 集成测试与隔离恢复演练
+- [ ] 配置文件与备份保留策略
+- [ ] S3 下载、列举与内容回读校验
+- [ ] MySQL / PostgreSQL 逻辑备份
+- [ ] TCP / DNS / HTTP 下载 / ICMP 网络排查
+- [ ] Linux ss / netstat 连接查看
+
+完整思路见 [设计文档](go-opskit-design.md)。设计文档描述目标，以上清单反映当前实现。
+
+## 参与项目
+
+如果 opskit 对你有帮助，欢迎点个 **Star**，也欢迎通过 **Watch → Releases** 关注新版本。
+
+更期待你带着实际问题参与：[报告 Bug](https://github.com/sxxpqp/opskit/issues/new?template=bug_report.yml)、[提出需求](https://github.com/sxxpqp/opskit/issues/new?template=feature_request.yml)，或提交一个小而清晰的 PR。反馈时请注明系统、架构、工具版本和复现步骤，移除密码、密钥与业务数据。
+
+开发与提交方式见 [贡献指南](CONTRIBUTING.md)。
+
+## 本地开发与发布
+
+Go 版本见 [go.mod](go.mod)。
 
 ```sh
+go build -o opskit ./cmd/opskit
 go test ./...
 go test -race ./...
 go vet ./...
 ```
 
-- 已实现：etcd 快照、SHA-256 清单、S3 上传、三平台六架构自动打包。
-- 后续：配置文件、TCP/DNS/wget/ping、Linux ss/netstat、MySQL/PostgreSQL 备份、S3 下载/列举、备份保留策略、真实集成恢复测试。
+每次 main 提交自动测试并构建，开发产物位于 Actions 的 `opskit-packages`。创建并推送新的 `v*` 标签后，三平台测试与六架构构建全部通过才自动发布公开 Release：
 
-完整规划见 [设计文档](go-opskit-design.md)。设计文档是目标规划，README 的进度代表当前实现。
+```sh
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+仅在本地创建标签不会触发。每个版本使用新标签，已有版本不重复发布。
