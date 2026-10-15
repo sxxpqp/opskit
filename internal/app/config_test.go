@@ -101,3 +101,62 @@ func TestInitAndDefaultConfig(t *testing.T) {
 		t.Fatal("help requires valid config")
 	}
 }
+
+func TestProviderSelection(t *testing.T) {
+	for _, provider := range []string{"minio", "aws", "custom"} {
+		t.Run(provider, func(t *testing.T) {
+			body := "schema_version: 1\ns3:\n  provider: " + provider + "\n  minio:\n    bucket: minio-bucket\n    endpoint: https://minio.example.com\n    access_key: minio-access\n    secret_key: minio-secret\n  aws:\n    bucket: aws-bucket\n  custom:\n    bucket: custom-bucket\n    endpoint: https://custom.example.com\n"
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			f := flag.NewFlagSet("test", flag.ContinueOnError)
+			var s storage
+			s.flags(f)
+			if err := loadConfig(path, true, f, &s); err != nil {
+				t.Fatal(err)
+			}
+			if s.bucket != provider+"-bucket" || s.region != "us-east-1" || s.pathStyle != (provider != "aws") {
+				t.Fatalf("wrong provider values: bucket=%s region=%s pathStyle=%v", s.bucket, s.region, s.pathStyle)
+			}
+			if provider == "minio" {
+				if s.accessKey != "minio-access" || s.secretKey != "minio-secret" {
+					t.Fatal("selected credentials missing")
+				}
+			} else if s.accessKey != "" || s.secretKey != "" {
+				t.Fatal("unselected credentials leaked")
+			}
+			if err := f.Parse([]string{"--bucket=override", "--path-style=false"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := loadConfig(path, true, f, &s); err != nil {
+				t.Fatal(err)
+			}
+			if s.bucket != "override" || s.pathStyle {
+				t.Fatal("CLI overrides ignored")
+			}
+		})
+	}
+}
+func TestProviderErrors(t *testing.T) {
+	for _, body := range []string{
+		"s3:\n  provider: typo\n",
+		"s3:\n  provider: minio\n",
+		"s3:\n  minio: {}\n",
+		"s3:\n  provider: minio\n  bucket: mixed\n  minio: {}\n",
+	} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		os.WriteFile(path, []byte("schema_version: 1\n"+body), 0600)
+		if err := loadConfig(path, true, flag.NewFlagSet("test", flag.ContinueOnError)); err == nil {
+			t.Fatal("invalid provider configuration accepted")
+		}
+	}
+	for _, block := range []string{"bucket: backup", "bucket: backup\n    endpoint: https://example.com\n    access_key: incomplete"} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		os.WriteFile(path, []byte("schema_version: 1\ns3:\n  provider: minio\n  minio:\n    "+block+"\n"), 0600)
+		var out bytes.Buffer
+		if code, err := Run(context.Background(), []string{"etcd", "backup", "--config", path}, &out, &out, "test"); code != 2 || err == nil {
+			t.Fatalf("must fail before snapshot: %d %v", code, err)
+		}
+	}
+}

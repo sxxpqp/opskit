@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -32,8 +33,9 @@ type Manifest struct {
 }
 
 type storage struct {
-	bucket, key, endpoint, region string
-	pathStyle                     bool
+	bucket, key, endpoint, region                string
+	provider, accessKey, secretKey, sessionToken string
+	pathStyle                                    bool
 }
 
 func (s *storage) flags(f *flag.FlagSet) {
@@ -90,7 +92,7 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 			requiredConfig = true
 		}
 	})
-	if err := loadConfig(*configPath, requiredConfig, f); err != nil {
+	if err := loadConfig(*configPath, requiredConfig, f, &s); err != nil {
 		return 2, err
 	}
 	if *timeout <= 0 {
@@ -98,6 +100,14 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	}
 	if (s.key != "" || s.endpoint != "") && s.bucket == "" {
 		return 2, errors.New("S3 options require --bucket")
+	}
+	if s.bucket != "" {
+		if (s.provider == "minio" || s.provider == "custom") && s.endpoint == "" {
+			return 2, fmt.Errorf("s3.%s.endpoint is required when bucket is set", s.provider)
+		}
+		if (s.accessKey == "") != (s.secretKey == "") || (s.sessionToken != "" && s.accessKey == "") {
+			return 2, errors.New("S3 access_key and secret_key must be provided together; session_token requires both")
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
@@ -238,7 +248,11 @@ func writeManifest(path string, m Manifest) error {
 	return os.Rename(temp.Name(), path)
 }
 func (s storage) upload(ctx context.Context, path, checksum string) error {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(s.region))
+	options := []func(*config.LoadOptions) error{config.WithRegion(s.region)}
+	if s.accessKey != "" {
+		options = append(options, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.accessKey, s.secretKey, s.sessionToken)))
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, options...)
 	if err != nil {
 		return err
 	}

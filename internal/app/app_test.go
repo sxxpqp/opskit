@@ -71,6 +71,9 @@ func TestS3ConditionalAndVerification(t *testing.T) {
 	os.WriteFile(file, []byte("hello"), 0600)
 	m, _ := inspect(file)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Authorization"), "Credential=config-access/") {
+			t.Error("configured credentials did not override environment")
+		}
 		switch r.Method {
 		case "PUT":
 			if r.Header.Get("If-None-Match") != "*" {
@@ -85,7 +88,7 @@ func TestS3ConditionalAndVerification(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	s := storage{bucket: "test", key: "test", endpoint: server.URL, region: "us-east-1", pathStyle: true}
+	s := storage{bucket: "test", key: "test", endpoint: server.URL, region: "us-east-1", pathStyle: true, accessKey: "config-access", secretKey: "config-secret"}
 	if err := s.upload(context.Background(), file, m.SHA256); err != nil {
 		t.Fatal(err)
 	}

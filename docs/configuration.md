@@ -32,16 +32,22 @@ s3:
 
 ## 上传到 MinIO
 
-保留上方 `etcd` 配置，将模板的 `s3` 节修改为：
+将 `s3.provider` 设为 `minio`，只填写 `s3.minio` 的空项，其余厂家保持模板原样：
 
 ```yaml
 s3:
-  bucket: k8s-backups
-  endpoint: https://minio.example.com:9000
-  region: us-east-1
-  path_style: true
-  key: ""
+  provider: minio
+  minio:
+    endpoint: https://minio.example.com:9000
+    bucket: k8s-backups
+    access_key: "replace-with-minio-access-key"
+    secret_key: "replace-with-minio-secret-key"
+    region: us-east-1
+    path_style: true
+    key: ""
 ```
+
+本地 YAML 填写凭据后会优先使用它们；不想在文件中存放凭据时，将 `access_key`、`secret_key`、`session_token` 都留空，再使用下方环境变量方式。
 
 域名、端口与桶名是示例，需替换成实际环境；endpoint 必须是 S3 API 入口。桶需提前创建。将 MinIO 服务账号凭据传给 AWS SDK：
 
@@ -62,7 +68,7 @@ Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue
 .\opskit.exe etcd backup
 ```
 
-Windows 上使用时要将 etcd endpoint 与证书路径改为实际可用值。S3 凭据通过 [AWS SDK 默认凭据链](https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html) 读取；也可使用共享凭据配置或工作负载角色。不要把占位符当成真实凭据；YAML 当前没有 `access_key` / `secret_key` 字段，也不会展开 `${AWS_ACCESS_KEY_ID}`。
+Windows 上使用时要将 etcd endpoint 与证书路径改为实际可用值。S3 凭据通过 [AWS SDK 默认凭据链](https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html) 读取；也可使用共享凭据配置或工作负载角色。不要把占位符当成真实凭据；所选厂家配置块支持 `access_key` / `secret_key`，但不会展开 `${AWS_ACCESS_KEY_ID}`；请填实际值或留空使用环境凭据。
 
 ## 三种“key”分别是什么
 
@@ -70,7 +76,7 @@ Windows 上使用时要将 etcd endpoint 与证书路径改为实际可用值。
 |---|---|---|
 | `etcd.key_file` | etcd TLS 客户端证书的私钥文件路径 | YAML 或 `--key-file` |
 | Access Key / Secret Key | 对象存储账号的访问凭据 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
-| `s3.key` | 桶内对象的完整名称 | YAML 或 `--key` |
+| `s3.minio.key` / `s3.aws.key` | 桶内对象的完整名称 | 所选厂家块或 `--key` |
 
 例如桶为 `k8s-backups`，对象 key 为 `clusters/prod/snapshot.db`，其对象位置可表示为 `s3://k8s-backups/clusters/prod/snapshot.db`。但 **key 字段只填 `clusters/prod/snapshot.db`**。
 
@@ -92,15 +98,19 @@ k8s-backups（bucket）
 
 ## AWS S3
 
-将 `s3` 节改为桶所在区域，endpoint 通常留空：
+将 `s3.provider` 改为 `aws`，只修改 `s3.aws` 的桶与所在区域，endpoint 通常留空：
 
 ```yaml
 s3:
-  bucket: replace-with-your-bucket
-  endpoint: ""
-  region: ap-southeast-1
-  path_style: false
-  key: ""
+  provider: aws
+  aws:
+    bucket: replace-with-your-bucket
+    region: ap-southeast-1
+    endpoint: ""
+    path_style: false
+    access_key: ""
+    secret_key: ""
+    key: ""
 ```
 
 临时凭据需同时提供匹配的 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_SESSION_TOKEN`。上传账号需具备对象写入、HEAD 查询以及分段上传失败时的清理权限；后端必须支持条件写入。opskit 不创建桶、不修改桶权限。
@@ -118,3 +128,9 @@ s3:
 | S3 私有 CA 不受信任 | 将 CA 安装到运行机器的系统信任库；当前未提供 S3 自定义 CA 配置字段 |
 
 上传后 HEAD 比对大小与 SHA-256 metadata，不能替代内容回读校验或恢复演练。
+
+## 厂家选择与旧配置兼容
+
+`provider` 支持 `minio`、`aws`、`custom`，只加载对应配置块，不回退到其他厂家。未填写 region 时默认 `us-east-1`；MinIO/custom 默认 path-style，AWS 默认虚拟主机方式。MinIO/custom 在启用上传时必须有 endpoint。其他 S3 厂家可使用 `custom`，按其文档设置 endpoint、region、path_style，兼容性仍需实际验证。
+
+旧版平铺的 `s3.bucket` / `s3.endpoint` 等仍可使用，但不能与 `provider` 混用。迁移时将原字段移入对应厂家块，再设置 `provider`。已有 opskit.yaml 不会被自动覆盖，可用 `opskit config init --config opskit.new.yaml` 生成新模板对照迁移。

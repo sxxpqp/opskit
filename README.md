@@ -91,7 +91,7 @@ chmod +x opskit
 - 默认文件不存在时仍可使用命令行参数；使用 `--config` 显式指定的文件不存在则报错。
 - 配置文件中的相对路径按配置文件所在目录解析；命令行中的相对路径按工作目录解析。
 - 配置拒绝未知字段、重复字段、多个 YAML 文档及无效超时，帮助尽早发现拼写错误。
-- `config init` 不覆盖已有文件。`opskit.yaml` 已加入 `.gitignore`；密码和访问密钥仍通过环境变量或 SDK 凭据链传入。
+- `config init` 不覆盖已有文件。`opskit.yaml` 已加入 `.gitignore`；访问密钥可配置在所选厂家块，也可通过环境变量或 SDK 凭据链传入；请勿提交真实凭据。
 
 ```sh
 # 生成模板到指定位置（父目录需已存在）
@@ -104,7 +104,7 @@ chmod +x opskit
 ./opskit s3 upload --config ./staging.yaml --key manual/snapshot.db ./snapshot.db
 ```
 
-填写 `s3.bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请核对模板地址与证书路径；S3 访问凭据通过 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` 提供，`s3.key` 是桶内文件名，二者不同。
+通过 `s3.provider` 选择 `minio`、`aws` 或 `custom`，只需修改对应配置块。填写所选块的 `bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请核对模板地址与证书路径；访问凭据可填在所选块的 `access_key` / `secret_key`，或将它们留空，使用 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`。块内的 `key` 是桶内文件名，二者不同。
 
 ## etcd 备份
 
