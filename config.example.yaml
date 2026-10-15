@@ -1,0 +1,26 @@
+# 复制为当前工作目录的 opskit.yaml，或执行 opskit config init。
+# 命令行参数覆盖配置；相对路径以配置文件所在目录为基准。
+# 密码和 S3 密钥请使用环境变量，不要写在此文件中。
+schema_version: 1
+timeout: 1h
+
+etcd:
+  # 请替换为实际地址；TLS 示例：https://127.0.0.1:2379
+  endpoint: http://127.0.0.1:2379
+  directory: ./data/backups/etcd
+  etcdctl: etcdctl
+  # cacert: ./certs/ca.crt
+  # cert: ./certs/client.crt
+  # key_file: ./certs/client.key
+  # 认证可使用 ETCDCTL_USER 环境变量。
+
+s3:
+  # 留空 bucket 仅备份到本地；填写后 etcd backup 自动上传。
+  bucket: ""
+  endpoint: ""
+  region: us-east-1
+  path_style: false
+  # key 留空时，etcd 备份生成唯一 key；独立上传使用 --key 指定。
+  key: ""
+  # 凭据：AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY、AWS_SESSION_TOKEN，
+  # 或使用 AWS SDK 默认凭据链（例如工作负载角色）。

@@ -65,9 +65,9 @@ opskit s3 ls backup-store --prefix mysql-prod/
 
 ## 4. 配置设计
 
-默认查找顺序：`--config` → `OPSKIT_CONFIG` → 当前目录 `config/config.yaml` → 可执行文件目录 `config/config.yaml`。使用首个命中的配置，不自动合并多个文件。显式指定但不存在的文件直接报错。纯网络命令不要求配置文件存在。
+当前实现默认加载当前工作目录 `opskit.yaml`；命令可用 `--config` 显式指定其他路径。不自动搜索可执行文件目录或合并配置。默认文件不存在可仅通过命令行运行；显式指定的文件缺失直接报错。命令行参数优先于配置，配置优先于内置默认值。
 
-路径字段相对所加载配置文件所在目录解析。命令参数覆盖配置项；凭据使用显式 `*_env` 或 `*_file` 引用，未定义的环境变量直接报错，不作为空密码继续执行。环境变量并不自动覆盖任意字段。
+`opskit config init` 从二进制内置模板生成带注释的配置，不覆盖已有文件；同一模板 `config.example.yaml` 随 Release 分发。相对路径字段按所加载配置文件所在目录解析；命令行路径按工作目录解析。当前已实现 schema_version、timeout、etcd、s3 字段；以仓库模板为准，以下多目标配置结构仍为后续设计。
 
 ```yaml
 schema_version: 1

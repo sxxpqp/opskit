@@ -46,7 +46,7 @@ func (s *storage) flags(f *flag.FlagSet) {
 
 func Run(ctx context.Context, args []string, out, diag io.Writer, version string) (int, error) {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "opskit version | etcd backup [flags] | s3 upload [flags] FILE\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
+		fmt.Fprintln(out, "opskit version | config init | etcd backup [flags] | s3 upload [flags] FILE\nDefault config: ./opskit.yaml; override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
 		return 0, nil
 	}
 	if args[0] == "version" {
@@ -57,11 +57,15 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 		return 2, errors.New("expected etcd backup or s3 upload")
 	}
 	command := strings.Join(args[:2], " ")
+	if command == "config init" {
+		return initConfig(args[2:], out, diag)
+	}
 	if command != "etcd backup" && command != "s3 upload" {
 		return 2, fmt.Errorf("unknown command %q", command)
 	}
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
 	f.SetOutput(diag)
+	configPath := f.String("config", "opskit.yaml", "configuration file (default: current directory)")
 	var s storage
 	s.flags(f)
 	timeout := f.Duration("timeout", time.Hour, "total task timeout")
@@ -78,6 +82,15 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
 		}
+		return 2, err
+	}
+	requiredConfig := false
+	f.Visit(func(v *flag.Flag) {
+		if v.Name == "config" {
+			requiredConfig = true
+		}
+	})
+	if err := loadConfig(*configPath, requiredConfig, f); err != nil {
 		return 2, err
 	}
 	if *timeout <= 0 {

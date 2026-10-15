@@ -17,6 +17,7 @@
 <p align="center">
   <a href="#快速上手">快速上手</a> ·
   <a href="#下载">下载</a> ·
+  <a href="#配置文件">配置文件</a> ·
   <a href="#etcd-备份">使用指南</a> ·
   <a href="#路线图">路线图</a> ·
   <a href="https://github.com/sxxpqp/opskit/issues/new/choose">反馈与建议</a>
@@ -33,6 +34,7 @@
 | 能力 | 当前行为 |
 |---|---|
 | etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
+| 当前目录配置 | 自动加载 `./opskit.yaml`，内置模板，一条命令生成 |
 | 备份清单 | 为每次任务生成独立目录，记录文件大小、SHA-256 和上传状态 |
 | S3 上传 | 内置 Go SDK，支持自定义 endpoint、region 和 path-style |
 | 失败保留 | 上传失败仍保留完整本地快照，便于排查和重试 |
@@ -70,6 +72,39 @@ chmod +x opskit
 
 这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
 
+
+## 配置文件
+
+在准备运行命令的目录生成配置模板：
+
+```sh
+./opskit config init
+# 编辑当前目录生成的 opskit.yaml，然后运行：
+./opskit etcd backup
+```
+
+模板包含 etcd 地址、备份目录、TLS 证书路径、S3 存储与超时设置，并附有注释。也可查看仓库的 [配置模板](config.example.yaml)，或从 [最新版本附件](https://github.com/sxxpqp/opskit/releases/latest) 下载 `config.example.yaml` 后复制为 `opskit.yaml`。二进制内置同一份模板，无需额外下载即可生成。
+
+**读取规则：命令行参数 > 配置文件 > 内置默认值。**
+
+- 默认只读取**当前工作目录**的 `opskit.yaml`，不是可执行文件所在目录。
+- 默认文件不存在时仍可使用命令行参数；使用 `--config` 显式指定的文件不存在则报错。
+- 配置文件中的相对路径按配置文件所在目录解析；命令行中的相对路径按工作目录解析。
+- 配置拒绝未知字段、重复字段、多个 YAML 文档及无效超时，帮助尽早发现拼写错误。
+- `config init` 不覆盖已有文件。`opskit.yaml` 已加入 `.gitignore`；密码和访问密钥仍通过环境变量或 SDK 凭据链传入。
+
+```sh
+# 生成模板到指定位置（父目录需已存在）
+./opskit config init --config ./staging.yaml
+
+# 使用指定配置，并覆盖其中的任务超时
+./opskit etcd backup --config ./staging.yaml --timeout 10m
+
+# S3 连接信息从配置读取，文件名放在所有选项之后
+./opskit s3 upload --config ./staging.yaml --key manual/snapshot.db ./snapshot.db
+```
+
+填写 `s3.bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请将模板地址与证书路径改为自己的环境。
 
 ## etcd 备份
 
@@ -115,7 +150,8 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 - [x] S3 兼容上传与远端 metadata 验证
 - [x] Windows / Linux / macOS 双架构构建与自动发布
 - [ ] 真实 etcd / S3 集成测试与隔离恢复演练
-- [ ] 配置文件与备份保留策略
+- [x] 当前目录 YAML 配置、内置注释模板与命令行覆盖
+- [ ] 备份保留策略
 - [ ] S3 下载、列举与内容回读校验
 - [ ] MySQL / PostgreSQL 逻辑备份
 - [ ] TCP / DNS / HTTP 下载 / ICMP 网络排查

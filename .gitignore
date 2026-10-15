@@ -7,3 +7,5 @@
 .DS_Store
 /opskit
 /opskit.exe
+
+/opskit.yaml
