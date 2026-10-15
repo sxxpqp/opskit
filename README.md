@@ -8,13 +8,24 @@
 
 | 系统 | x86_64 / amd64（Intel、AMD 64 位） | ARM64 / aarch64 |
 |---|---|---|
-| Windows | [下载 ZIP](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_amd64.zip) | [下载 ZIP](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_arm64.zip) |
-| Linux | [下载 tar.gz](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64.tar.gz) | [下载 tar.gz](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_arm64.tar.gz) |
-| macOS | [Intel 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_amd64.tar.gz) | [Apple 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_arm64.tar.gz) |
+| Windows | [下载 EXE](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_amd64.exe) | [下载 EXE](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_windows_arm64.exe) |
+| Linux | [下载二进制](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64) | [下载二进制](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_arm64) |
+| macOS | [Intel 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_amd64) | [Apple 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_arm64) |
 
-这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后解压运行；Linux/macOS 如需补充执行权限，运行 `chmod +x opskit`。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
+这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
 
 每次 main 提交自动测试并打包，开发包位于 Actions 的 `opskit-packages`。维护者推送 `v*` 标签后，三平台测试与六架构构建全部通过才自动发布公开 Release，安装包分别作为附件提供。
+
+### 发布版本
+
+提交代码后创建并推送新标签，即可自动构建并公开发布。标签必须以 `v` 开头，且指向包含此工作流的提交；无需在网页手动创建 Release。
+
+```sh
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+仅在本地创建标签不会触发。每个版本使用新标签，已有版本不重复发布。
 
 ### 从源码构建
 
