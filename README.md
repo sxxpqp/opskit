@@ -10,15 +10,17 @@
 </p>
 
 <p align="center">
-  <strong>一个 Go 运维工具箱，从 etcd 备份到 S3 归档。</strong><br>
-  下载即用 · 六种平台构建 · 本地备份可追踪
+  <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
+  集群健康检查 · MinIO / AWS 厂家配置 · 六种平台构建
 </p>
 
 <p align="center">
   <a href="#快速上手">快速上手</a> ·
   <a href="#下载">下载</a> ·
   <a href="#配置文件">配置文件</a> ·
-  <a href="#etcd-备份">使用指南</a> ·
+  <a href="#连通性与集群健康检查">健康检查</a> ·
+  <a href="#etcd-备份">备份指南</a> ·
+  <a href="#近期更新">近期更新</a> ·
   <a href="#路线图">路线图</a> ·
   <a href="https://github.com/sxxpqp/opskit/issues/new/choose">反馈与建议</a>
 </p>
@@ -27,7 +29,7 @@
 
 备份 etcd、记录校验信息、再把文件传到对象存储，这些日常操作经常散落在不同脚本里。opskit 希望把它们收进一套清楚、可重复执行的命令中，让服务器、个人电脑和自动化任务使用同一个入口。
 
-项目正在早期迭代，当前重点是 **etcd 快照与 S3 上传**。网络排查、更多数据库备份和保留策略将逐步加入。
+项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。网络排查、更多数据库备份和保留策略将逐步加入。
 
 ## 现在能做什么
 
@@ -38,7 +40,8 @@
 | etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
 | 当前目录配置 | 自动加载 `./opskit.yaml`，内置模板，一条命令生成 |
 | 备份清单 | 为每次任务生成独立目录，记录文件大小、SHA-256 和上传状态 |
-| S3 上传 | 内置 Go SDK，支持自定义 endpoint、region 和 path-style |
+| 厂家配置 | `provider: minio / aws / custom`，仅填写选中厂家的配置块 |
+| S3 上传 | 内置 Go SDK，支持配置凭据、环境变量或默认凭据链 |
 | 失败保留 | 上传失败仍保留完整本地快照，便于排查和重试 |
 | 跨平台交付 | Windows / Linux / macOS，amd64 与 arm64，直接下载可执行文件 |
 
@@ -52,13 +55,34 @@ S3 兼容服务的后端能力需实际验证。etcd 备份需要单独安装匹
 curl -fL https://github.com/sxxpqp/opskit/releases/latest/download/opskit_linux_amd64 -o opskit
 chmod +x opskit
 ./opskit version
-./opskit etcd backup --help
+./opskit config init
+# 编辑 opskit.yaml：核对 etcd 证书，选择 S3 厂家并填好对应配置块。
 
-# 本地开发环境示例：先安装 etcdctl，并确认 etcd 已在该地址运行
-./opskit etcd backup --endpoint http://127.0.0.1:2379 --directory ./backups
+# 检查集群有几个节点、哪些健康、谁是 Leader
+./opskit etcd check --timeout 30s
+
+# 配置好 bucket 后检查 S3 桶访问
+./opskit s3 check --timeout 15s
+
+# 备份；所选厂家的 bucket 非空时自动上传
+./opskit etcd backup
 ```
 
-生产环境的 TLS 连接和 S3 上传示例见下文。下载文件可先按 Release 附带的 `checksums.txt` 校验。
+模板已预填 kubeadm 常见 etcd 证书路径；其他部署方式请按实际环境修改，且需单独安装匹配版本的 `etcdctl`。只做本地备份时将 bucket 留空，跳过 S3 检查。下载文件可先按 Release 附带的 `checksums.txt` 校验。
+
+## 常用命令
+
+| 目的 | 命令 |
+|---|---|
+| 查看版本 | `opskit version` |
+| 生成当前目录配置 | `opskit config init` |
+| 检查 etcd 集群 | `opskit etcd check --timeout 30s` |
+| 检查 S3 桶连通性 | `opskit s3 check --timeout 15s` |
+| 检查 S3 已有对象 | `opskit s3 check --key existing/snapshot.db --timeout 15s` |
+| 备份 etcd，按配置上传 | `opskit etcd backup` |
+| 单独上传文件 | `opskit s3 upload --key manual/snapshot.db ./snapshot.db` |
+
+命令默认读取当前目录的 `opskit.yaml`；需要时在子命令后追加 `--config ./other.yaml`。检查输出为 JSON，部分节点异常也会返回非零退出码。S3 HEAD 检查不会测试写入权限。
 
 ## 下载
 
@@ -73,7 +97,6 @@ chmod +x opskit
 | macOS | [Intel 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_amd64) | [Apple 芯片下载](https://github.com/sxxpqp/opskit/releases/latest/download/opskit_darwin_arm64) |
 
 这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。可下载 [SHA-256 校验文件](https://github.com/sxxpqp/opskit/releases/latest/download/checksums.txt) 校验完整性。
-
 
 ## 配置文件
 
@@ -158,7 +181,7 @@ opskit s3 upload --bucket backups --key manual/snapshot.db \
   --s3-endpoint https://s3.example.com --path-style ./snapshot.db
 ```
 
-S3 凭据使用 AWS SDK 默认凭据链，例如 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、可选 `AWS_SESSION_TOKEN` 或工作负载角色。支持 AWS S3、MinIO 等 S3 兼容服务（需实际验证后端能力），不自动创建 bucket。默认 region 为 `us-east-1`，可用 `--region` 修改。所有参数须放在位置文件参数前。
+S3 凭据优先使用所选厂家配置块的 `access_key` / `secret_key`；留空时使用 AWS SDK 默认凭据链，例如 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、可选 `AWS_SESSION_TOKEN` 或工作负载角色。支持 AWS S3、MinIO 等 S3 兼容服务（需实际验证后端能力），不自动创建 bucket。默认 region 为 `us-east-1`，可用 `--region` 修改。所有参数须放在位置文件参数前。
 
 上传采用分段上传，默认禁止覆盖已存在对象，要求后端支持条件写；不支持时应报错。上传后 HEAD 核对长度和 SHA-256 metadata，验证数据对象后才上传远端 manifest。metadata 验证不代表远端内容回读校验。若上传完成但 HEAD 或清单失败，请检查远端已有对象，重试时指定新 key。任务总超时包含快照和上传。
 
@@ -180,8 +203,9 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 - [x] S3 兼容上传与远端 metadata 验证
 - [x] S3 桶连通性与 etcd 集群成员 / 健康检查
 - [x] Windows / Linux / macOS 双架构构建与自动发布
-- [ ] 真实 etcd / S3 集成测试与隔离恢复演练
 - [x] 当前目录 YAML 配置、内置注释模板与命令行覆盖
+- [x] MinIO / AWS / custom 厂家选择及独立凭据
+- [ ] 真实 etcd / S3 集成测试与隔离恢复演练
 - [ ] 备份保留策略
 - [ ] S3 下载、列举与内容回读校验
 - [ ] MySQL / PostgreSQL 逻辑备份
@@ -189,6 +213,19 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 - [ ] Linux ss / netstat 连接查看
 
 完整思路见 [设计文档](go-opskit-design.md)。设计文档描述目标，以上清单反映当前实现。
+
+## 近期更新
+
+| 功能版本 | 变化 |
+|---|---|
+| [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
+| [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |
+| [v0.1.3](https://github.com/sxxpqp/opskit/releases/tag/v0.1.3) | 模板预填 kubeadm 证书路径，补充 MinIO/S3 字段说明与示例 |
+| [v0.1.2](https://github.com/sxxpqp/opskit/releases/tag/v0.1.2) | 当前目录 YAML 配置、`config init` 与内置模板 |
+| [v0.1.1](https://github.com/sxxpqp/opskit/releases/tag/v0.1.1) | 六种平台可执行文件直接下载，无需解压 |
+| [v0.1.0](https://github.com/sxxpqp/opskit/releases/tag/v0.1.0) | etcd 快照、SHA-256 清单、S3 上传与自动构建发布 |
+
+新标签需待自动检查与构建通过后出现在 Releases；可在 [Actions](https://github.com/sxxpqp/opskit/actions) 查看进度。后续功能变更会同步更新首页的功能表、上手命令、路线图和此更新记录。
 
 ## 参与项目
 
@@ -212,8 +249,8 @@ go vet ./...
 每次 main 提交自动测试并构建，开发产物位于 Actions 的 `opskit-packages`。创建并推送新的 `v*` 标签后，三平台测试与六架构构建全部通过才自动发布公开 Release：
 
 ```sh
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 仅在本地创建标签不会触发。每个版本使用新标签，已有版本不重复发布。
