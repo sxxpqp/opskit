@@ -13,6 +13,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv("OPSKIT_FAKE_CHECK") != "" {
+		fakeEtcdCheck()
+		os.Exit(0)
+	}
 	if os.Getenv("OPSKIT_FAKE_ETCD") == "1" {
 		if os.Getenv("OPSKIT_FAKE_FAIL") == "1" {
 			os.Exit(7)

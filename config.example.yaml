@@ -7,11 +7,14 @@
 # 不执行 ${ENV_VAR}、~、日期变量或其他模板展开；凭据按下方环境变量方式传入。
 
 schema_version: 1
-# 整个任务（快照 + 校验 + 上传）的总期限；支持 30s、10m、1h 等 Go duration。
+# 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
+# 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。
 timeout: 1h
 
 etcd:
-  # 单个客户端 API 地址，端口通常为 2379；不要使用 peer 端口 2380。
+  # 备份使用单个客户端 API 地址，端口通常为 2379；不要使用 peer 端口 2380。
+  # etcd check 会从该入口发现全部成员，检查成员健康、节点数量和 Leader。
+  # 检查时也可用 --endpoint https://node1:2379,https://node2:2379 传多个种子地址。
   # 此默认值适用于 kubeadm 控制平面节点上的本地 etcd。
   # 远程备份改成证书 SAN 包含的地址，并确认服务监听与防火墙允许连接。
   endpoint: https://127.0.0.1:2379
@@ -40,6 +43,7 @@ etcd:
   # 配置中的非空连接字段会作为 etcdctl 参数传递，优先于对应 ETCDCTL_* 环境变量。
 
 s3:
+  # 配好后执行 opskit s3 check --timeout 15s 检查桶访问，不写入测试对象。
   # 选择要使用的厂家：minio / aws / custom。只读取所选配置块。
   # 选 minio 就只需填写 minio 下的空项；不需要修改 aws/custom。
   # 所选块的 bucket 留空时仅本地备份，填写后自动上传。

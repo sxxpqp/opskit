@@ -33,6 +33,8 @@
 
 | 能力 | 当前行为 |
 |---|---|
+| etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
+| S3 连通性 | 检查桶访问，区分 HTTP 权限错误与连接失败，可选对象 HEAD |
 | etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
 | 当前目录配置 | 自动加载 `./opskit.yaml`，内置模板，一条命令生成 |
 | 备份清单 | 为每次任务生成独立目录，记录文件大小、SHA-256 和上传状态 |
@@ -106,6 +108,34 @@ chmod +x opskit
 
 通过 `s3.provider` 选择 `minio`、`aws` 或 `custom`，只需修改对应配置块。填写所选块的 `bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请核对模板地址与证书路径；访问凭据可填在所选块的 `access_key` / `secret_key`，或将它们留空，使用 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`。块内的 `key` 是桶内文件名，二者不同。
 
+## 连通性与集群健康检查
+
+复用当前目录的 `opskit.yaml`，或用 `--config` 指定其他文件：
+
+```sh
+# 检查选中厂家的 S3 桶（不上传文件、不创建桶）
+./opskit s3 check --timeout 15s
+
+# 同时检查某个已有对象是否可访问；--key 为空时仅检查桶
+./opskit s3 check --key manual/snapshot.db --timeout 15s
+
+# 从 etcd 成员列表发现节点，逐个检查状态与健康
+./opskit etcd check --timeout 30s --probe-timeout 5s
+
+# 可提供多个种子 endpoint，便于一个地址故障时通过其他地址发现成员
+./opskit etcd check --endpoint https://10.0.0.1:2379,https://10.0.0.2:2379 --timeout 30s
+```
+
+输出为带缩进的 JSON，便于直接阅读或交给监控脚本。检查通过返回 0；探测失败或部分节点异常返回 1；参数错误返回 2；缺少 etcdctl 返回 3；总超时或取消返回 4。
+
+**S3**：报告 `service_reachable`、`bucket_access`、HTTP 状态和耗时。有 key 时额外检查对象。403 表示收到服务响应但访问被拒绝，404 标记为未找到或被隐藏，均不会直接断言网络故障。此检查使用 HEAD，`write_access` 始终为 `not-tested`，无法证明上传权限；HeadBucket 权限不足也不代表没有 PutObject 权限。连接失败或凭据不可用时，`service_reachable: false` 表示未确认收到服务响应。
+
+**etcd**：报告成员总数、投票节点数、learner 数、健康节点数、所需多数票和观察到的 quorum，以及每个节点的 ID、名称、地址、Leader 标记、版本、数据库大小、revision、Raft term。会尝试各成员通告的客户端地址，因此执行机器必须能连接这些地址。没有通告客户端地址的成员、不可达节点、身份不匹配和健康探测失败都会标记异常；有 quorum 但节点不全健康时仍返回失败。结果是逐节点探测快照，不能替代持续监控或数据一致性校验。
+
+成员发现与每个节点的 status + health 共用各自的 `--probe-timeout`；总期限由 `--timeout` 限制。配置中的 timeout 仍可覆盖内置默认值，检查任务建议显式传较短超时。etcd 检查不会执行快照或上传文件，不依赖 S3 endpoint/凭据是否完整。
+
+更多字段与限制见 [检查指南](docs/checks.md)。
+
 ## etcd 备份
 
 ```sh
@@ -148,6 +178,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 - [x] etcd 快照、SHA-256 清单、失败保留
 - [x] S3 兼容上传与远端 metadata 验证
+- [x] S3 桶连通性与 etcd 集群成员 / 健康检查
 - [x] Windows / Linux / macOS 双架构构建与自动发布
 - [ ] 真实 etcd / S3 集成测试与隔离恢复演练
 - [x] 当前目录 YAML 配置、内置注释模板与命令行覆盖

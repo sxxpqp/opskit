@@ -48,7 +48,7 @@ func (s *storage) flags(f *flag.FlagSet) {
 
 func Run(ctx context.Context, args []string, out, diag io.Writer, version string) (int, error) {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "opskit version | config init | etcd backup [flags] | s3 upload [flags] FILE\nDefault config: ./opskit.yaml; override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
+		fmt.Fprintln(out, "opskit version | config init | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./opskit.yaml; override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
 		return 0, nil
 	}
 	if args[0] == "version" {
@@ -62,7 +62,7 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	if command == "config init" {
 		return initConfig(args[2:], out, diag)
 	}
-	if command != "etcd backup" && command != "s3 upload" {
+	if command != "etcd backup" && command != "s3 upload" && command != "etcd check" && command != "s3 check" {
 		return 2, fmt.Errorf("unknown command %q", command)
 	}
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -70,9 +70,17 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	configPath := f.String("config", "opskit.yaml", "configuration file (default: current directory)")
 	var s storage
 	s.flags(f)
-	timeout := f.Duration("timeout", time.Hour, "total task timeout")
+	defaultTimeout := time.Hour
+	if strings.HasSuffix(command, "check") {
+		defaultTimeout = 30 * time.Second
+	}
+	timeout := f.Duration("timeout", defaultTimeout, "total task timeout")
+	var probeTimeout *time.Duration
+	if command == "etcd check" {
+		probeTimeout = f.Duration("probe-timeout", 5*time.Second, "per-member health and status timeout")
+	}
 	var binary, endpoint, dir, ca, cert, key *string
-	if command == "etcd backup" {
+	if strings.HasPrefix(command, "etcd ") {
 		binary = f.String("etcdctl", "etcdctl", "etcdctl executable")
 		endpoint = f.String("endpoint", "", "single etcd endpoint; otherwise ETCDCTL_ENDPOINTS")
 		dir = f.String("directory", "data/backups/etcd", "local backup directory")
@@ -98,10 +106,10 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	if *timeout <= 0 {
 		return 2, errors.New("timeout must be positive")
 	}
-	if (s.key != "" || s.endpoint != "") && s.bucket == "" {
+	if command != "etcd check" && (s.key != "" || s.endpoint != "") && s.bucket == "" {
 		return 2, errors.New("S3 options require --bucket")
 	}
-	if s.bucket != "" {
+	if command != "etcd check" && s.bucket != "" {
 		if (s.provider == "minio" || s.provider == "custom") && s.endpoint == "" {
 			return 2, fmt.Errorf("s3.%s.endpoint is required when bucket is set", s.provider)
 		}
@@ -111,6 +119,12 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
+	if command == "s3 check" {
+		if f.NArg() != 0 || s.bucket == "" {
+			return 2, errors.New("s3 check requires a bucket and no positional arguments")
+		}
+		return s.check(ctx, out)
+	}
 	if command == "s3 upload" {
 		if f.NArg() != 1 || s.bucket == "" || s.key == "" {
 			return 2, errors.New("usage: opskit s3 upload --bucket BUCKET --key KEY [flags] FILE")
@@ -134,6 +148,12 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	}
 	if _, err := exec.LookPath(*binary); err != nil {
 		return 3, fmt.Errorf("etcdctl dependency: %w", err)
+	}
+	if command == "etcd check" {
+		if *probeTimeout <= 0 {
+			return 2, errors.New("probe-timeout must be positive")
+		}
+		return checkEtcd(ctx, *binary, *endpoint, *ca, *cert, *key, *probeTimeout, out)
 	}
 	if err := os.MkdirAll(*dir, 0700); err != nil {
 		return 1, err
@@ -247,14 +267,14 @@ func writeManifest(path string, m Manifest) error {
 	}
 	return os.Rename(temp.Name(), path)
 }
-func (s storage) upload(ctx context.Context, path, checksum string) error {
+func (s storage) client(ctx context.Context) (*s3.Client, error) {
 	options := []func(*config.LoadOptions) error{config.WithRegion(s.region)}
 	if s.accessKey != "" {
 		options = append(options, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.accessKey, s.secretKey, s.sessionToken)))
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, options...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = s.pathStyle
@@ -262,6 +282,14 @@ func (s storage) upload(ctx context.Context, path, checksum string) error {
 			o.BaseEndpoint = aws.String(s.endpoint)
 		}
 	})
+	return client, nil
+}
+
+func (s storage) upload(ctx context.Context, path, checksum string) error {
+	client, err := s.client(ctx)
+	if err != nil {
+		return err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return err
