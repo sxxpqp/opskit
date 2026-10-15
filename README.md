@@ -83,7 +83,7 @@ chmod +x opskit
 ./opskit etcd backup
 ```
 
-模板包含 etcd 地址、备份目录、TLS 证书路径、S3 存储与超时设置，并附有注释。也可查看仓库的 [配置模板](config.example.yaml)，或从 [最新版本附件](https://github.com/sxxpqp/opskit/releases/latest) 下载 `config.example.yaml` 后复制为 `opskit.yaml`。二进制内置同一份模板，无需额外下载即可生成。
+模板默认采用 **kubeadm 控制平面节点的本机 etcd 地址与证书路径**，逐项说明备份目录、TLS、MinIO/S3 和三种 key 的区别。其他 Kubernetes 发行版或外置 etcd 需修改实际路径。完整示例见 [Kubernetes + MinIO/S3 配置指南](docs/configuration.md)。也可查看仓库的 [配置模板](config.example.yaml)，或从 [最新版本附件](https://github.com/sxxpqp/opskit/releases/latest) 下载 `config.example.yaml` 后复制为 `opskit.yaml`。二进制内置同一份模板，无需额外下载即可生成。
 
 **读取规则：命令行参数 > 配置文件 > 内置默认值。**
 
@@ -104,7 +104,7 @@ chmod +x opskit
 ./opskit s3 upload --config ./staging.yaml --key manual/snapshot.db ./snapshot.db
 ```
 
-填写 `s3.bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请将模板地址与证书路径改为自己的环境。
+填写 `s3.bucket` 后，`etcd backup` 会自动上传；默认模板的 bucket 留空，仅保存在本地。实际运行前请核对模板地址与证书路径；S3 访问凭据通过 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` 提供，`s3.key` 是桶内文件名，二者不同。
 
 ## etcd 备份
 

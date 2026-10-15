@@ -1,26 +1,86 @@
-# 复制为当前工作目录的 opskit.yaml，或执行 opskit config init。
-# 命令行参数覆盖配置；相对路径以配置文件所在目录为基准。
-# 密码和 S3 密钥请使用环境变量，不要写在此文件中。
+# opskit 配置模板：执行 opskit config init，或复制此文件为 ./opskit.yaml。
+# 默认场景：在 kubeadm 控制平面节点上备份本机 etcd；不填写 bucket 时仅本地备份。
+# K3s、RKE2、外置 etcd、自定义证书目录等环境，请修改下面的地址与证书路径。
+# 当前工作目录决定默认加载位置；--config 可指定其他文件，不自动合并配置。
+# 优先级：命令行参数 > 此配置 > 程序内置默认值。
+# 路径：配置中的相对路径以本文件所在目录为准；绝对路径原样使用。
+# 不执行 ${ENV_VAR}、~、日期变量或其他模板展开；凭据按下方环境变量方式传入。
+
 schema_version: 1
+# 整个任务（快照 + 校验 + 上传）的总期限；支持 30s、10m、1h 等 Go duration。
 timeout: 1h
 
 etcd:
-  # 请替换为实际地址；TLS 示例：https://127.0.0.1:2379
-  endpoint: http://127.0.0.1:2379
+  # 单个客户端 API 地址，端口通常为 2379；不要使用 peer 端口 2380。
+  # 此默认值适用于 kubeadm 控制平面节点上的本地 etcd。
+  # 远程备份改成证书 SAN 包含的地址，并确认服务监听与防火墙允许连接。
+  endpoint: https://127.0.0.1:2379
+
+  # 本地备份根目录；每次生成独立任务子目录，内含 snapshot.db 和 manifest.json。
+  # 上传失败也保留本地快照；当前不会自动轮转或删除旧备份。
   directory: ./data/backups/etcd
+
+  # 官方客户端的可执行文件名或路径，需要自行安装并匹配 etcd 版本。
+  # 裸名称从 PATH 查找；./bin/etcdctl 等路径相对于本配置文件。
   etcdctl: etcdctl
-  # cacert: ./certs/ca.crt
-  # cert: ./certs/client.crt
-  # key_file: ./certs/client.key
-  # 认证可使用 ETCDCTL_USER 环境变量。
+
+  # kubeadm 常见的 etcd CA 与健康检查客户端证书（不是 Kubernetes 根 CA）。
+  # 这些是模板中启用的配置值；不加载配置时，程序不会自动搜索这些路径。
+  # 运行用户需能读取证书和私钥；cert 与 key_file 必须成对配置。
+  cacert: /etc/kubernetes/pki/etcd/ca.crt
+  cert: /etc/kubernetes/pki/etcd/healthcheck-client.crt
+  key_file: /etc/kubernetes/pki/etcd/healthcheck-client.key
+
+  # 若使用无 TLS 的本地开发 etcd，请同时修改：
+  # endpoint: http://127.0.0.1:2379
+  # cacert: ""
+  # cert: ""
+  # key_file: ""
+  # 若 etcd 启用了用户名密码认证，另设置 ETCDCTL_USER='用户名:密码'。
+  # 配置中的非空连接字段会作为 etcdctl 参数传递，优先于对应 ETCDCTL_* 环境变量。
 
 s3:
-  # 留空 bucket 仅备份到本地；填写后 etcd backup 自动上传。
+  # MinIO 与 AWS S3 共用此配置节。
+  # bucket：已存在的桶名称，例如 k8s-backups；不是 URL，也不包含对象目录。
+  # 留空表示 etcd backup 不上传；独立 s3 upload 命令必须有 bucket。
+  # 程序不会自动创建桶。
   bucket: ""
+
+  # 对象存储的 S3 API 地址，包含 http:// 或 https://，不拼接 bucket 或对象 key。
+  # MinIO 示例：https://minio.example.com:9000（实际端口按部署配置）。
+  # 应填写 S3 API 地址，不要填写 MinIO Web Console 管理页面地址。
+  # AWS S3 通常留空，由 SDK 按 region 选择地址。
   endpoint: ""
+
+  # AWS 填桶所在区域；MinIO 填服务配置的 region，未自定义时通常为 us-east-1。
   region: us-east-1
-  path_style: false
-  # key 留空时，etcd 备份生成唯一 key；独立上传使用 --key 指定。
+
+  # MinIO 常用 true：访问 endpoint/bucket/key。
+  # AWS S3 通常使用 false：访问 bucket 对应的虚拟主机地址。
+  path_style: true
+
+  # 对象 key = 桶内完整文件名，不是 Access Key，也不是本地路径。
+  # 示例：clusters/prod/etcd/20261015/snapshot.db
+  # key 不是“目录前缀”；不会自动在自定义 key 后补任务号或 snapshot.db。
+  # 不要填 s3://bucket/...、endpoint 或 bucket 名。
+  # 留空：etcd backup 自动生成 etcd/<UTC时间-随机任务号>/snapshot.db，适合定时任务。
+  # 非空：使用你提供的完整 key；默认禁止覆盖，重复备份会在上传阶段报错。
+  # 独立上传：opskit s3 upload --key manual/snapshot.db ./snapshot.db
+  # 快照上传并通过 HEAD 验证后，会再写入 <key>.manifest.json 作为远端清单。
   key: ""
-  # 凭据：AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY、AWS_SESSION_TOKEN，
-  # 或使用 AWS SDK 默认凭据链（例如工作负载角色）。
+
+  # ---------- MinIO / S3 访问凭据（在启动 opskit 的环境中设置） ----------
+  # AWS_ACCESS_KEY_ID     = MinIO 服务账号 Access Key / AWS Access Key ID（访问标识）
+  # AWS_SECRET_ACCESS_KEY = 配套的 Secret Key（访问密钥）
+  # AWS_SESSION_TOKEN     = 可选临时会话令牌；长期账号通常不设置。
+  # 注意：上面的 s3.key 与这里的 Access Key 完全不同。
+  # 当前不支持在 YAML 中写 access_key / secret_key 字段，也不展开 ${...}。
+  # Linux/macOS shell 示例（替换为自己的服务账号凭据）：
+  # export AWS_ACCESS_KEY_ID='replace-with-access-key'
+  # export AWS_SECRET_ACCESS_KEY='replace-with-secret-key'
+  # 若使用长期凭据，应清除之前残留的临时令牌：unset AWS_SESSION_TOKEN
+  # 然后运行：./opskit etcd backup
+  # 未提供环境变量时，使用 AWS SDK 默认凭据链（共享配置、工作负载角色等）。
+  # 在 cron/systemd/容器中运行时，也需为对应任务提供凭据环境。
+  # 使用能上传、HEAD 查询和终止分段上传的账号；服务端需支持条件写。
+  # HTTPS 始终校验证书；私有 CA 应安装到系统信任库，当前不支持 S3 自定义 CA 字段。
