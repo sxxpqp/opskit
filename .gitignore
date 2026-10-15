@@ -1,0 +1,9 @@
+/dist/
+/data/
+/config/config.yaml
+/secrets/
+*.partial
+.env
+.DS_Store
+/opskit
+/opskit.exe
