@@ -172,9 +172,9 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	}
 	a = append(a, "snapshot", "save", partial)
 	cmd := exec.CommandContext(ctx, *binary, a...)
-	cmd.Stdout = diag
-	// etcdctl diagnostics can include credential-bearing endpoint URLs or user info.
-	// Do not forward raw stderr into logs or terminal output.
+	// etcdctl may print credential-bearing URLs or authentication details on
+	// either output stream. Never forward raw subprocess output to the caller.
+	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err = cmd.Run(); err != nil {
 		return taskError(ctx, fmt.Errorf("snapshot failed (partial retained at %s); check etcd connectivity, TLS credentials and permissions", partial))
@@ -261,6 +261,12 @@ func writeManifest(path string, m Manifest) error {
 	}
 	defer os.Remove(temp.Name())
 	if _, err = temp.Write(b); err != nil {
+		temp.Close()
+		return err
+	}
+	// Persist the new manifest contents before making the replacement visible.
+	// This is not, by itself, a guarantee against a sudden power loss.
+	if err = temp.Sync(); err != nil {
 		temp.Close()
 		return err
 	}

@@ -18,6 +18,9 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	if os.Getenv("OPSKIT_FAKE_ETCD") == "1" {
+		if os.Getenv("OPSKIT_FAKE_STDOUT") == "1" {
+			fmt.Fprintln(os.Stdout, "sensitive-test-stdout=must-not-leak")
+		}
 		if os.Getenv("OPSKIT_FAKE_FAIL") == "1" {
 			fmt.Fprintln(os.Stderr, "sensitive-test-password=must-not-leak")
 			os.Exit(7)
