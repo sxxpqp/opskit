@@ -237,7 +237,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 - [ ] TCP / DNS / HTTP 下载 / ICMP 网络排查
 - [ ] Linux ss / netstat 连接查看
 
-完整思路见 [设计文档](go-opskit-design.md)。设计文档描述目标，以上清单反映当前实现。
+当前可靠性与兼容性实施标准见 [M0 技术设计基线](docs/m0-design-baseline.md)；长期目标见 [设计文档](go-opskit-design.md)。设计内容不代表全部已实现，以上清单反映当前能力。
 
 备用地址在 [downloads.json](downloads.json) 集中配置，接入说明见 [Nexus 下载指南](docs/downloads.md)。
 
