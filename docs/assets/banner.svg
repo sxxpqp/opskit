@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
   <title id="title">opskit — 运维工具，随取随用</title>
-  <desc id="desc">Go 运维工具箱，支持 etcd 健康检查与快照、S3 连通性与上传和六种平台构建。</desc>
+  <desc id="desc">Go 运维工具箱，支持 etcd 健康检查与快照、S3 连通性与上传；main 新增 kind 版本安装。</desc>
   <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0f172a"/><stop offset="1" stop-color="#133e4a"/></linearGradient></defs>
   <rect width="1200" height="340" rx="20" fill="url(#bg)"/>
   <circle cx="1120" cy="35" r="210" fill="#22d3ee" opacity=".05"/>
@@ -8,7 +8,7 @@
   <path d="m79 78 12 13-12 13m20 0h16" stroke="#0f172a" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="150" y="110" fill="#f8fafc" font-family="system-ui,sans-serif" font-size="58" font-weight="750">opskit</text>
   <text x="64" y="184" fill="#f8fafc" font-family="system-ui,sans-serif" font-size="32" font-weight="600">运维工具，随取随用。</text>
-  <text x="64" y="226" fill="#a5c4d2" font-family="system-ui,sans-serif" font-size="20">etcd health &amp; snapshots · S3 checks &amp; uploads</text>
+  <text x="64" y="226" fill="#a5c4d2" font-family="system-ui,sans-serif" font-size="20">etcd health &amp; snapshots · S3 checks · kind install (main)</text>
   <text x="64" y="288" fill="#67e8f9" font-family="monospace" font-size="17">LINUX / macOS / WINDOWS</text>
   <text x="840" y="288" fill="#a5c4d2" font-family="monospace" font-size="17">AMD64 + ARM64</text>
 </svg>

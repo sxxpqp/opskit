@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
-  集群健康检查 · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
+  集群健康检查 · kind 版本安装（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
 </p>
 
 <p align="center">
@@ -39,10 +39,13 @@
 
 项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。安装包提供 GitHub 与 Nexus 双入口，首页版本摘要、近期更新入口和下载表随正式发布自动刷新。网络排查、更多数据库备份和保留策略将逐步加入。
 
+main 分支新增 **指定版本安装 kind**（尚未发布），支持 SHA-256 校验和多版本共存；现有 Release 下载仍对应上方正式版。
+
 ## 现在能做什么
 
 | 能力 | 当前行为 |
 |---|---|
+| kind 安装（main，未发布） | 显式 `--version`、系统架构识别、SHA-256 校验、按版本隔离安装 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
 | S3 连通性 | 检查桶访问，区分 HTTP 权限错误与连接失败，可选对象 HEAD |
 | etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
@@ -84,6 +87,7 @@ chmod +x opskit
 | 目的 | 命令 |
 |---|---|
 | 查看版本 | `opskit version` |
+| 安装指定 kind 版本（main） | `opskit kind install --version v0.17.0` |
 | 生成当前目录配置 | `opskit config init` |
 | 检查 etcd 集群 | `opskit etcd check --timeout 30s` |
 | 检查 S3 桶连通性 | `opskit s3 check --timeout 15s` |
@@ -91,7 +95,25 @@ chmod +x opskit
 | 备份 etcd，按配置上传 | `opskit etcd backup` |
 | 单独上传文件 | `opskit s3 upload --key manual/snapshot.db ./snapshot.db` |
 
-命令默认读取当前目录的 `opskit.yaml`；需要时在子命令后追加 `--config ./other.yaml`。检查输出为 JSON，部分节点异常也会返回非零退出码。S3 HEAD 检查不会测试写入权限。
+etcd / S3 命令默认读取当前目录的 `opskit.yaml`；需要时在子命令后追加 `--config ./other.yaml`。检查输出为 JSON，部分节点异常也会返回非零退出码。S3 HEAD 检查不会测试写入权限。
+
+## kind 版本安装（main，尚未发布）
+
+此能力从 `linux/opskit` 迁移到本项目，使用已有的 `cmd/opskit` 主入口；已有 etcd/S3 命令保持不变。当前正式版 v0.1.5 不包含此命令，请先从 main 构建。
+
+```sh
+go build -o opskit ./cmd/opskit
+./opskit kind install --version v0.17.0
+./opskit kind install --version v0.33.0
+# 自定义安装目录（相同目录切换版本前会保留旧二进制备份）
+./opskit kind install --version v0.17.0 --bin-dir /opt/kind-v0.17.0
+```
+
+`--version` 必填，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存，调用时使用对应路径或将所选目录加入 PATH，不自动修改 shell 配置。
+
+kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。该命令不读取 `opskit.yaml`，运行不依赖 Bash、curl 或 Go。仅安装 kind 工具，不创建集群，也不安装 Docker、kubectl 或 KubeSphere。
+
+旧 `linux` 仓库脚本在 PATH 中找到 opskit（或设置 `OPSKIT_BIN`）时会调用本实现，并传递原版本和安装目录；未部署 opskit 的机器继续使用旧脚本。测试覆盖版本共存、重复安装、SHA/版本校验失败和 HTTP 失败保留原文件；macOS 做了原生执行检查，其他平台完成交叉编译，尚未完成 Windows/Linux 真机安装验收。
 
 ## 下载
 
@@ -223,6 +245,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 下面是演进方向，未勾选的功能尚未实现。欢迎在 Issue 中分享使用场景，帮助确定优先级。
 
+- [x] kind 显式版本安装、SHA-256 校验和版本隔离（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
 - [x] S3 兼容上传与远端 metadata 验证
 - [x] S3 桶连通性与 etcd 集群成员 / 健康检查
@@ -245,6 +268,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
+| main（未发布） | 从 linux 仓库迁入 kind 版本安装器，支持显式版本、多版本隔离和失败保留；不包含 KS 部署迁移 |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |
