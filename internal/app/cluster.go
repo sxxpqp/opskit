@@ -189,7 +189,13 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 	f.SetOutput(diag)
 	path := f.String("config", defaultConfigPath, "统一配置文件")
 	o := clusterFlags(f)
-	apply := f.Bool("apply", false, "执行创建或删除；默认只预览")
+	var apply, dryRun bool
+	if action == "delete" {
+		f.BoolVar(&apply, "apply", false, "执行删除；默认只预览")
+	}
+	if action == "create" {
+		f.BoolVar(&dryRun, "dry-run", false, "仅预览集群配置，不创建集群")
+	}
 	confirm := f.String("confirm-name", "", "删除时必须与集群名完全一致")
 	logDir := f.String("directory", "", "导出诊断日志的目录")
 	timeout := f.Duration("timeout", 10*time.Minute, "任务超时")
@@ -218,9 +224,12 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 			return 1, err
 		}
 		fmt.Fprintf(out, "kind create: %s; Kubernetes %s; workers=%d; kubeconfig=%s\n", o.name, o.nodeVersion, o.workers, o.kubeconfig)
-		if !*apply {
-			_, err = out.Write(config)
-			return 0, err
+		if dryRun {
+			if _, err = out.Write(config); err != nil {
+				return 1, err
+			}
+			fmt.Fprintln(out, "仅预览：未创建集群；去掉 --dry-run 执行创建。")
+			return 0, nil
 		}
 		if _, err = exec.LookPath("kubectl"); err != nil {
 			return 3, fmt.Errorf("kubectl dependency: %w", err)
@@ -267,7 +276,7 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 			fmt.Fprintln(out, "日志目录:", *logDir)
 		}
 	case "delete":
-		if !*apply {
+		if !apply {
 			fmt.Fprintf(out, "预览: 删除 kind 集群 %s；执行需 --apply --confirm-name %s\n", o.name, o.name)
 			return 0, nil
 		}

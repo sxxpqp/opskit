@@ -94,7 +94,7 @@ chmod +x opskit
 |---|---|
 | 查看版本 | `opskit version` |
 | 安装指定 kind 版本（main） | `opskit kind install --version v0.17.0` |
-| 预览 / 创建集群（main） | `opskit kind create --version v1.24.7` / 追加 `--apply` |
+| 创建 / 预览集群（main） | `opskit kind create --version v1.24.7` / 追加 `--dry-run` |
 | 修改 kind 镜像源（main） | `opskit mirror containerd --kind kubesphere-341 --apply` |
 | 安装 KS（main） | `opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --apply` |
 | 生成当前目录配置 | `opskit config init` |
@@ -114,8 +114,8 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 ./opskit config init                    # 生成 config/config.yaml；不覆盖已有文件
 # 模板已带本项目镜像源；确认这些内网域名在当前环境可达
 ./opskit kind install --version v0.17.0
-./opskit kind create --version v1.24.7 --workers 2     # 默认预览
-./opskit kind create --version v1.24.7 --workers 2 --apply
+./opskit kind create --version v1.24.7 --workers 2 --dry-run  # 仅预览
+./opskit kind create --version v1.24.7 --workers 2            # 实际创建
 ./opskit mirror containerd --kind kubesphere-341       # 预检全部节点，不写入
 ./opskit mirror containerd --kind kubesphere-341 --apply
 # 确认集群已有可供卷的默认 StorageClass；本工具不会安装存储驱动
@@ -127,7 +127,7 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 ./opskit kind delete --name kubesphere-341 --apply --confirm-name kubesphere-341
 ```
 
-`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
+`kind create` 默认实际创建，不需要 `--apply`；仅预览时显式使用 `--dry-run`。`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
 
 自建集群 KS 安装使用 `--kubeconfig FILE --context NAME`，不传 `--kind`；各节点 mirror 请先执行 `mirror containerd --apply` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。密码保存在本机 0600 文件，不打印明文；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
 
@@ -345,6 +345,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 |---|---|
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | kind create 默认执行创建，--dry-run 仅预览；删除操作仍需显式确认 |
 | main（未发布） | 修复 kind 等命令组的裸命令、-h、--help、help 帮助入口，不再作为未知子命令处理 |
 | main（未发布） | kind 优先复用 PATH 中已有可写目录，保留 Linux/macOS 软链接和 Windows exe 复制；无可用目录才配置用户 PATH |
 | main（未发布） | kind 安装后检查入口版本和 PATH 实际命中，识别旧版本遮挡与待生效状态；Windows User PATH 回读校验 |

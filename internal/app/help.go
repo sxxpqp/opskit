@@ -7,7 +7,7 @@ var commandGroupHelp = map[string]string{
 
 命令:
   install  安装指定版本 kind，并设置命令入口
-  create   创建 kind 集群（默认预览，--apply 执行）
+  create   创建 kind 集群（默认执行，--dry-run 预览）
   status   查看集群状态
   logs     查看集群日志
   use      切换到 kind 集群
@@ -16,7 +16,7 @@ var commandGroupHelp = map[string]string{
 
 示例:
   opskit kind install --version v0.17.0
-  opskit kind create --version v1.24.7 --apply
+  opskit kind create --version v1.24.7
   opskit kind status
 
 使用 opskit kind <命令> --help 查看具体参数。`,

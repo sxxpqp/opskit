@@ -152,22 +152,29 @@ func workflowRun(t *testing.T, args ...string) (int, error, string) {
 	code, err := Run(context.Background(), args, &output, &output, "test")
 	return code, err, output.String()
 }
-func TestCreatePreviewApplyAndExisting(t *testing.T) {
+func TestCreateDryRunDefaultExecutionAndExisting(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := fakeTools(t)
 	config := filepath.Join(dir, "kube.config")
 	args := []string{"kind", "create", "--name", "test", "--version", "v1.24.7", "--workers", "2", "--kubeconfig", config}
-	code, err, text := workflowRun(t, args...)
+	code, err, text := workflowRun(t, append(args, "--dry-run")...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
 	if _, e := os.Stat(filepath.Join(dir, "events")); !os.IsNotExist(e) {
 		t.Fatal("preview executed commands")
 	}
-	if !strings.Contains(text, "kindest/node:v1.24.7") {
+	if !strings.Contains(text, "kindest/node:v1.24.7") || !strings.Contains(text, "未创建集群") {
 		t.Fatal(text)
 	}
-	code, err, text = workflowRun(t, append(args, "--apply")...)
+	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	if code == 0 || err == nil {
+		t.Fatal("removed --apply flag accepted")
+	}
+	if _, e := os.Stat(filepath.Join(dir, "events")); !os.IsNotExist(e) {
+		t.Fatal("invalid flags executed commands")
+	}
+	code, err, text = workflowRun(t, args...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
@@ -180,7 +187,7 @@ func TestCreatePreviewApplyAndExisting(t *testing.T) {
 		t.Fatal("wrong node count")
 	}
 	t.Setenv("OPSKIT_FAKE_EXISTING", "test\n")
-	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	code, err, _ = workflowRun(t, args...)
 	if code == 0 || err == nil {
 		t.Fatal("existing cluster overwritten")
 	}
