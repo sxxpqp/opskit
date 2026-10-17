@@ -17,7 +17,7 @@ var commandGroupHelp = map[string]string{
 
 命令:
   install  安装指定版本 kind，并设置命令入口
-  create   创建 kind 集群（默认执行，--dry-run 预览）
+  create   创建 kind 集群，映射 Ingress 80/443（默认执行，--dry-run 预览）
   status   查看集群状态
   logs     查看集群日志
   use      切换到 kind 集群

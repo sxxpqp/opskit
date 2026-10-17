@@ -131,6 +131,8 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 ./opskit kind delete --name kubesphere-341 --apply --confirm-name kubesphere-341
 ```
 
+新建 kind 集群默认在控制平面映射 `0.0.0.0:80 → 节点80`、`0.0.0.0:443 → 节点443`，并设置 `ingress-ready=true` 标签。KS 控制台保留 `127.0.0.1:30880 → 节点30880`。可在 `kind.http_port`、`kind.https_port` 配置宿主机端口，或传 `--http-port 8080 --https-port 8443`。端口须互不重复、未被其他宿主机服务占用。此配置只建立 Docker 端口映射，Ingress Controller 需另行部署到控制平面并通过 hostPort/hostNetwork 监听节点 80/443。已有集群不会自动修改映射或删除重建；需自行安排备份后重建，或用新集群名创建。已核对 kind v0.17.0 配置类型支持节点 labels 和 extraPortMappings；尚未做真实 Ingress 请求验收。
+
 `kind create` 默认实际创建，不需要 `--apply`；仅预览时显式使用 `--dry-run`。`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
 
 自建集群 KS 安装使用 `--kubeconfig FILE --context NAME`，不传 `--kind`；各节点 mirror 请先执行 `mirror containerd --apply` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。密码保存在本机 0600 文件，不打印明文；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
@@ -341,6 +343,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 - [ ] 运行时安装 Linux 真机验收及升级迁移
 - [x] kubectl 版本安装、SHA-256/客户端版本及 PATH 校验，支持完整帮助（main，未发布）
 - [x] kind 显式版本安装、SHA-256 校验、版本隔离和跨系统 PATH 配置（main，未发布）
+- [x] kind 控制平面默认映射 Ingress 80/443，支持覆盖宿主机端口（main，未发布）
 - [x] kind 集群管理、统一 mirror 和 KS 3.4.1 安装工作流（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
 - [x] S3 兼容上传与远端 metadata 验证
@@ -366,6 +369,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 |---|---|
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | kind 控制平面补齐 Ingress 80/443 映射及 ingress-ready 标签；保留 KS 30880，校验端口冲突并支持配置覆盖 |
 | main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |
 | main（未发布） | kind create 默认执行创建，--dry-run 仅预览；删除操作仍需显式确认 |
 | main（未发布） | 修复 kind 等命令组的裸命令、-h、--help、help 帮助入口，不再作为未知子命令处理 |

@@ -39,7 +39,11 @@ kind:
   kubeconfig: ""
   # 留空先查版本隔离安装目录，再查 PATH；不要求用户安装 Go。
   binary: ""
-  console_port: 30880
+  console_port: 30880  # KubeSphere 控制台，保持监听 127.0.0.1
+  # Ingress 宿主机端口 → 控制平面节点 80/443，监听所有 IPv4 网卡；仅创建集群时生效。
+  # Controller 需单独部署到 ingress-ready=true 节点并监听节点 80/443。
+  http_port: 80
+  https_port: 443
 
 # 项目镜像源基线：迁移自 linux/docker/containerd/mirrors.sh、docker/docker-mirror.sh
 # 以及 docs/infra-reference.md、aliyun-mirrors.md；内网地址需要运行环境可达。

@@ -36,6 +36,8 @@ type fileConfig struct {
 		Kubeconfig  string `yaml:"kubeconfig"`
 		Binary      string `yaml:"binary"`
 		ConsolePort int    `yaml:"console_port"`
+		HTTPPort    int    `yaml:"http_port"`
+		HTTPSPort   int    `yaml:"https_port"`
 	} `yaml:"kind"`
 	Mirrors    mirrorSettings `yaml:"mirrors"`
 	KubeSphere struct {

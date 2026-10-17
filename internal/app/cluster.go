@@ -101,7 +101,7 @@ var clusterNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
 
 type clusterOptions struct {
 	name, kubeconfig, binary, nodeVersion string
-	workers, port                         int
+	workers, port, httpPort, httpsPort    int
 }
 
 func clusterFlags(f *flag.FlagSet) *clusterOptions {
@@ -113,6 +113,8 @@ func clusterFlags(f *flag.FlagSet) *clusterOptions {
 	f.StringVar(&o.nodeVersion, "version", "v1.24.7", "创建节点的 Kubernetes 版本")
 	f.IntVar(&o.workers, "workers", 2, "worker 数量")
 	f.IntVar(&o.port, "console-port", 30880, "127.0.0.1 上的 KS 控制台映射端口")
+	f.IntVar(&o.httpPort, "http-port", 80, "Ingress HTTP 宿主机端口，映射控制平面节点 80，监听 0.0.0.0")
+	f.IntVar(&o.httpsPort, "https-port", 443, "Ingress HTTPS 宿主机端口，映射控制平面节点 443，监听 0.0.0.0")
 	return o
 }
 func applyClusterConfig(f *flag.FlagSet, o *clusterOptions, c fileConfig) error {
@@ -130,6 +132,12 @@ func applyClusterConfig(f *flag.FlagSet, o *clusterOptions, c fileConfig) error 
 	if c.Kind.ConsolePort != 0 {
 		setConfigFlag(f, "console-port", strconv.Itoa(c.Kind.ConsolePort))
 	}
+	if c.Kind.HTTPPort != 0 {
+		setConfigFlag(f, "http-port", strconv.Itoa(c.Kind.HTTPPort))
+	}
+	if c.Kind.HTTPSPort != 0 {
+		setConfigFlag(f, "https-port", strconv.Itoa(c.Kind.HTTPSPort))
+	}
 	if !explicitFlag(f, "kubeconfig") {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -140,6 +148,9 @@ func applyClusterConfig(f *flag.FlagSet, o *clusterOptions, c fileConfig) error 
 	o.binary = configuredKindBinary(c, o.binary)
 	if !clusterNamePattern.MatchString(o.name) || o.workers < 0 || o.workers > 100 || o.port < 1 || o.port > 65535 {
 		return errors.New("集群名、workers 或 console-port 无效")
+	}
+	if o.httpPort < 1 || o.httpPort > 65535 || o.httpsPort < 1 || o.httpsPort > 65535 || o.httpPort == o.httpsPort || o.httpPort == o.port || o.httpsPort == o.port {
+		return errors.New("http-port、https-port 须在 1～65535，且不能互相或与 console-port 重复")
 	}
 	if !versionPattern.MatchString(o.nodeVersion) {
 		return errors.New("Kubernetes 版本须为 vX.Y.Z")
@@ -169,7 +180,13 @@ func (o clusterOptions) kubeArgs(args ...string) []string {
 	return append([]string{"--kubeconfig", o.kubeconfig, "--context", "kind-" + o.name, "--request-timeout=30s"}, args...)
 }
 func renderKind(o clusterOptions) ([]byte, error) {
-	nodes := []any{map[string]any{"role": "control-plane", "image": "kindest/node:" + o.nodeVersion, "extraPortMappings": []any{map[string]any{"containerPort": 30880, "hostPort": o.port, "listenAddress": "127.0.0.1", "protocol": "TCP"}}}}
+	ports := []any{
+		map[string]any{"containerPort": 80, "hostPort": o.httpPort, "listenAddress": "0.0.0.0", "protocol": "TCP"},
+		map[string]any{"containerPort": 443, "hostPort": o.httpsPort, "listenAddress": "0.0.0.0", "protocol": "TCP"},
+		map[string]any{"containerPort": 30880, "hostPort": o.port, "listenAddress": "127.0.0.1", "protocol": "TCP"},
+	}
+	nodes := []any{map[string]any{"role": "control-plane", "image": "kindest/node:" + o.nodeVersion, "labels": map[string]string{"ingress-ready": "true"}, "extraPortMappings": ports}}
+
 	for i := 0; i < o.workers; i++ {
 		nodes = append(nodes, map[string]any{"role": "worker", "image": "kindest/node:" + o.nodeVersion})
 	}
@@ -224,6 +241,7 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 			return 1, err
 		}
 		fmt.Fprintf(out, "kind create: %s; Kubernetes %s; workers=%d; kubeconfig=%s\n", o.name, o.nodeVersion, o.workers, o.kubeconfig)
+		fmt.Fprintf(out, "Ingress 端口: 0.0.0.0:%d → control-plane:80，0.0.0.0:%d → control-plane:443；需单独部署 Ingress Controller。\n", o.httpPort, o.httpsPort)
 		if dryRun {
 			if _, err = out.Write(config); err != nil {
 				return 1, err

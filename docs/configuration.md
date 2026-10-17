@@ -188,3 +188,9 @@ install:
 优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。`--download-base` 优先于 install.kubectl_download_base，官方默认源可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
+
+## kind Ingress 入口端口
+
+`kind.http_port: 80`、`kind.https_port: 443` 分别映射到控制平面节点容器 80/443，绑定 `0.0.0.0`；CLI `--http-port` / `--https-port` 优先于 YAML。现有 `kind.console_port` 保持 127.0.0.1 上的 KubeSphere 30880 映射。端口范围为 1～65535，三项不能重复；被其他服务占用时须更换宿主机端口。
+
+创建前用 `opskit kind create --dry-run` 检查生成的 extraPortMappings。控制平面设置 `ingress-ready=true`，Ingress Controller 需另行部署到此节点并监听节点 80/443（例如 hostPort/hostNetwork）；端口映射不自动安装 Controller 或创建 Ingress 对象。已核对 kind v0.17.0 配置类型支持这些字段。已有集群的 Docker 映射不会变更，新版 opskit 不会自动删除旧集群；需使用新集群名或自行安排重建。实际集群 Ingress 连通性尚未验收。
