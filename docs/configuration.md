@@ -162,7 +162,7 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 `versions.docker`、`cri_dockerd`、`containerd`、`runc`、`cni_plugins` 均为完整 vX.Y.Z；安装命令的 `--version` 优先于对应配置。containerd 另支持 `--runc-version` 和 `--cni-version`。Docker 27.3.1、cri-dockerd 0.3.22、containerd 2.1.3、CNI 1.5.1 来自 linux 项目；runc 固定为 1.2.6，不沿用原脚本的 1.1.10，不做 glibc 失败时静默降级。此版本组合尚未做真机兼容验收。
 
-`install.docker_method` 为 script 或 binary，`docker_mirror` 为官方脚本的软件包源（Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `docker_script` 默认 get.docker.com；二进制源 `docker_binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`release_base` 用于 containerd、runc、CNI 和 cri-dockerd，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
+`install.docker_method` 为 script 或 binary，`docker_mirror` 为官方脚本的软件包源（默认清华 URL，也支持 Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `docker_script` 默认通过 Nexus 代理获取固定提交的官方脚本；二进制源 `docker_binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`release_base` 用于 containerd、runc、CNI 和 cri-dockerd，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
 
 `--url` 只覆盖主包/脚本，`--sha256` 只校验该文件；runc/CNI 无单独摘要字段，使用源站 HTTPS。安装不改既有配置、不升级现有运行时，不自动修改主机网络参数。完整示例见首页运行时安装章节。既有 config/config.yaml 不自动覆盖；用 `opskit config init --config config/config.new.yaml` 生成对照模板，手工合并新字段。
 
@@ -210,3 +210,18 @@ install:
 | cri-dockerd、containerd、runc、CNI plugins | `install.release_base` |
 
 默认地址只维护在 `config.example.yaml`，代码读取嵌入模板作为默认值；用户配置留空时使用该默认值。已有用户配置不自动覆写。kind 源优先级为 CLI `--download-base` > `KIND_DOWNLOAD_BASE` > YAML > 模板默认值；该环境变量不影响运行时安装。运行时 `--url` 可覆盖主包地址，containerd 配套 runc/CNI 仍使用 `release_base`。Docker 官方脚本内部的软件包源由 `docker_mirror` 控制。上述配置针对文件下载，容器镜像仍走 mirrors 配置。完整下载地址、版本与架构在执行日志中显示。
+
+## Docker 清华软件包源
+
+按 [清华 Docker CE 帮助](https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/) 设置软件包源：
+
+```yaml
+install:
+  docker_method: script
+  docker_mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce
+  docker_script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
+```
+
+运行 `opskit docker install --version v27.3.1`，或用 `--mirror https://mirrors.tuna.tsinghua.edu.cn/docker-ce` 覆盖软件包源。URL 通过子进程环境 `DOWNLOAD_URL` 传递，此时不传脚本的 `--mirror`，避免其覆盖该地址；Aliyun / AzureChinaCloud 仍通过官方 `--mirror` 传递。
+
+清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `docker_script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `versions.docker` / `--version` 指定。

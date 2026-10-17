@@ -329,7 +329,7 @@ Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://storage.googlea
 Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。运行时安装命令默认直接执行，添加 `--dry-run` 仅预览；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
 
 ```bash
-# 默认使用官方脚本和 Aliyun 软件包源；预览可追加 --dry-run
+# 默认使用官方脚本和清华 Docker CE 软件包源；预览可追加 --dry-run
 opskit docker install --version v27.3.1
 # Docker 静态二进制：包含 dockerd 自带的 containerd/runc
 opskit docker install --version v27.3.1 --method binary
@@ -377,6 +377,8 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 备用地址在 [downloads.json](downloads.json) 集中配置，接入说明见 [Nexus 下载指南](docs/downloads.md)。
 
 ## 近期更新
+
+Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker_mirror` 支持 HTTP(S) URL 或 Aliyun / AzureChinaCloud。脚本下载地址独立由 `install.docker_script` 配置，模板指向 Nexus 的固定提交代理；代理端到端连通性尚未验证。详见 [清华接入配置](docs/configuration.md#docker-清华软件包源)。
 
 下载地址均可通过统一 YAML 覆盖，完整对应表见 [下载源配置](docs/configuration.md#下载源配置)。kind 与运行时源相互独立；默认地址统一定义在配置模板。
 

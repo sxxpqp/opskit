@@ -58,7 +58,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	var method, mirror, runc, cni *string
 	if tool == "docker" {
 		method = f.String("method", "script", "script 或 binary")
-		mirror = f.String("mirror", "Aliyun", "官方脚本软件包源 Aliyun 或 AzureChinaCloud")
+		mirror = f.String("mirror", defaults.DockerMirror, "官方脚本软件包源：HTTP(S) 根地址、Aliyun 或 AzureChinaCloud")
 	}
 	if tool == "containerd" {
 		runc = f.String("runc-version", "v1.2.6", "配套 runc 版本")
@@ -120,8 +120,8 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 			return 2, errors.New("method 必须为 script 或 binary")
 		}
 		if script {
-			if *mirror != "Aliyun" && *mirror != "AzureChinaCloud" {
-				return 2, errors.New("mirror 必须为 Aliyun 或 AzureChinaCloud")
+			if err := validateDockerMirror(*mirror); err != nil {
+				return 2, err
 			}
 			if *source == "" {
 				*source = c.Install.DockerScript
@@ -178,7 +178,11 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	fmt.Fprintln(out, "下载目录:", *downloadDir)
 	fmt.Fprintf(out, "安装计划: %s %s，Linux/%s\n", tool, *version, *arch)
 	if script {
-		fmt.Fprintf(out, "方式: 官方脚本 --mirror %s --version %s\n", *mirror, ver)
+		if strings.HasPrefix(*mirror, "http") {
+			fmt.Fprintf(out, "方式: 官方脚本 DOWNLOAD_URL=%s --version %s\n", *mirror, ver)
+		} else {
+			fmt.Fprintf(out, "方式: 官方脚本 --mirror %s --version %s\n", *mirror, ver)
+		}
 	}
 	for _, p := range packages {
 		fmt.Fprintf(out, "下载: %s %s %s\n", p.name, p.version, p.source)
@@ -266,7 +270,9 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 				return 1, e
 			}
 		}
-		if e = commandRun(ctx, nil, out, diag, "sh", tmp.Name(), "--mirror", *mirror, "--version", ver, "--channel", "stable"); e != nil {
+		cmd := dockerScriptCommand(ctx, tmp.Name(), ver, *mirror)
+		cmd.Stdout, cmd.Stderr = out, diag
+		if e = cmd.Run(); e != nil {
 			return 1, e
 		}
 	} else {
@@ -563,4 +569,35 @@ func (b *runtimeDownloadBuffer) Write(p []byte) (int, error) {
 		return 0, errors.New("安装包下载大小超过 256 MiB")
 	}
 	return b.Buffer.Write(p)
+}
+
+func validateDockerMirror(mirror string) error {
+	if mirror == "Aliyun" || mirror == "AzureChinaCloud" {
+		return nil
+	}
+	u, err := url.Parse(mirror)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return errors.New("mirror 必须为 Aliyun、AzureChinaCloud 或无凭据、查询参数、片段的 HTTP(S) 根地址")
+	}
+	return nil
+}
+
+func dockerScriptCommand(ctx context.Context, script, version, mirror string) *exec.Cmd {
+	args := []string{script, "--version", version, "--channel", "stable"}
+	env := os.Environ()
+	if strings.HasPrefix(mirror, "http") {
+		// An explicit --mirror would override DOWNLOAD_URL inside Docker's script.
+		filtered := make([]string, 0, len(env)+1)
+		for _, entry := range env {
+			if !strings.HasPrefix(entry, "DOWNLOAD_URL=") {
+				filtered = append(filtered, entry)
+			}
+		}
+		env = append(filtered, "DOWNLOAD_URL="+strings.TrimRight(mirror, "/"))
+	} else {
+		args = append(args, "--mirror", mirror)
+	}
+	cmd := exec.CommandContext(ctx, "sh", args...)
+	cmd.Env = env
+	return cmd
 }

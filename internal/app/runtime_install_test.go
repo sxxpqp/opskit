@@ -24,7 +24,7 @@ func TestRuntimeInstallPlans(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"docker", nil, []string{"官方脚本 --mirror Aliyun --version 27.3.1", "仅预览"}},
+		{"docker", []string{"--mirror", "Aliyun"}, []string{"官方脚本 --mirror Aliyun --version 27.3.1", "仅预览"}},
 		{"docker", []string{"--method", "binary", "--arch", "arm64", "--version", "28.0.1"}, []string{"docker v28.0.1", "aarch64/docker-28.0.1.tgz"}},
 		{"cri-dockerd", []string{"--arch", "amd64"}, []string{"cri-dockerd-0.3.22.amd64.tgz", "https://packages.example/Mirantis"}},
 		{"containerd", []string{"--arch", "arm64", "--runc-version", "v1.2.5"}, []string{"containerd-2.1.3-linux-arm64.tar.gz", "runc v1.2.5", "cni-plugins-linux-arm64-v1.5.1.tgz"}},
@@ -189,6 +189,36 @@ func TestRuntimeDownloadDefaultsIgnoreKindEnvironment(t *testing.T) {
 		code, err := runRuntimeInstall(context.Background(), tool, []string{"--config", cfg, "--version", "v1.7.27", "--dry-run"}, &out, &out)
 		if code != 0 || err != nil || !strings.Contains(out.String(), defaults.ReleaseBase+"/") || strings.Contains(out.String(), "kind-only.example") {
 			t.Fatalf("%s: %d %v %s", tool, code, err, out.String())
+		}
+	}
+}
+
+func TestDockerScriptCustomMirror(t *testing.T) {
+	t.Setenv("DOWNLOAD_URL", "https://wrong.example")
+	mirror := "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/"
+	if err := validateDockerMirror(mirror); err != nil {
+		t.Fatal(err)
+	}
+	cmd := dockerScriptCommand(context.Background(), "installer.sh", "27.3.1", mirror)
+	args := strings.Join(cmd.Args, " ")
+	if strings.Contains(args, "--mirror") || !strings.Contains(args, "--version 27.3.1") {
+		t.Fatal(args)
+	}
+	count := 0
+	for _, entry := range cmd.Env {
+		if strings.HasPrefix(entry, "DOWNLOAD_URL=") {
+			count++
+			if entry != "DOWNLOAD_URL=https://mirrors.tuna.tsinghua.edu.cn/docker-ce" {
+				t.Fatal(entry)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("DOWNLOAD_URL count=%d", count)
+	}
+	for _, invalid := range []string{"Tuna", "https://user:password@example.com", "https://example.com?a=1", "file:///tmp/repo"} {
+		if validateDockerMirror(invalid) == nil {
+			t.Fatalf("accepted %s", invalid)
 		}
 	}
 }

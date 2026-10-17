@@ -27,8 +27,8 @@ install:
   kubectl_download_base: https://storage.googleapis.com/kubernetes-release/release  # 官方存储直连，已验证 v1.24.7；支持 KUBECTL_DOWNLOAD_BASE / --kubectl-download-base 覆盖
   download_dir: ""  # 默认用户目录 ~/.opskit/downloads（Windows 为 %USERPROFILE%\.opskit\downloads）；可覆盖
   docker_method: script  # script / binary
-  docker_mirror: Aliyun  # 官方脚本软件包源，注意大小写
-  docker_script: https://get.docker.com
+  docker_mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce  # 软件包源 URL；也支持 Aliyun / AzureChinaCloud
+  docker_script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
   docker_binary_base: https://mirrors.aliyun.com/docker-ce/linux/static/stable
   release_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 
