@@ -8,7 +8,8 @@ var commandGroupHelp = map[string]string{
 自动识别 Linux/macOS amd64、arm64 或 Windows amd64；校验 SHA-256、客户端版本和 PATH。
 默认直接安装，--dry-run 仅预览。
 版本优先级: --version > versions.kubectl > versions.kubernetes。
-下载源优先级: --download-base > KUBECTL_DOWNLOAD_BASE > install.kubectl_download_base > 默认官方存储直连。
+下载源优先级: --kubectl-download-base > KUBECTL_DOWNLOAD_BASE > install.kubectl_download_base > 默认官方存储直连。
+--download-base 保留为 --kubectl-download-base 的兼容别名。
 示例:
   opskit kubectl install
   opskit kubectl install --version v1.24.7

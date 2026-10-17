@@ -209,7 +209,7 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 			}
 			args := []string{"kubectl", "install", "--config", file, "--version", "v1.24.7", "--dry-run"}
 			if c.cli != "" {
-				args = append(args, "--download-base", c.cli)
+				args = append(args, "--kubectl-download-base", c.cli)
 			}
 			var out bytes.Buffer
 			code, err := Run(context.Background(), args, &out, &out, "dev")
@@ -230,5 +230,43 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "secret") {
 		t.Fatal("source credentials leaked")
+	}
+}
+
+func TestKubectlDownloadFlagAliases(t *testing.T) {
+	if _, err := k8s.KubectlAsset(runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Skip(err)
+	}
+	t.Setenv("KUBECTL_DOWNLOAD_BASE", "https://env.example/release")
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfg, []byte("schema_version: 1\ninstall:\n  kubectl_download_base: https://config.example/release\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{"canonical", []string{"--kubectl-download-base", "https://cli.example/release"}, "https://cli.example/release"},
+		{"canonical equals", []string{"--kubectl-download-base=https://cli.example/release"}, "https://cli.example/release"},
+		{"old alias", []string{"--download-base", "https://legacy.example/release"}, "https://legacy.example/release"},
+		{"old alias equals", []string{"--download-base=https://legacy.example/release"}, "https://legacy.example/release"},
+		{"canonical last", []string{"--download-base", "https://legacy.example/release", "--kubectl-download-base", "https://cli.example/release"}, "https://cli.example/release"},
+		{"alias last", []string{"--kubectl-download-base", "https://cli.example/release", "--download-base", "https://legacy.example/release"}, "https://legacy.example/release"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"kubectl", "install", "--config", cfg, "--version", "v1.24.7", "--dry-run"}, c.flags...)
+			var out bytes.Buffer
+			code, err := Run(context.Background(), args, &out, &out, "dev")
+			if code != 0 || err != nil || !strings.Contains(out.String(), c.want+"/v1.24.7/bin/") {
+				t.Fatalf("%d %v %s", code, err, out.String())
+			}
+		})
+	}
+	var out bytes.Buffer
+	code, err := Run(context.Background(), []string{"kubectl", "install", "--help"}, &out, &out, "dev")
+	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl-download-base") || !strings.Contains(out.String(), "KUBECTL_DOWNLOAD_BASE") || !strings.Contains(out.String(), "兼容别名") {
+		t.Fatalf("%d %v %s", code, err, out.String())
 	}
 }
