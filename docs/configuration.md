@@ -186,7 +186,7 @@ install:
   download_dir: ""  # 默认用户目录 .opskit/downloads
 ```
 
-优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 默认官方存储直连；空环境变量不覆盖 YAML。该默认地址已核验项目 v1.24.7 的五种平台文件头与校验文件；本机完整下载仍超时，完整链路尚未验收，可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
+优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认官方存储直连；空环境变量不覆盖 YAML。默认使用官方存储直连；Nexus 可显式选择 `kubernetes-binaries`，但当前完整二进制回源返回 504。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
@@ -272,3 +272,25 @@ install:
 ```
 
 旧平铺字段 `kind_download_base`、`kubectl_download_base`、`docker_method`、`docker_mirror`、`docker_script`、`docker_binary_base`、`release_base` 已移除，读取时报未知字段。原 `release_base` 的值分别迁移到 containerd、runc、cni_plugins、cri_dockerd 块中的 `download_base`；各组件可单独指定来源，不再共用隐式发布地址。CLI 参数和环境变量名称保持原命名。
+
+## kubectl：Nexus 与阿里云镜像
+
+当前安装器支持配置 Nexus 的 Kubernetes 裸二进制代理，例如：
+
+```yaml
+install:
+  kubectl:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
+```
+
+例如 v1.24.7 的 Linux amd64 会请求 `<base>/v1.24.7/bin/linux/amd64/kubectl` 和 `kubectl.sha256`。下载、SHA-256 校验及执行 `kubectl version` 的安装检查保持不变。版本仍用 `--version v1.24.7` 或 `versions.kubectl` 固定，不取 latest。
+
+```sh
+opskit kubectl install --version v1.24.7 --dry-run
+# 使用其他兼容的镜像根地址：
+opskit kubectl install --version v1.24.7 --kubectl-download-base https://your-mirror.example/release --dry-run
+```
+
+阿里云来源可以使用 OSS 自建镜像或其他满足相同 URL 结构的文件服务，直接填写根地址即可。阿里云 apt/yum Kubernetes 镜像提供 deb/rpm 软件包，不能直接用作这个裸二进制安装器的 download_base。本次探测 `mirrors.aliyun.com/kubernetes-release/kubectl` 和 `.../release` 下的 v1.24.7 Linux amd64 候选路径均返回 404，因此未将它们列为可用默认源，也不会在 Nexus 失败时静默切换过去。
+
+现有用户配置不会自动改写；请编辑 `install.kubectl.download_base`，或用环境变量 `KUBECTL_DOWNLOAD_BASE` / CLI 覆盖。Nexus 未缓存文件需先回源，受其上游网络和缓存状态影响。本次 v1.24.7 Linux amd64 的校验文件请求成功，完整二进制请求返回 504；仅有校验文件可读不等于安装成功。当前未将 Nexus 改为默认值。

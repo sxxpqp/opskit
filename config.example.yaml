@@ -27,6 +27,10 @@ install:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # KIND_DOWNLOAD_BASE / kind install --download-base
   kubectl:
     download_base: https://storage.googleapis.com/kubernetes-release/release  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
+    # Nexus 可选根地址：https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
+    # 当前探测：Nexus v1.24.7 linux/amd64 校验文件可读，完整二进制回源返回 504，需先修复上游访问。
+    # 可换官方 https://dl.k8s.io/release 或阿里云/OSS 自建镜像的兼容根地址。
+    # 必须同时提供 <version>/bin/<os>/<arch>/kubectl[.exe] 和追加 .sha256 的校验文件。
   download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads，可覆盖
   docker:
     method: script  # script / binary

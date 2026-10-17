@@ -309,7 +309,7 @@ opskit kubectl install --version v1.24.7 --dry-run
 
 先校验上游 SHA-256，再运行 `kubectl version --client=true --output=json` 验证客户端版本，成功后安装到 `~/.local/share/opskit/kubectl/<版本>/`。下载保留在统一 `.opskit/downloads` 目录；Unix 创建软链接，Windows 复制 exe。命令入口复用 PATH 中可写目录，找不到时才配置用户 PATH；已有其他来源的 kubectl 不覆盖。安装后检查实际 PATH 命中与客户端版本，新终端待生效时明确提示。安装不连接集群、不修改 kubeconfig，实际集群操作仍应选择匹配服务端的客户端版本。
 
-kubectl 默认使用官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`，已核验项目固定 v1.24.7 五种平台的文件头和校验文件可读取；本机完整安装下载仍超时，完整链路尚未验收；这不是国内镜像，目标网络速度需实际验证。其他版本须确认该源是否保留文件，可显式切换到官方 `https://dl.k8s.io/release` 或自建代理。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > `install.kubectl.download_base` > 默认值，空环境变量不覆盖配置。既有配置若仍填 dl.k8s.io，需要自行改为新源，或用环境变量/命令行覆盖；不会自动改写用户显式配置。
+kubectl 的 `install.kubectl.download_base` 支持官方、Nexus 和具有相同目录结构的阿里云 / OSS 镜像。默认保留官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`。现有 Nexus 候选根地址为 `https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries`；本次 v1.24.7 Linux amd64 校验文件可读，但完整二进制回源返回 504，尚未验证可安装。阿里云 apt/yum 的 deb/rpm 仓库不能直接作为裸二进制下载源；本次探测的两个阿里云裸二进制候选路径返回 404，因此不列为可用源。配置方法见 [配置指南](docs/configuration.md#kubectlnexus-与阿里云镜像)。下载源优先级：`--kubectl-download-base` > `KUBECTL_DOWNLOAD_BASE` > YAML > 模板默认值，已有显式配置不会自动覆盖。
 
 ```bash
 export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release
@@ -387,6 +387,7 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.m
 | [v0.1.8](https://github.com/sxxpqp/opskit/releases/tag/v0.1.8) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | kubectl 补充 Nexus / 阿里云兼容镜像配置与下载要求，标明实际可达性限制 |
 | main（未发布） | 安装配置统一为 `install.<组件>.<参数>`，kind、kubectl、Docker 和运行时各自分组；旧平铺字段需迁移 |
 | main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / install.kubectl.download_base，移除旧 --download-base 参数 |
 | main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；默认官方存储直连，命令行 > 环境变量 > YAML > 默认值 |
