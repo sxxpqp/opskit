@@ -42,7 +42,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	f.SetOutput(diag)
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "目标版本 vX.Y.Z；也可由 versions 配置")
-	apply := f.Bool("apply", false, "执行安装；默认仅预览")
+	dryRun := f.Bool("dry-run", false, "仅预览安装计划，不执行安装")
 	arch := f.String("arch", runtime.GOARCH, "Linux 目标架构 amd64/arm64")
 	source := f.String("url", "", "覆盖主安装包或 Docker 官方脚本 URL")
 	checksum := f.String("sha256", "", "主安装包 SHA-256；指定后强制校验")
@@ -175,8 +175,8 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 		fmt.Fprintln(out, "目标: /usr/local/bin、/etc/systemd/system；不覆盖已有文件。")
 	}
 	fmt.Fprintln(out, "镜像源另执行 mirror 命令。")
-	if !*apply {
-		fmt.Fprintln(out, "仅预览；添加 --apply 执行。")
+	if *dryRun {
+		fmt.Fprintln(out, "仅预览；去掉 --dry-run 执行安装。")
 		return 0, nil
 	}
 	if runtime.GOOS != "linux" || runtime.GOARCH != *arch {

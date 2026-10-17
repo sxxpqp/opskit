@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -31,7 +32,7 @@ func TestRuntimeInstallPlans(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.tool+strings.Join(c.args, " "), func(t *testing.T) {
 			var out, diag bytes.Buffer
-			args := append([]string{c.tool, "install", "--config", cfg}, c.args...)
+			args := append([]string{c.tool, "install", "--config", cfg, "--dry-run"}, c.args...)
 			code, e := Run(context.Background(), args, &out, &diag, "dev")
 			if e != nil || code != 0 {
 				t.Fatalf("%d %v %s", code, e, diag.String())
@@ -135,5 +136,40 @@ func TestRuntimeChecksumAndUnits(t *testing.T) {
 	u := runtimeUnits("cri-dockerd")["cri-docker.service"]
 	if !strings.Contains(u, "unix:///run/cri-dockerd.sock") || strings.Contains(u, "fd://") {
 		t.Fatal(u)
+	}
+}
+
+func TestRuntimeInstallExecutesByDefault(t *testing.T) {
+	// On non-Linux hosts, default execution must reach the platform preflight;
+	// dry-run succeeds before that preflight without touching the host.
+	if runtime.GOOS == "linux" {
+		t.Skip("non-Linux preflight test")
+	}
+	cfg := filepath.Join(t.TempDir(), "absent.yaml")
+	for _, tool := range []string{"docker", "cri-dockerd", "containerd"} {
+		var out, diag bytes.Buffer
+		code, err := Run(context.Background(), []string{tool, "install", "--config", cfg, "--version", "v1.2.3"}, &out, &diag, "dev")
+		// Explicit config paths must exist.
+		if err == nil || code == 0 {
+			t.Fatal("expected missing config error")
+		}
+		if err := os.WriteFile(cfg, []byte("schema_version: 1\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		out.Reset()
+		diag.Reset()
+		code, err = Run(context.Background(), []string{tool, "install", "--config", cfg, "--version", "v1.2.3"}, &out, &diag, "dev")
+		if code == 0 || err == nil || !strings.Contains(err.Error(), "Linux") {
+			t.Fatalf("default execution did not reach preflight: %s %d %v", tool, code, err)
+		}
+		out.Reset()
+		diag.Reset()
+		code, err = Run(context.Background(), []string{tool, "install", "--config", cfg, "--version", "v1.2.3", "--apply"}, &out, &diag, "dev")
+		if code == 0 || err == nil {
+			t.Fatal("removed --apply flag accepted")
+		}
+		if err := os.Remove(cfg); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

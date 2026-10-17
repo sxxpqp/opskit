@@ -46,7 +46,7 @@ main 分支新增 **Docker 双方式 / cri-dockerd / containerd 安装、kind �
 
 | 能力 | 当前行为 |
 |---|---|
-| 运行时安装（main，未发布） | Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI；指定版本与预览 |
+| 运行时安装（main，未发布） | Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI；指定版本、默认执行、--dry-run 预览 |
 | kind 管理（main，未发布） | 版本安装、集群创建/状态/日志、context 切换及确认删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；预览、备份与显式写入 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
@@ -287,17 +287,17 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 ## 运行时安装（main，未发布）
 
-Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。所有命令默认仅输出计划，加 `--apply` 执行；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
+Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。运行时安装命令默认直接执行，添加 `--dry-run` 仅预览；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
 
 ```bash
-# Docker 官方脚本：软件包源使用 Aliyun，不是镜像拉取代理
-opskit docker install --version v27.3.1 --method script --mirror Aliyun --apply
+# 默认使用官方脚本和 Aliyun 软件包源；预览可追加 --dry-run
+opskit docker install --version v27.3.1
 # Docker 静态二进制：包含 dockerd 自带的 containerd/runc
-opskit docker install --version v27.3.1 --method binary --apply
+opskit docker install --version v27.3.1 --method binary
 # 使用 Docker 作为 Kubernetes 运行时时再装 CRI 适配器
-opskit cri-dockerd install --version v0.3.22 --apply
+opskit cri-dockerd install --version v0.3.22
 # 或单独安装 containerd（与上面的 Docker 路线二选一）
-opskit containerd install --version v2.1.3 --runc-version v1.2.6 --cni-version v1.5.1 --apply
+opskit containerd install --version v2.1.3 --runc-version v1.2.6 --cni-version v1.5.1
 opskit mirror containerd --apply
 # 自行安排重启，使 mirror 生效
 sudo systemctl restart containerd
@@ -339,7 +339,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 | 功能版本 | 变化 |
 |---|---|
-| main（未发布） | 新增 Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI 安装，默认预览并拒绝覆盖已有运行时 |
+| main（未发布） | 新增 Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI 安装，默认直接安装、--dry-run 预览，并拒绝覆盖已有运行时 |
 | main（未发布） | 迁入 kind/mirror/KS 流程与项目实际默认镜像源，支持 Docker insecure-registry 合并与 Go proxy 列表；配置集中到 config/config.yaml |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |

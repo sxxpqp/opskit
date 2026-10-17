@@ -158,6 +158,8 @@ s3:
 
 ## 运行时版本与安装源（main，未发布）
 
+Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接受 `--apply`；需要预览时添加 `--dry-run`。
+
 `versions.docker`、`cri_dockerd`、`containerd`、`runc`、`cni_plugins` 均为完整 vX.Y.Z；安装命令的 `--version` 优先于对应配置。containerd 另支持 `--runc-version` 和 `--cni-version`。Docker 27.3.1、cri-dockerd 0.3.22、containerd 2.1.3、CNI 1.5.1 来自 linux 项目；runc 固定为 1.2.6，不沿用原脚本的 1.1.10，不做 glibc 失败时静默降级。此版本组合尚未做真机兼容验收。
 
 `install.docker_method` 为 script 或 binary，`docker_mirror` 为官方脚本的软件包源（Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `docker_script` 默认 get.docker.com；二进制源 `docker_binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`release_base` 用于 containerd、runc、CNI 和 cri-dockerd，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。

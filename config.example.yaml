@@ -19,7 +19,7 @@ versions:
   kubernetes: v1.24.7
   kubesphere: v3.4.1
 
-# Linux systemd 主机安装；默认仅预览，--apply 执行。不覆盖已有运行时。
+# Linux systemd 主机安装；默认执行，--dry-run 仅预览。不覆盖已有运行时。
 # URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
 install:
   docker_method: script  # script / binary

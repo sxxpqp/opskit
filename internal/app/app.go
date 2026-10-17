@@ -48,7 +48,7 @@ func (s *storage) flags(f *flag.FlagSet) {
 
 func Run(ctx context.Context, args []string, out, diag io.Writer, version string) (int, error) {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "opskit version | config init | docker/cri-dockerd/containerd install --version VERSION [--apply] | kind install/create/status/logs/delete/use/unuse [flags] | mirror docker/containerd/go/npm/pip/maven [flags] | kubesphere install --version VERSION [flags] | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./config/config.yaml (legacy ./opskit.yaml fallback); override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
+		fmt.Fprintln(out, "opskit version | config init | docker/cri-dockerd/containerd install --version VERSION [--dry-run] | kind install/create/status/logs/delete/use/unuse [flags] | mirror docker/containerd/go/npm/pip/maven [flags] | kubesphere install --version VERSION [flags] | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./config/config.yaml (legacy ./opskit.yaml fallback); override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
 		return 0, nil
 	}
 	if args[0] == "version" {
