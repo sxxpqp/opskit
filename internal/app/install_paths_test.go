@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDownloadRetained(t *testing.T) {
@@ -210,5 +211,118 @@ func TestPersistUnixKindPath(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatal("PATH already present should not touch profiles")
+	}
+}
+
+func TestVerifyKindCommand(t *testing.T) {
+	dir := fakeTools(t)
+	var out bytes.Buffer
+	if err := verifyKindCommand(context.Background(), dir, "v0.17.0", &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "PATH 验证通过") {
+		t.Fatal(out.String())
+	}
+	if err := verifyKindCommand(context.Background(), dir, "v0.33.0", io.Discard); err == nil {
+		t.Fatal("wrong version was accepted")
+	}
+	binary := "kind"
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	shadow := t.TempDir()
+	b, err := os.ReadFile(filepath.Join(dir, binary))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(shadow, binary), b, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shadow+string(os.PathListSeparator)+dir)
+	if err = verifyKindCommand(context.Background(), dir, "v0.17.0", io.Discard); err == nil || !strings.Contains(err.Error(), "优先命中") {
+		t.Fatalf("shadowed kind accepted: %v", err)
+	}
+	t.Setenv("PATH", shadow)
+	out.Reset()
+	if err = verifyKindCommand(context.Background(), dir, "v0.17.0", &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "PATH 待生效") || strings.Contains(out.String(), "PATH 验证通过") {
+		t.Fatal(out.String())
+	}
+}
+func TestUnsupportedShellPathFailsClearly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix shell")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SHELL", "/usr/bin/fish")
+	t.Setenv("PATH", "/usr/bin:/bin")
+	err := finishKindPath(filepath.Join(t.TempDir(), "bin"), io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "不支持自动 PATH") {
+		t.Fatalf("unsupported shell accepted: %v", err)
+	}
+}
+
+func TestKindInFreshUnixShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix startup files")
+	}
+	dir := fakeTools(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Launch a fresh interactive shell with an initial PATH that excludes the tool.
+	line := shellPathLine(dir) + "\n"
+	cases := []struct {
+		shell   string
+		args    []string
+		profile string
+	}{
+		{"/bin/bash", []string{"--noprofile", "--rcfile", filepath.Join(home, ".bashrc"), "-ic", "command -v kind; kind version"}, ".bashrc"},
+		{"/bin/zsh", []string{"-ic", "command -v kind; kind version"}, ".zshrc"},
+	}
+	for _, c := range cases {
+		t.Run(c.shell, func(t *testing.T) {
+			if _, err := os.Stat(c.shell); err != nil {
+				t.Skip("shell unavailable")
+			}
+			if err := os.WriteFile(filepath.Join(home, c.profile), []byte(line), 0600); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, c.shell, c.args...)
+			cmd.Env = append(os.Environ(), "HOME="+home, "ZDOTDIR="+home, "PATH=/usr/bin:/bin")
+			b, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("new shell: %v %s", err, b)
+			}
+			if !strings.Contains(string(b), filepath.Join(dir, "kind")) || !strings.Contains(string(b), "kind v0.17.0") {
+				t.Fatalf("new shell resolved wrong kind: %s", b)
+			}
+		})
+	}
+}
+func TestWindowsUserPathReadBack(t *testing.T) {
+	if runtime.GOOS != "windows" || os.Getenv("GITHUB_ACTIONS") != "true" {
+		t.Skip("isolated Windows GitHub runner registry test")
+	}
+	// The hosted runner is ephemeral. Restore its exact prior User PATH even if the assertion fails.
+	script := `$ErrorActionPreference='Stop'
+$before=[Environment]::GetEnvironmentVariable('Path','User')
+try {
+& {` + windowsKindPathScript + `}
+& {` + windowsKindPathScript + `}
+$saved=[Environment]::GetEnvironmentVariable('Path','User')
+$matchingEntries=@($saved -split ';' | Where-Object { [string]::Equals($_.TrimEnd('\'),$env:OPSKIT_KIND_LINK_DIR.TrimEnd('\'),[StringComparison]::OrdinalIgnoreCase) })
+if ($matchingEntries.Count -ne 1) { throw 'PATH registration was not idempotent' }
+} finally { [Environment]::SetEnvironmentVariable('Path',$before,'User') }
+`
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+	cmd.Env = append(os.Environ(), "OPSKIT_KIND_LINK_DIR="+filepath.Join(t.TempDir(), "tools space's"))
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Windows user PATH: %v %s", err, b)
 	}
 }

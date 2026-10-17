@@ -77,7 +77,10 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	if err != nil {
 		return err
 	}
-	return exposeKind(filepath.Join(*binDir, binary), *linkDir, out)
+	if err := exposeKind(filepath.Join(*binDir, binary), *linkDir, out); err != nil {
+		return err
+	}
+	return verifyKindCommand(ctx, *linkDir, *version, out)
 }
 
 func defaultDownloadBase() string {
