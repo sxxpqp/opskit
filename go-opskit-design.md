@@ -65,7 +65,7 @@ opskit db backup mysql-prod
 opskit db backup mysql-prod --upload backup-store
 opskit db backup pg-prod --dry-run
 opskit db cleanup mysql-prod --dry-run
-opskit db cleanup mysql-prod --apply
+opskit db cleanup mysql-prod
 
 opskit s3 upload ./backup.sql.gz backup-store --key manual/backup.sql.gz
 opskit s3 download backup-store manual/backup.sql.gz -o ./backup.sql.gz
@@ -266,7 +266,7 @@ manifest 包含任务 ID、数据库类型/名称、服务端和客户端版本�
 
 本地 SHA-256 是产物校验依据，ETag 不当作通用 MD5。上传后使用 HEAD 核对长度、任务标识及 metadata；这只能确认对象属性，不等同于远端内容已逐字节校验。后端支持时验证明确的 checksum API，否则可用 `--verify-download` 回读计算 SHA-256。仅在数据对象验证完成后上传远端 manifest 作为本任务完成标识。
 
-`retain_local` 只作用于 opskit 自己生成且 manifest 有效的任务目录，不扫描任意 SQL 文件。清理默认 dry-run，`--apply` 才删除；要求目标目录位于已解析备份根目录内，拒绝符号链接逃逸。需要远端备份的任务只有上传已验证后才能被本地保留策略删除。第一版不自动清理 S3 对象，远端保留由 bucket 生命周期管理。
+`retain_local` 只作用于 opskit 自己生成且 manifest 有效的任务目录，不扫描任意 SQL 文件。清理默认执行，`--dry-run` 仅预览；要求目标目录位于已解析备份根目录内，拒绝符号链接逃逸。需要远端备份的任务只有上传已验证后才能被本地保留策略删除。第一版不自动清理 S3 对象，远端保留由 bucket 生命周期管理。
 
 ## 9. doctor 与可观测性
 
@@ -317,3 +317,15 @@ GitHub 发布工作流在实施时确定；代码检查与构建通过后才能�
 ## 13. 2026-10-15 实施补充
 
 GitHub 仓库：https://github.com/sxxpqp/opskit 。按阶段逐步完善，以 README 当前实现列表为准。首批支持 etcdctl snapshot save、S3 兼容上传与清单；etcd 不按 SQL 逻辑导出或额外 gzip。etcdutl 校验与隔离恢复演练仍需实测。交付范围扩为 Windows/Linux/macOS amd64、arm64；main 提交生成 Actions 安装包，v* 标签在检查与构建通过后自动发布公开 Release，按操作系统和架构提供下载附件。
+
+## 14. 2026-10-18 启动更新提示计划（尚未实现）
+
+正式 Release 二进制启动时检查是否存在较新的稳定版本，展示当前版本、目标版本及 `是否更新？[y/N]`。只有用户输入 y 才执行更新；输入 n 或回车继续原命令。更新成功后结束本次启动，提示重新执行原命令，不自动重放可能修改集群的操作。
+
+检查设置短超时，每天最多检查一次并缓存结果；网络失败不阻断原命令。非交互终端、CI 和管道环境只提示，不等待输入、不自动更新。`dev` / `go run` 构建跳过检查，正式版本按语义版本比较，忽略草稿和预发布 Release。发布流水线需确保可准确解析构建版本，目标使用实际 Release tag，不把未发布提交作为可安装版本。
+
+提供 `opskit update --check`、`opskit update --version vX.Y.Z` 和 `opskit update --dry-run`。交互检查发现新版本后，将实际 tag 固定为本次目标；帮助、日志和结果均显示目标版本，不在下载过程中重新解析 latest。版本查询地址与下载根地址统一由 YAML 管理，默认仅定义在 config.example.yaml，支持 Nexus 代理，实施时同步帮助与配置指南。
+
+根据操作系统与架构选择 Release 附件，下载至临时目录，校验发布的 SHA-256 清单，并执行候选程序的 version 命令确认目标版本。定位当前可执行文件，将候选文件移至同一文件系统后替换，保留旧版本供回退；权限不足时报告原因并继续使用原版本。Windows 通过独立更新进程在主进程退出后替换。并发启动应防止重复替换，下载、校验、替换失败不得损坏已有程序。
+
+验收覆盖：版本比较、每日缓存、拒绝/回车继续原命令、确认后更新、非交互不阻塞、离线继续、SHA-256/版本不匹配保护、目录不可写、并发更新、替换失败和回退，以及 Windows/Linux/macOS 实际更新。此节仅记录设计，不代表当前已支持自更新。

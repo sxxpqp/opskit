@@ -59,10 +59,14 @@ func fakeWorkflowTool() {
 			} else {
 				fmt.Printf(`{"clientVersion":{"gitVersion":%q}}`, envOr("OPSKIT_FAKE_KUBECTL_VERSION", "v1.24.7"))
 			}
+		case strings.HasSuffix(args, "config current-context"):
+			fmt.Print(os.Getenv("OPSKIT_FAKE_CURRENT_CONTEXT"))
 		case strings.Contains(args, "config view -o jsonpath="):
 			fmt.Print("original-context")
 		case args == "config view --raw --flatten":
 			fmt.Print("apiVersion: v1\nkind: Config\nusers:\n- name: original\n  user:\n    token: EXISTING-TOKEN\ncontexts:\n- name: original-context\n- name: kind-test\n")
+		case strings.Contains(args, "get clusterconfiguration/ks-installer -o json"):
+			fmt.Print(`{"status":{"core":{"status":"enabled"}}}`)
 		case strings.Contains(args, "get nodes -o json"):
 			fmt.Printf(`{"items":[{"metadata":{"name":"node1"},"status":{"nodeInfo":{"kubeletVersion":%q},"conditions":[{"type":"Ready","status":"True"}]}}]}`, envOr("OPSKIT_FAKE_K8S", "v1.24.7"))
 		case strings.Contains(args, "get storageclasses"):
@@ -198,12 +202,12 @@ func TestCreateDryRunDefaultExecutionAndExisting(t *testing.T) {
 		t.Fatal("existing cluster overwritten")
 	}
 }
-func TestDeleteRequiresExactName(t *testing.T) {
+func TestDeleteRejectsRemovedConfirmation(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := fakeTools(t)
-	code, err, _ := workflowRun(t, "kind", "delete", "--name", "test", "--apply", "--confirm-name", "wrong")
+	code, err, _ := workflowRun(t, "kind", "delete", "--name", "test", "--confirm-name", "wrong")
 	if code == 0 || err == nil {
-		t.Fatal("delete without matching confirmation")
+		t.Fatal("removed confirm-name accepted")
 	}
 	if _, e := os.Stat(filepath.Join(dir, "events")); !os.IsNotExist(e) {
 		t.Fatal("delete command executed")
@@ -258,7 +262,7 @@ func TestKindMirrorPreflightBeforeWrites(t *testing.T) {
 	if err := os.WriteFile(config, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"mirror", "containerd", "--kind", "test", "--config", config, "--apply"}
+	args := []string{"mirror", "containerd", "--kind", "test", "--config", config}
 	t.Setenv("OPSKIT_FAKE_FAIL_NODE", "worker")
 	code, err, _ := workflowRun(t, args...)
 	if code == 0 || err == nil {
@@ -278,46 +282,63 @@ func TestKindMirrorPreflightBeforeWrites(t *testing.T) {
 		t.Fatal("not all nodes configured")
 	}
 }
-func TestKubeSpherePreflightApplyAndProtection(t *testing.T) {
+func TestKubeSpherePreflightDefaultInstallAndProtection(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := fakeTools(t)
-	secret := filepath.Join(dir, "password.secret")
-	args := []string{"kubesphere", "install", "--version", "v3.4.1", "--kind", "test", "--password-file", secret}
-	code, err, text := workflowRun(t, args...)
+	config := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(config, []byte("schema_version: 1\nkubesphere:\n  password: ConfigPassword123!\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"kubesphere", "install", "--version", "v3.4.1", "--kind", "test", "--config", config, "--timeout", "45m"}
+	code, err, text := workflowRun(t, append(args, "--dry-run")...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
-	if _, e := os.Stat(secret); !os.IsNotExist(e) {
-		t.Fatal("preview generated password")
+	if _, e := os.Stat(filepath.Join(dir, "applied.yaml")); !os.IsNotExist(e) {
+		t.Fatal("preview applied configuration")
 	}
 	t.Setenv("OPSKIT_FAKE_K8S", "v1.35.0")
-	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	code, err, _ = workflowRun(t, args...)
 	if code == 0 || err == nil {
 		t.Fatal("unsupported K8s installed")
 	}
 	t.Setenv("OPSKIT_FAKE_K8S", "v1.24.7")
 	t.Setenv("OPSKIT_FAKE_KS_EXISTS", "yes")
-	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	code, err, _ = workflowRun(t, args...)
 	if code == 0 || err == nil {
 		t.Fatal("existing KS overwritten")
 	}
 	t.Setenv("OPSKIT_FAKE_KS_EXISTS", "")
-	code, err, text = workflowRun(t, append(args, "--apply")...)
+	code, err, text = workflowRun(t, args...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
-	password, e := os.ReadFile(secret)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if strings.Contains(text, strings.TrimSpace(string(password))) {
+	if strings.Contains(text, "ConfigPassword123!") {
 		t.Fatal("password leaked")
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "applied.yaml"))
-	if !strings.Contains(string(raw), "openebs-hostpath") || !strings.Contains(string(raw), "adminPassword:") {
+	if !strings.Contains(string(raw), "openebs-hostpath") || !strings.Contains(string(raw), "adminPassword: ConfigPassword123!") {
 		t.Fatal("runtime configuration not injected")
 	}
 	events, _ := os.ReadFile(filepath.Join(dir, "events"))
+	for _, component := range []string{"ks-installer", "ks-apiserver", "ks-controller-manager", "ks-console"} {
+		if !strings.Contains(string(events), "rollout status deployment/"+component+" --timeout=45m0s") {
+			t.Fatal("rollout timeout did not follow task timeout", string(events))
+		}
+	}
+	for _, component := range []string{"ks-apiserver", "ks-controller-manager", "ks-console"} {
+		patch := strings.Index(string(events), "patch deployment/"+component+` --type=merge -p {"spec":{"progressDeadlineSeconds":2700}}`)
+		rollout := strings.Index(string(events), "rollout status deployment/"+component)
+		if patch < 0 || rollout < patch {
+			t.Fatal("progress deadline must be extended before rollout", string(events))
+		}
+	}
+	rollout := strings.Index(string(events), "rollout status deployment/ks-installer")
+	logs := strings.Index(string(events), "logs deployment/ks-installer --tail=100")
+	core := strings.Index(string(events), "get clusterconfiguration/ks-installer -o json")
+	if rollout < 0 || logs < rollout || core < logs {
+		t.Fatal("expected installer rollout, logs, then core wait", string(events))
+	}
 	if strings.Index(string(events), "kind load docker-image") > strings.Index(string(events), "apply -f -") {
 		t.Fatal("installer loaded after apply")
 	}
@@ -394,7 +415,7 @@ func TestDockerMirrorBackupAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := []string{"mirror", "docker", "--config", config, "--file", target}
-	code, err, _ := workflowRun(t, args...)
+	code, err, _ := workflowRun(t, append(args, "--dry-run")...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
@@ -402,7 +423,7 @@ func TestDockerMirrorBackupAndPreview(t *testing.T) {
 	if !bytes.Equal(raw, old) {
 		t.Fatal("preview modified file")
 	}
-	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	code, err, _ = workflowRun(t, args...)
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
@@ -431,14 +452,14 @@ func TestMirrorPreviewDoesNotPrintExistingSecrets(t *testing.T) {
 	if err := os.WriteFile(target, []byte("//registry.example.com/:_authToken=DO-NOT-PRINT\nregistry=https://old.example.com\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, err, text := workflowRun(t, "mirror", "npm", "--file", target, "--url", "https://new.example.com")
+	code, err, text := workflowRun(t, "mirror", "npm", "--file", target, "--url", "https://new.example.com", "--dry-run")
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
 	if strings.Contains(text, "DO-NOT-PRINT") {
 		t.Fatal("existing auth token leaked in preview")
 	}
-	code, err, _ = workflowRun(t, "mirror", "npm", "--file", target, "--url", "https://new.example.com", "--apply")
+	code, err, _ = workflowRun(t, "mirror", "npm", "--file", target, "--url", "https://new.example.com")
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
@@ -498,7 +519,7 @@ func TestProjectTemplateDefaultsAreUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Mirrors.Docker) != 1 || len(c.Mirrors.Containerd) != 6 || len(c.Mirrors.DockerInsecure) != 4 {
+	if len(c.Mirrors.Docker) != 2 || len(c.Mirrors.Containerd) != 6 || len(c.Mirrors.DockerInsecure) != 4 {
 		t.Fatal("project runtime defaults missing")
 	}
 	if c.Mirrors.Containerd["docker.io"].Endpoint != "https://huball.ihome.sxxpqp.top:8443/v2/dockerhub" {
@@ -512,7 +533,7 @@ func TestProjectTemplateDefaultsAreUsable(t *testing.T) {
 	}
 	for _, tool := range []string{"docker", "go", "npm", "pip", "maven"} {
 		file := filepath.Join(t.TempDir(), tool+".config")
-		code, err, _ = workflowRun(t, "mirror", tool, "--file", file)
+		code, err, _ = workflowRun(t, "mirror", tool, "--file", file, "--dry-run")
 		if code != 0 || err != nil {
 			t.Fatal(tool, code, err)
 		}
@@ -549,7 +570,7 @@ func TestDockerInsecureMerge(t *testing.T) {
 	if err := os.WriteFile(target, old, 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, err, _ := workflowRun(t, "mirror", "docker", "--config", config, "--file", target, "--apply")
+	code, err, _ := workflowRun(t, "mirror", "docker", "--config", config, "--file", target)
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
@@ -570,12 +591,79 @@ func TestSelfHostedIgnoresKindInstallerTemplate(t *testing.T) {
 	if err := os.WriteFile(config, templates.ConfigTemplate, 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, err, text := workflowRun(t, "kubesphere", "install", "--config", config, "--kubeconfig", filepath.Join(dir, "kube.config"), "--context", "self-hosted")
+	code, err, text := workflowRun(t, "kubesphere", "install", "--config", config, "--kubeconfig", filepath.Join(dir, "kube.config"), "--context", "self-hosted", "--dry-run")
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
 	events, _ := os.ReadFile(filepath.Join(dir, "events"))
 	if strings.Contains(string(events), "docker ") {
 		t.Fatal("self-hosted preflight tried kind preload")
+	}
+}
+
+func TestMirrorRejectsApply(t *testing.T) {
+	code, err, _ := workflowRun(t, "mirror", "docker", "--apply")
+	if code == 0 || err == nil {
+		t.Fatal("removed --apply flag accepted")
+	}
+}
+
+func TestKubeSphereAutoContext(t *testing.T) {
+	for _, env := range []string{"", "/tmp/first.config" + string(os.PathListSeparator) + "/tmp/second.config"} {
+		t.Run(env, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			dir := fakeTools(t)
+			t.Setenv("KUBECONFIG", env)
+			t.Setenv("OPSKIT_FAKE_CURRENT_CONTEXT", "kind-test")
+			code, err, text := workflowRun(t, "kubesphere", "install", "--version", "v3.4.1", "--dry-run")
+			if code != 0 || err != nil {
+				t.Fatal(code, err, text)
+			}
+			events, _ := os.ReadFile(filepath.Join(dir, "events"))
+			if !strings.Contains(string(events), "kubectl config current-context") || !strings.Contains(string(events), "--context kind-test") || strings.Contains(string(events), "--kubeconfig") {
+				t.Fatal(string(events))
+			}
+			t.Setenv("OPSKIT_FAKE_CURRENT_CONTEXT", "")
+			code, err, _ = workflowRun(t, "kubesphere", "install", "--version", "v3.4.1", "--dry-run")
+			if code == 0 || err == nil || !strings.Contains(err.Error(), "current-context") {
+				t.Fatal(code, err)
+			}
+		})
+	}
+}
+
+func TestKubeSphereRejectsApply(t *testing.T) {
+	code, err, _ := workflowRun(t, "kubesphere", "install", "--apply")
+	if code == 0 || err == nil {
+		t.Fatal("removed --apply flag accepted")
+	}
+}
+
+func TestDeleteDefaultExecutionAndDryRun(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := fakeTools(t)
+	config := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(config, []byte("schema_version: 1\nkind:\n  name: test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"kind", "delete", "--config", config}
+	code, err, _ := workflowRun(t, append(args, "--dry-run")...)
+	if code != 0 || err != nil {
+		t.Fatal(code, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "events")); !os.IsNotExist(err) {
+		t.Fatal("preview executed command")
+	}
+	code, err, _ = workflowRun(t, append(args, "--apply")...)
+	if code == 0 || err == nil {
+		t.Fatal("removed --apply accepted")
+	}
+	code, err, _ = workflowRun(t, args...)
+	if code != 0 || err != nil {
+		t.Fatal(code, err)
+	}
+	events, _ := os.ReadFile(filepath.Join(dir, "events"))
+	if !strings.Contains(string(events), "kind delete cluster --name test") {
+		t.Fatal(string(events))
 	}
 }

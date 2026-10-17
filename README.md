@@ -98,8 +98,8 @@ chmod +x opskit
 | 安装 kubectl（main） | `opskit kubectl install --version v1.24.7` |
 | 安装指定 kind 版本（main） | `opskit kind install --version v0.17.0` |
 | 创建 / 预览集群（main） | `opskit kind create --version v1.24.7` / 追加 `--dry-run` |
-| 修改 kind 镜像源（main） | `opskit mirror containerd --kind kubesphere-341 --apply` |
-| 安装 KS（main） | `opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --apply` |
+| 修改 kind 镜像源（main） | `opskit mirror containerd --kind kubesphere-341` |
+| 安装 KS（main） | `opskit kubesphere install --version v3.4.1 --kind kubesphere-341` |
 | 生成当前目录配置 | `opskit config init` |
 | 检查 etcd 集群 | `opskit etcd check --timeout 30s` |
 | 检查 S3 桶连通性 | `opskit s3 check --timeout 15s` |
@@ -120,31 +120,31 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 ./opskit kubectl install --version v1.24.7
 ./opskit kind create --version v1.24.7 --workers 2 --dry-run  # 仅预览
 ./opskit kind create --version v1.24.7 --workers 2            # 实际创建
-./opskit mirror containerd --kind kubesphere-341       # 预检全部节点，不写入
-./opskit mirror containerd --kind kubesphere-341 --apply
+./opskit mirror containerd --kind kubesphere-341 --dry-run  # 预检全部节点，不写入
+./opskit mirror containerd --kind kubesphere-341
 # 确认集群已有可供卷的默认 StorageClass；本工具不会安装存储驱动
+./opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --dry-run
 ./opskit kubesphere install --version v3.4.1 --kind kubesphere-341
-./opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --apply
 ./opskit kind status
 ./opskit kind logs
-# 删除需 apply 与完整集群名两项确认
-./opskit kind delete --name kubesphere-341 --apply --confirm-name kubesphere-341
+# 删除配置中的 kind 集群；追加 --dry-run 仅预览
+./opskit kind delete
 ```
 
-新建 kind 集群默认在控制平面映射 `0.0.0.0:80 → 节点80`、`0.0.0.0:443 → 节点443`，并设置 `ingress-ready=true` 标签。KS 控制台保留 `127.0.0.1:30880 → 节点30880`。可在 `kind.http_port`、`kind.https_port` 配置宿主机端口，或传 `--http-port 8080 --https-port 8443`。端口须互不重复、未被其他宿主机服务占用。此配置只建立 Docker 端口映射，Ingress Controller 需另行部署到控制平面并通过 hostPort/hostNetwork 监听节点 80/443。已有集群不会自动修改映射或删除重建；需自行安排备份后重建，或用新集群名创建。已核对 kind v0.17.0 配置类型支持节点 labels 和 extraPortMappings；尚未做真实 Ingress 请求验收。
+新建 kind 集群默认在控制平面映射 `0.0.0.0:80 → 节点80`、`0.0.0.0:443 → 节点443`，并设置 `ingress-ready=true` 标签。KS 控制台映射 `0.0.0.0:30880 → 节点30880`。可在 `kind.http_port`、`kind.https_port` 配置宿主机端口，或传 `--http-port 8080 --https-port 8443`。端口须互不重复、未被其他宿主机服务占用。此配置只建立 Docker 端口映射，Ingress Controller 需另行部署到控制平面并通过 hostPort/hostNetwork 监听节点 80/443。已有集群不会自动修改映射或删除重建；需自行安排备份后重建，或用新集群名创建。已核对 kind v0.17.0 配置类型支持节点 labels 和 extraPortMappings；尚未做真实 Ingress 请求验收。
 
 `kind create` 默认实际创建，不需要 `--apply`；仅预览时显式使用 `--dry-run`。`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
 
-自建集群 KS 安装使用 `--kubeconfig FILE --context NAME`，不传 `--kind`；各节点 mirror 请先执行 `mirror containerd --apply` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。密码保存在本机 0600 文件，不打印明文；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
+KS 安装等待共用总超时（默认 45 分钟，可用 `--timeout 45m` 延长）。KS 安装默认直接安装，`--dry-run` 仅做只读预检；读取 `KUBECONFIG` 或 `~/.kube/config` 的 current-context，也可用 `--kubeconfig FILE --context NAME` 显式指定；自建集群不传 `--kind`；各节点 mirror 请先执行 `mirror containerd` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。初始密码从 `kubesphere.password` 读取，可用 `--password` 覆盖，不创建密码文件；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
 
-`mirror docker/containerd/go/npm/pip/maven` 共用 `mirrors` 配置；不再将 mirror 归属于 kind。默认只预览，`--apply` 备份后写入。宿主机 Docker/containerd 修改后不自动重启服务，需自行安排维护窗口；kind 节点逐台重启并检查 CRI、验证 DockerHub 拉取。Maven 已有自定义 mirrors 或 containerd 旧认证配置时要求人工合并，不覆盖未知配置。
+`mirror docker/containerd/go/npm/pip/maven` 共用 `mirrors` 配置；不再将 mirror 归属于 kind。默认备份后写入，`--dry-run` 仅预览。Linux 标准 Docker 配置写入后自动重启并检查服务；自定义 Docker 配置文件和宿主机 containerd 需手动安排重启；kind 节点逐台重启并检查 CRI、验证 DockerHub 拉取。Maven 已有自定义 mirrors 或 containerd 旧认证配置时要求人工合并，不覆盖未知配置。
 
 ```sh
-./opskit mirror docker                         # 预览 Linux /etc/docker/daemon.json
+./opskit mirror docker                         # 写入配置并重启 Linux Docker 服务
 ./opskit mirror go --url https://your-go-proxy.example.com
-./opskit mirror npm --url https://your-npm.example.com --apply
-./opskit mirror pip --url https://your-pypi.example.com/simple --apply
-./opskit mirror maven --url https://your-maven.example.com/repository --apply
+./opskit mirror npm --url https://your-npm.example.com
+./opskit mirror pip --url https://your-pypi.example.com/simple
+./opskit mirror maven --url https://your-maven.example.com/repository
 ```
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
@@ -309,20 +309,20 @@ opskit kubectl install --version v1.24.7 --dry-run
 
 先校验上游 SHA-256，再运行 `kubectl version --client=true --output=json` 验证客户端版本，成功后安装到 `~/.local/share/opskit/kubectl/<版本>/`。下载保留在统一 `.opskit/downloads` 目录；Unix 创建软链接，Windows 复制 exe。命令入口复用 PATH 中可写目录，找不到时才配置用户 PATH；已有其他来源的 kubectl 不覆盖。安装后检查实际 PATH 命中与客户端版本，新终端待生效时明确提示。安装不连接集群、不修改 kubeconfig，实际集群操作仍应选择匹配服务端的客户端版本。
 
-kubectl 的 `install.kubectl.download_base` 支持官方、Nexus 和具有相同目录结构的阿里云 / OSS 镜像。默认保留官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`。现有 Nexus 候选根地址为 `https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries`；本次 v1.24.7 Linux amd64 校验文件可读，但完整二进制回源返回 504，尚未验证可安装。阿里云 apt/yum 的 deb/rpm 仓库不能直接作为裸二进制下载源；本次探测的两个阿里云裸二进制候选路径返回 404，因此不列为可用源。配置方法见 [配置指南](docs/configuration.md#kubectlnexus-与阿里云镜像)。下载源优先级：`--kubectl-download-base` > `KUBECTL_DOWNLOAD_BASE` > YAML > 模板默认值，已有显式配置不会自动覆盖。
+kubectl 的 `install.kubectl.download_base` 支持官方、Nexus 和具有相同目录结构的阿里云 / OSS 镜像。默认使用 Nexus 代理 `https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries`。阿里云 apt/yum 的 deb/rpm 仓库不能直接作为裸二进制下载源；本次探测的两个阿里云裸二进制候选路径返回 404，因此不列为可用源。配置方法见 [配置指南](docs/configuration.md#kubectlnexus-与阿里云镜像)。下载源优先级：`--kubectl-download-base` > `KUBECTL_DOWNLOAD_BASE` > YAML > 模板默认值，已有显式配置不会自动覆盖。
 
 ```bash
-export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release
+export KUBECTL_DOWNLOAD_BASE=https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
 opskit kubectl install --version v1.24.7
 # 临时覆盖（与环境变量采用同一命名）
-opskit kubectl install --version v1.24.7 --kubectl-download-base https://storage.googleapis.com/kubernetes-release/release
+opskit kubectl install --version v1.24.7 --kubectl-download-base https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
 # 取消环境变量覆盖
 unset KUBECTL_DOWNLOAD_BASE
 ```
 
 kubectl 已移除旧参数 `--download-base`，只接受 `--kubectl-download-base`。配置键 `install.kubectl.download_base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、主参数 `--kubectl-download-base` 统一命名，不需要同时设置三个入口。
 
-Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://storage.googleapis.com/kubernetes-release/release'`。自建源需要保持同样路径结构并同时提供二进制和 `.sha256`。`--bin-dir`、`--link-dir` 和 `--download-dir` 分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
+Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries'`。自建源需要保持同样路径结构并同时提供二进制和 `.sha256`。`--bin-dir`、`--link-dir` 和 `--download-dir` 分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
 
 ## 运行时安装（main，未发布）
 
@@ -337,7 +337,7 @@ opskit docker install --version v27.3.1 --method binary
 opskit cri-dockerd install --version v0.3.22
 # 或单独安装 containerd（与上面的 Docker 路线二选一）
 opskit containerd install --version v2.1.3 --runc-version v1.2.6 --cni-version v1.5.1
-opskit mirror containerd --apply
+opskit mirror containerd
 # 自行安排重启，使 mirror 生效
 sudo systemctl restart containerd
 ```
@@ -353,6 +353,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 下面是演进方向，未勾选的功能尚未实现。欢迎在 Issue 中分享使用场景，帮助确定优先级。
 
 - [x] Docker 双方式、cri-dockerd 和 containerd 版本安装（main，未发布）
+- [ ] 启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)，尚未实现）
 - [ ] 运行时安装 Linux 真机验收及升级迁移
 - [x] kubectl 版本安装、SHA-256/客户端版本及 PATH 校验，支持完整帮助（main，未发布）
 - [x] kind 显式版本安装、SHA-256 校验、版本隔离和跨系统 PATH 配置（main，未发布）
@@ -389,8 +390,19 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.m
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
 | main（未发布） | kubectl 补充 Nexus / 阿里云兼容镜像配置与下载要求，标明实际可达性限制 |
 | main（未发布） | 安装配置统一为 `install.<组件>.<参数>`，kind、kubectl、Docker 和运行时各自分组；旧平铺字段需迁移 |
+| main（未发布） | KS 使用 kubesphere.password 设置初始密码，默认 sxxpqp.top，移除密码文件 |
+| main（未发布） | KS 默认总超时延长至 45 分钟，核心 Deployment 进度期限跟随 --timeout |
+| main（未发布） | KS 安装器、core 状态和核心 Deployment 等待共用 --timeout 总期限，取消固定 180 秒 / 900 秒限制 |
+| main（未发布） | kind KS 控制台端口改为监听 0.0.0.0，支持通过宿主机 IP 访问；已有集群需重建映射 |
+| main（未发布） | KS 安装先等待 ks-installer Deployment 就绪并输出最近 100 行日志，再等待核心服务 |
+| main（未发布） | KS 安装轮询资源 JSON 等待 core enabled，兼容初始缺少 status 字段的 kubectl v1.24.7 |
+| main（未发布） | 所有命令均不接受 --apply；kind delete 使用 --dry-run 预览，直接使用配置中的集群名，--name 可覆盖 |
+| main（未发布） | kubesphere install 默认执行安装，--dry-run 只读预检，移除 --apply |
+| main（未发布） | kubesphere install 自动读取默认 kubeconfig 和 current-context，保留显式参数与 --kind 推导 |
+| main（未发布） | mirror 默认备份并写入，--dry-run 预览；标准 Docker 配置写入后自动重启并检查服务 |
+| main（未发布） | kubectl 默认下载源改为 Nexus kubernetes-binaries 代理；已有显式配置保持优先 |
 | main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / install.kubectl.download_base，移除旧 --download-base 参数 |
-| main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；默认官方存储直连，命令行 > 环境变量 > YAML > 默认值 |
+| main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；命令行 > 环境变量 > YAML > 模板默认值 |
 | main（未发布） | kind 控制平面补齐 Ingress 80/443 映射及 ingress-ready 标签；保留 KS 30880，校验端口冲突并支持配置覆盖 |
 | main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |
 | main（未发布） | kind create 默认执行创建，--dry-run 仅预览；删除操作仍需显式确认 |

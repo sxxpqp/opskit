@@ -8,8 +8,8 @@ var commandGroupHelp = map[string]string{
 自动识别 Linux/macOS amd64、arm64 或 Windows amd64；校验 SHA-256、客户端版本和 PATH。
 默认直接安装，--dry-run 仅预览。
 版本优先级: --version > versions.kubectl > versions.kubernetes。
-下载源优先级: --kubectl-download-base > KUBECTL_DOWNLOAD_BASE > install.kubectl.download_base > 默认官方存储直连。
---download-base 保留为 --kubectl-download-base 的兼容别名。
+下载源优先级: --kubectl-download-base > KUBECTL_DOWNLOAD_BASE > install.kubectl.download_base > 模板默认 Nexus 代理。
+旧 --download-base 已移除，请使用 --kubectl-download-base。
 示例:
   opskit kubectl install
   opskit kubectl install --version v1.24.7
@@ -24,7 +24,7 @@ var commandGroupHelp = map[string]string{
   logs     查看集群日志
   use      切换到 kind 集群
   unuse    恢复之前的 kubeconfig
-  delete   删除集群（需要 --apply 和 --confirm-name）
+  delete   删除配置指定的集群（--name 可覆盖，--dry-run 仅预览）
 
 示例:
   opskit kind install --version v0.17.0
@@ -35,7 +35,7 @@ var commandGroupHelp = map[string]string{
 	"mirror": `用法: opskit mirror <类型> [参数]
 
 类型: docker | containerd | go | npm | pip | maven
-默认预览，--apply 备份后写入配置。
+默认备份后写入，--dry-run 仅预览；Linux 标准 Docker 配置写入后自动重启服务。
 示例: opskit mirror containerd --help`,
 	"docker": `用法: opskit docker install [参数]
 安装 Docker；默认使用官方脚本和 Aliyun 软件包源。
@@ -51,6 +51,8 @@ var commandGroupHelp = map[string]string{
 示例: opskit containerd install --version v2.1.3
 使用 --dry-run 预览；install --help 查看全部参数。`,
 	"kubesphere": `用法: opskit kubesphere install [参数]
+默认执行安装，--dry-run 仅做只读预检。
+默认读取 KUBECONFIG 或 ~/.kube/config 的 current-context；支持 --kubeconfig、--context 和 --kind 覆盖。
 安装 KubeSphere，检查 Kubernetes 版本和存储等前置条件。
 示例: opskit kubesphere install --version v3.4.1 --help`,
 	"config": `用法: opskit config init [参数]

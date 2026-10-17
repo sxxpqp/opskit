@@ -2,11 +2,11 @@
 
 main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创建；正式版 v0.1.5 仍使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
 
-版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubectl` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和密码文件路径放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
+版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubectl` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和初始密码放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
-`mirror` 命令默认预览，`--apply` 才写入并保留备份；模板镜像源已按 linux 项目原配置填充：Docker 多前端、containerd huball 和现有公共语言源。部署到其他环境时需替换地址；模板更新不会覆盖本地已生成配置。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
+`mirror` 命令默认写入并保留备份，`--dry-run` 仅预览；Linux 标准 `/etc/docker/daemon.json` 写入后自动重启并检查 Docker 服务，自定义文件和宿主机 containerd 仍需手动重启。模板镜像源已按 linux 项目原配置填充：Docker 多前端、containerd huball 和现有公共语言源。部署到其他环境时需替换地址；模板更新不会覆盖本地已生成配置。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
 
 kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和固定默认值；etcd/S3 保留已有参数及 AWS 默认凭据链语义。非空 YAML 账号信息仍按原规则优先于 AWS 环境凭据。请勿把全局的配置优先级理解成秘密管理机制。
 
@@ -154,7 +154,7 @@ s3:
 - Maven：`aliyun-mirrors.md` 中的公开聚合源。
 - kind KS 安装器：原 `kubernetes/kubesphere/kind-3.4.1` 使用的公开 3.4.1 镜像源；自建集群不读取这个 kind 专用模板项。
 
-`kind.kubeconfig`、`kind.binary`、KS storage_class/password_file 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。
+`kind.kubeconfig`、`kind.binary`、KS storage_class 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。
 
 ## 运行时版本与安装源（main，未发布）
 
@@ -170,7 +170,7 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
 
-`kind create` 默认执行创建，版本仍由 `versions.kubernetes` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群仍需 `--apply --confirm-name`。
+`kind create` 默认执行创建，版本仍由 `versions.kubernetes` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群默认执行，集群名按 `--name` > `OPSKIT_KIND_NAME` > `kind.name` > 默认值解析，无需重复确认名称，`--dry-run` 仅预览。
 
 ## kubectl 安装（main，未发布）
 
@@ -182,21 +182,21 @@ versions:
   kubectl: ""  # 留空跟随 kubernetes，也可明确固定独立版本
 install:
   kubectl:
-    download_base: https://storage.googleapis.com/kubernetes-release/release
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
   download_dir: ""  # 默认用户目录 .opskit/downloads
 ```
 
-优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认官方存储直连；空环境变量不覆盖 YAML。默认使用官方存储直连；Nexus 可显式选择 `kubernetes-binaries`，但当前完整二进制回源返回 504。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
+优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认 Nexus 代理；空环境变量不覆盖 YAML。默认使用 Nexus `kubernetes-binaries` 代理。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
 ## kind Ingress 入口端口
 
-`kind.http_port: 80`、`kind.https_port: 443` 分别映射到控制平面节点容器 80/443，绑定 `0.0.0.0`；CLI `--http-port` / `--https-port` 优先于 YAML。现有 `kind.console_port` 保持 127.0.0.1 上的 KubeSphere 30880 映射。端口范围为 1～65535，三项不能重复；被其他服务占用时须更换宿主机端口。
+`kind.http_port: 80`、`kind.https_port: 443` 分别映射到控制平面节点容器 80/443，绑定 `0.0.0.0`；CLI `--http-port` / `--https-port` 优先于 YAML。`kind.console_port` 默认 30880，映射 KubeSphere 节点端口 30880 并绑定 `0.0.0.0`，CLI 可用 `--console-port` 覆盖宿主机端口；已有集群需重建后生效。端口范围为 1～65535，三项不能重复；被其他服务占用时须更换宿主机端口。
 
 创建前用 `opskit kind create --dry-run` 检查生成的 extraPortMappings。控制平面设置 `ingress-ready=true`，Ingress Controller 需另行部署到此节点并监听节点 80/443（例如 hostPort/hostNetwork）；端口映射不自动安装 Controller 或创建 Ingress 对象。已核对 kind v0.17.0 配置类型支持这些字段。已有集群的 Docker 映射不会变更，新版 opskit 不会自动删除旧集群；需使用新集群名或自行安排重建。实际集群 Ingress 连通性尚未验收。
 
-下载源变量示例：`export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release`；用 `unset KUBECTL_DOWNLOAD_BASE` 取消覆盖。PowerShell 用 `$env:KUBECTL_DOWNLOAD_BASE = "..."`。已有配置若仍显式填写 dl.k8s.io 会继续使用该值，应按需修改配置或使用环境变量覆盖。默认官方存储地址不等于国内镜像，不保证在所有网络或任意版本可用；缺少目标文件时返回错误，不静默更换版本。
+下载源变量示例：`export KUBECTL_DOWNLOAD_BASE=https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries`；用 `unset KUBECTL_DOWNLOAD_BASE` 取消覆盖。PowerShell 用 `$env:KUBECTL_DOWNLOAD_BASE = "..."`。已有配置若仍显式填写 dl.k8s.io 会继续使用该值，应按需修改配置或使用环境变量覆盖。Nexus 代理不保证在所有网络或任意版本可用；缺少目标文件时返回错误，不静默更换版本。
 
 下载源命名统一：CLI `--kubectl-download-base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、YAML `install.kubectl.download_base`。旧 `--download-base` 已移除，传入会报未知参数。命名变更只针对 kubectl，不改变 kind 的 --download-base。
 
@@ -255,7 +255,7 @@ install:
   kind:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
   kubectl:
-    download_base: https://storage.googleapis.com/kubernetes-release/release
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
   docker:
     method: script
     mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce
@@ -293,4 +293,16 @@ opskit kubectl install --version v1.24.7 --kubectl-download-base https://your-mi
 
 阿里云来源可以使用 OSS 自建镜像或其他满足相同 URL 结构的文件服务，直接填写根地址即可。阿里云 apt/yum Kubernetes 镜像提供 deb/rpm 软件包，不能直接用作这个裸二进制安装器的 download_base。本次探测 `mirrors.aliyun.com/kubernetes-release/kubectl` 和 `.../release` 下的 v1.24.7 Linux amd64 候选路径均返回 404，因此未将它们列为可用默认源，也不会在 Nexus 失败时静默切换过去。
 
-现有用户配置不会自动改写；请编辑 `install.kubectl.download_base`，或用环境变量 `KUBECTL_DOWNLOAD_BASE` / CLI 覆盖。Nexus 未缓存文件需先回源，受其上游网络和缓存状态影响。本次 v1.24.7 Linux amd64 的校验文件请求成功，完整二进制请求返回 504；仅有校验文件可读不等于安装成功。当前未将 Nexus 改为默认值。
+现有用户配置不会自动改写；请编辑 `install.kubectl.download_base`，或用环境变量 `KUBECTL_DOWNLOAD_BASE` / CLI 覆盖。Nexus 未缓存文件需先回源，受其上游网络和缓存状态影响。此前探测曾出现校验文件可读、完整二进制回源返回 504；本次环境无法解析 Nexus 域名，未验证真实下载或安装。默认值已改为 Nexus，使用前应确认目标版本的二进制及校验文件均可访问。
+
+Docker 默认镜像源按顺序为 `https://index.dockerhub.sxxpqp.top`、`https://dockerhub.ihome.sxxpqp.top:8443`。已有配置不会自动增加源，请在本地 YAML 的 `mirrors.docker` 列表中加入新地址，再执行 `opskit mirror docker`。旧 `--apply` 已移除，预览使用 `--dry-run`。
+
+`kubesphere install` 未指定 `--context` 时读取 kubeconfig 的 `current-context`。路径优先级为 `--kubeconfig` > `KUBECONFIG` > `kind.kubeconfig` > kubectl 默认的 `~/.kube/config`；`KUBECONFIG` 多文件列表由 kubectl 按其规则合并。指定 `--kind NAME` 时仍推导 `kind-NAME` context，无路径配置时使用对应专用 kubeconfig。执行前输出目标 context，默认直接安装，`--dry-run` 仅做只读预检，不提交清单；旧 `--apply` 已移除。
+
+KS 提交 ClusterConfiguration 后每 5 秒读取资源 JSON，等待 `status.core.status=enabled`（与安装器及核心 Deployment 等待共用安装总超时，默认 45 分钟，可用 `--timeout 45m` 延长）；初始缺少 status/core 时继续等待，兼容 kubectl v1.24.7。读取或解析失败仍返回错误。该等待失败不表示已创建资源被回滚；可用 `kubectl -n kubesphere-system logs deployment/ks-installer -f` 查看安装器日志，已有实例保护仍会阻止重新安装。
+
+KS 安装提交配置后先执行 `rollout status deployment/ks-installer`，等待期限使用安装总超时的剩余时间，就绪后输出最近 100 行安装器日志，再继续轮询 core 状态及检查核心 Deployment。不使用阻塞的 `logs -f`；需要持续查看时可在另一个终端执行 `kubectl -n kubesphere-system logs deployment/ks-installer -f`。
+
+KS 初始账号为 `admin`；`kubesphere.password` 默认 `sxxpqp.top`，`--password` 可覆盖。直接注入安装配置，不创建本地密码文件。旧 `password_file` 和 `--password-file` 已移除，需迁移为 `password`。仅影响全新安装，不会修改已安装集群的账号密码。密码长度为 8～64 字节；真实 KS 登录尚未验证。
+
+KS 安装总超时默认 45 分钟，`--timeout 60m` 可延长。core enabled 后先将三个核心 Deployment 的 `progressDeadlineSeconds` 设为该总超时的秒数，再检查 rollout，避免服务端进度期限先于客户端等待结束。整个流程仍受同一个总期限约束。

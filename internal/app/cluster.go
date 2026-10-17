@@ -64,7 +64,6 @@ func commandConfig(f *flag.FlagSet, path string) (fileConfig, error) {
 	if strings.ContainsAny(c.Kind.Binary, "/\\") {
 		c.Kind.Binary = resolve(c.Kind.Binary)
 	}
-	c.KubeSphere.PasswordFile = resolve(c.KubeSphere.PasswordFile)
 	return c, nil
 }
 
@@ -112,7 +111,7 @@ func clusterFlags(f *flag.FlagSet) *clusterOptions {
 	f.StringVar(&o.binary, "kind-bin", "kind", "kind 可执行文件")
 	f.StringVar(&o.nodeVersion, "version", "v1.24.7", "创建节点的 Kubernetes 版本")
 	f.IntVar(&o.workers, "workers", 2, "worker 数量")
-	f.IntVar(&o.port, "console-port", 30880, "127.0.0.1 上的 KS 控制台映射端口")
+	f.IntVar(&o.port, "console-port", 30880, "0.0.0.0 上的 KS 控制台映射端口")
 	f.IntVar(&o.httpPort, "http-port", 80, "Ingress HTTP 宿主机端口，映射控制平面节点 80，监听 0.0.0.0")
 	f.IntVar(&o.httpsPort, "https-port", 443, "Ingress HTTPS 宿主机端口，映射控制平面节点 443，监听 0.0.0.0")
 	return o
@@ -183,7 +182,7 @@ func renderKind(o clusterOptions) ([]byte, error) {
 	ports := []any{
 		map[string]any{"containerPort": 80, "hostPort": o.httpPort, "listenAddress": "0.0.0.0", "protocol": "TCP"},
 		map[string]any{"containerPort": 443, "hostPort": o.httpsPort, "listenAddress": "0.0.0.0", "protocol": "TCP"},
-		map[string]any{"containerPort": 30880, "hostPort": o.port, "listenAddress": "127.0.0.1", "protocol": "TCP"},
+		map[string]any{"containerPort": 30880, "hostPort": o.port, "listenAddress": "0.0.0.0", "protocol": "TCP"},
 	}
 	nodes := []any{map[string]any{"role": "control-plane", "image": "kindest/node:" + o.nodeVersion, "labels": map[string]string{"ingress-ready": "true"}, "extraPortMappings": ports}}
 
@@ -206,14 +205,13 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 	f.SetOutput(diag)
 	path := f.String("config", defaultConfigPath, "统一配置文件")
 	o := clusterFlags(f)
-	var apply, dryRun bool
+	var dryRun bool
 	if action == "delete" {
-		f.BoolVar(&apply, "apply", false, "执行删除；默认只预览")
+		f.BoolVar(&dryRun, "dry-run", false, "仅预览删除，不执行")
 	}
 	if action == "create" {
 		f.BoolVar(&dryRun, "dry-run", false, "仅预览集群配置，不创建集群")
 	}
-	confirm := f.String("confirm-name", "", "删除时必须与集群名完全一致")
 	logDir := f.String("directory", "", "导出诊断日志的目录")
 	timeout := f.Duration("timeout", 10*time.Minute, "任务超时")
 	if err := f.Parse(args[1:]); err != nil {
@@ -242,6 +240,7 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 		}
 		fmt.Fprintf(out, "kind create: %s; Kubernetes %s; workers=%d; kubeconfig=%s\n", o.name, o.nodeVersion, o.workers, o.kubeconfig)
 		fmt.Fprintf(out, "Ingress 端口: 0.0.0.0:%d → control-plane:80，0.0.0.0:%d → control-plane:443；需单独部署 Ingress Controller。\n", o.httpPort, o.httpsPort)
+		fmt.Fprintf(out, "KS 控制台端口: 0.0.0.0:%d → control-plane:30880\n", o.port)
 		if dryRun {
 			if _, err = out.Write(config); err != nil {
 				return 1, err
@@ -294,13 +293,11 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 			fmt.Fprintln(out, "日志目录:", *logDir)
 		}
 	case "delete":
-		if !apply {
-			fmt.Fprintf(out, "预览: 删除 kind 集群 %s；执行需 --apply --confirm-name %s\n", o.name, o.name)
+		if dryRun {
+			fmt.Fprintf(out, "预览: 删除 kind 集群 %s；去掉 --dry-run 执行删除\n", o.name)
 			return 0, nil
 		}
-		if *confirm != o.name {
-			return 2, errors.New("confirm-name 必须与集群名完全一致")
-		}
+		fmt.Fprintf(out, "删除 kind 集群: %s\n", o.name)
 		err = commandRun(ctx, nil, out, diag, o.binary, "delete", "cluster", "--name", o.name, "--kubeconfig", o.kubeconfig)
 	case "use", "unuse":
 		err = switchKindContext(ctx, *o, action, out)

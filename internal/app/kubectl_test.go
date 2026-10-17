@@ -193,7 +193,7 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 		t.Skip(err)
 	}
 	cases := []struct{ name, config, env, cli, want string }{
-		{"default", "", "", "", "https://storage.googleapis.com/kubernetes-release/release"},
+		{"default", "", "", "", "https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries"},
 		{"yaml", "https://config.example/release", "", "", "https://config.example/release"},
 		{"environment", "https://config.example/release", "https://env.example/release", "", "https://env.example/release"},
 		{"cli", "https://config.example/release", "https://env.example/release", "https://cli.example/release", "https://cli.example/release"},

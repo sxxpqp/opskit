@@ -288,7 +288,7 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 	f := flag.NewFlagSet("mirror "+tool, flag.ContinueOnError)
 	f.SetOutput(diag)
 	configPath := f.String("config", defaultConfigPath, "统一配置文件")
-	apply := f.Bool("apply", false, "写入配置；默认预览")
+	dryRun := f.Bool("dry-run", false, "仅预览；默认备份并写入配置，标准 Docker 配置写入后重启服务")
 	file := f.String("file", "", "覆盖配置文件路径")
 	source := f.String("url", "", "语言工具镜像地址")
 	kindName := f.String("kind", "", "修改指定 kind 的全部 containerd 节点；不修改宿主机")
@@ -316,7 +316,7 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 		if tool != "containerd" || *file != "" {
 			return 2, errors.New("--kind 仅与 mirror containerd 一起使用，不能指定 --file")
 		}
-		err = mirrorKindNodes(ctx, *kindName, *kindBin, c.Mirrors.Containerd, *apply, out, diag)
+		err = mirrorKindNodes(ctx, *kindName, *kindBin, c.Mirrors.Containerd, !*dryRun, out, diag)
 		if err != nil {
 			return 1, err
 		}
@@ -435,11 +435,11 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 		}
 		data = []byte(updated)
 		fmt.Fprintf(out, "containerd: %s → config_path=/etc/containerd/certs.d；将写入 %d 份 hosts.toml\n", *file, len(files))
-		if !*apply {
+		if *dryRun {
 			return 0, nil
 		}
 		if filepath.Clean(*file) != "/etc/containerd/config.toml" {
-			return 2, errors.New("宿主机 apply 仅允许标准 config.toml 路径，以保证 certs.d 对应实际运行时")
+			return 2, errors.New("宿主机写入仅允许标准 config.toml 路径，以保证 certs.d 对应实际运行时")
 		}
 		// Validate with the installed runtime before touching its live configuration.
 		tmp, e := os.CreateTemp("", "opskit-containerd-*.toml")
@@ -484,15 +484,24 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 		return 2, err
 	}
 	fmt.Fprintf(out, "mirror %s: %s\n", tool, *file)
-	if !*apply {
+	if *dryRun {
 		_, err = out.Write(preview)
-		fmt.Fprintln(out, "\n预览完成；添加 --apply 写入并备份。")
+		fmt.Fprintln(out, "\n预览完成；去掉 --dry-run 写入并备份。")
 		return 0, err
 	}
 	if err = writeConfigFile(*file, data, out); err != nil {
 		return 1, err
 	}
-	if tool == "docker" || tool == "containerd" {
+	if tool == "docker" && runtime.GOOS == "linux" && filepath.Clean(*file) == "/etc/docker/daemon.json" {
+		fmt.Fprintln(out, "配置已写入；正在重启 docker 服务。")
+		if err = commandRun(ctx, nil, out, diag, "systemctl", "restart", "docker"); err != nil {
+			return 1, fmt.Errorf("配置已写入，但重启 docker 失败: %w", err)
+		}
+		if err = commandRun(ctx, nil, out, diag, "systemctl", "is-active", "--quiet", "docker"); err != nil {
+			return 1, fmt.Errorf("docker 服务未通过运行状态检查: %w", err)
+		}
+		fmt.Fprintln(out, "docker 服务已重启并通过运行状态检查。")
+	} else if tool == "docker" || tool == "containerd" {
 		fmt.Fprintf(out, "配置已写入；请在维护窗口重启 %s 服务。\n", tool)
 	}
 	return 0, nil

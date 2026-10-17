@@ -43,7 +43,7 @@ type fileConfig struct {
 	KubeSphere struct {
 		StorageClass    string `yaml:"storage_class"`
 		InstallerSource string `yaml:"installer_source"`
-		PasswordFile    string `yaml:"password_file"`
+		Password        string `yaml:"password"`
 	} `yaml:"kubesphere"`
 
 	SchemaVersion int    `yaml:"schema_version"`

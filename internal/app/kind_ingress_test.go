@@ -54,9 +54,6 @@ func TestKindIngressPortMappings(t *testing.T) {
 		}
 		for _, p := range cluster.Nodes[0].Ports {
 			listen := "0.0.0.0"
-			if p.Container == 30880 {
-				listen = "127.0.0.1"
-			}
 			if expected[p.Container] != p.Host || p.Listen != listen || p.Protocol != "TCP" {
 				t.Fatal(string(b))
 			}

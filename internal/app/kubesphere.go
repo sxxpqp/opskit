@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,19 +19,23 @@ import (
 )
 
 func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (int, error) {
+	var templateDefaults fileConfig
+	if err := yaml.Unmarshal(templates.ConfigTemplate, &templateDefaults); err != nil {
+		return 1, err
+	}
 	f := flag.NewFlagSet("kubesphere install", flag.ContinueOnError)
 	f.SetOutput(diag)
 	configPath := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "KubeSphere 版本；当前内嵌清单仅支持 v3.4.1")
-	kubeconfig := f.String("kubeconfig", "", "kubeconfig 路径")
-	clusterContext := f.String("context", "", "目标 context；必须显式指定或通过 --kind 推导")
+	kubeconfig := f.String("kubeconfig", "", "kubeconfig 路径；默认 KUBECONFIG 或 ~/.kube/config")
+	clusterContext := f.String("context", "", "目标 context；默认 kubeconfig 的 current-context，--kind 时推导")
 	kindName := f.String("kind", "", "目标 kind 集群名（可选，用于加载安装器镜像）")
 	kindBin := f.String("kind-bin", "kind", "kind 可执行文件")
 	source := f.String("installer-source", "", "kind 安装器拉取源；清单 image 保持上游名称")
 	storageClass := f.String("storage-class", "", "指定现有 StorageClass；默认读取集群默认 SC")
-	passwordPath := f.String("password-file", "", "初始密码文件，默认在 ~/.kube 中生成")
-	apply := f.Bool("apply", false, "执行安装；默认只读预检")
-	timeout := f.Duration("timeout", 20*time.Minute, "整个安装任务超时")
+	password := f.String("password", templateDefaults.KubeSphere.Password, "初始 admin 密码；对应 kubesphere.password，不写入密码文件")
+	dryRun := f.Bool("dry-run", false, "仅做只读预检；默认执行安装")
+	timeout := f.Duration("timeout", 45*time.Minute, "整个安装任务超时，安装器和核心服务就绪等待共用此期限")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
@@ -49,13 +50,14 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 		return 2, err
 	}
 	setEnvFlag(f, "version", "OPSKIT_KUBESPHERE_VERSION")
-	setEnvFlag(f, "kubeconfig", "KUBECONFIG")
 	setEnvFlag(f, "kind-bin", "OPSKIT_KIND_BIN")
 	setConfigFlag(f, "version", c.Versions.KubeSphere)
-	setConfigFlag(f, "kubeconfig", c.Kind.Kubeconfig)
+	if os.Getenv("KUBECONFIG") == "" {
+		setConfigFlag(f, "kubeconfig", c.Kind.Kubeconfig)
+	}
 	setConfigFlag(f, "kind-bin", c.Kind.Binary)
 	setConfigFlag(f, "storage-class", c.KubeSphere.StorageClass)
-	setConfigFlag(f, "password-file", c.KubeSphere.PasswordFile)
+	setConfigFlag(f, "password", c.KubeSphere.Password)
 	if *kindName != "" {
 		setConfigFlag(f, "installer-source", c.KubeSphere.InstallerSource)
 	}
@@ -73,7 +75,7 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 		if *clusterContext != "kind-"+*kindName {
 			return 2, errors.New("--kind 与 --context 不一致")
 		}
-		if *kubeconfig == "" {
+		if *kubeconfig == "" && os.Getenv("KUBECONFIG") == "" {
 			home, e := os.UserHomeDir()
 			if e != nil {
 				return 1, e
@@ -81,15 +83,27 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 			*kubeconfig = filepath.Join(home, ".kube", "kind-"+*kindName+".config")
 		}
 	}
-	if *clusterContext == "" || *kubeconfig == "" {
-		return 2, errors.New("必须指定 --kubeconfig 和 --context，或通过 --kind 与配置提供")
-	}
 	if *source != "" && *kindName == "" {
 		return 2, errors.New("installer-source 预加载目前仅支持 --kind；自建集群请配置节点 mirror 后使用上游镜像")
 	}
 	ctx, cancel := context.WithTimeout(parent, *timeout)
 	defer cancel()
-	base := []string{"--kubeconfig", *kubeconfig, "--context", *clusterContext, "--request-timeout=30s"}
+	base := []string{}
+	if *kubeconfig != "" {
+		base = append(base, "--kubeconfig", *kubeconfig)
+	}
+	if *clusterContext == "" {
+		raw, e := commandOutput(ctx, nil, "kubectl", append(append([]string{}, base...), "config", "current-context")...)
+		if e != nil {
+			return 2, fmt.Errorf("无法读取 kubeconfig 当前 context，请检查 KUBECONFIG 或 ~/.kube/config，或指定 --kubeconfig 和 --context: %w", e)
+		}
+		*clusterContext = strings.TrimSpace(string(raw))
+		if *clusterContext == "" {
+			return 2, errors.New("kubeconfig 未设置 current-context，请使用 kubectl config use-context 或指定 --context")
+		}
+	}
+	base = append(base, "--context", *clusterContext, "--request-timeout=30s")
+	fmt.Fprintf(out, "目标 Kubernetes context: %s\n", *clusterContext)
 	kubeOutput := func(a ...string) ([]byte, error) {
 		return commandOutput(ctx, nil, "kubectl", append(append([]string{}, base...), a...)...)
 	}
@@ -175,22 +189,14 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 		return 2, errors.New("kubesphere-system 已存在，此入口只做全新安装；不会覆盖已有实例或密码")
 	}
 	fmt.Fprintf(out, "KS %s → context=%s；StorageClass=%s；节点数=%d\n", *version, *clusterContext, *storageClass, len(nodes.Items))
-	if !*apply {
-		fmt.Fprintln(out, "预检通过；--apply 执行安装。存储驱动和节点 mirror 不会自动安装。")
+	if *dryRun {
+		fmt.Fprintln(out, "预检通过；去掉 --dry-run 执行安装。存储驱动和节点 mirror 不会自动安装。")
 		return 0, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return 1, err
+	if len(*password) < 8 || len(*password) > 64 {
+		return 2, errors.New("kubesphere.password 必须 8~64 字节")
 	}
-	if *passwordPath == "" {
-		*passwordPath = filepath.Join(home, ".kube", "ks341-"+regexp.MustCompile(`[^a-zA-Z0-9_.-]`).ReplaceAllString(*clusterContext, "_")+".secret")
-	}
-	password, err := initialPassword(*passwordPath)
-	if err != nil {
-		return 1, err
-	}
-	configuration, err := renderKSConfig(templates.KSConfiguration, *storageClass, password)
+	configuration, err := renderKSConfig(templates.KSConfiguration, *storageClass, *password)
 	if err != nil {
 		return 1, err
 	}
@@ -223,56 +229,34 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 	if err = kubeRun(configuration, "apply", "-f", "-"); err != nil {
 		return 1, err
 	}
-	if err = kubeRun(nil, "-n", "kubesphere-system", "wait", "--for=jsonpath={.status.core.status}=enabled", "clusterconfiguration/ks-installer", "--timeout=900s"); err != nil {
+	if err = kubeRun(nil, "-n", "kubesphere-system", "rollout", "status", "deployment/ks-installer", "--timeout="+timeout.String()); err != nil {
 		return 1, err
 	}
-	for _, component := range []string{"ks-apiserver", "ks-controller-manager", "ks-console"} {
-		if err = kubeRun(nil, "-n", "kubesphere-system", "rollout", "status", "deployment/"+component, "--timeout=180s"); err != nil {
+	fmt.Fprintln(out, "ks-installer 已就绪；最近 100 行安装日志：")
+	if err = kubeRun(nil, "-n", "kubesphere-system", "logs", "deployment/ks-installer", "--tail=100"); err != nil {
+		return 1, err
+	}
+	fmt.Fprintln(out, "等待 KubeSphere core 状态变为 enabled…")
+	if err = waitKubeSphereCore(ctx, 5*time.Second, func(ctx context.Context) ([]byte, error) {
+		return commandOutput(ctx, nil, "kubectl", append(append([]string{}, base...), "-n", "kubesphere-system", "get", "clusterconfiguration/ks-installer", "-o", "json")...)
+	}); err != nil {
+		return 1, err
+	}
+	progressSeconds := int64((*timeout + time.Second - 1) / time.Second)
+	progressPatch := fmt.Sprintf(`{"spec":{"progressDeadlineSeconds":%d}}`, progressSeconds)
+	components := []string{"ks-apiserver", "ks-controller-manager", "ks-console"}
+	for _, component := range components {
+		if err = kubeRun(nil, "-n", "kubesphere-system", "patch", "deployment/"+component, "--type=merge", "-p", progressPatch); err != nil {
 			return 1, err
 		}
 	}
-	fmt.Fprintf(out, "KS %s 核心服务已就绪；admin 密码文件: %s；控制台端口 30880\n", *version, *passwordPath)
+	for _, component := range components {
+		if err = kubeRun(nil, "-n", "kubesphere-system", "rollout", "status", "deployment/"+component, "--timeout="+timeout.String()); err != nil {
+			return 1, err
+		}
+	}
+	fmt.Fprintf(out, "KS %s 核心服务已就绪；账号 admin；密码使用 kubesphere.password 或 --password 指定值；控制台端口 30880\n", *version)
 	return 0, kubeRun(nil, "-n", "kubesphere-system", "get", "service", "ks-console")
-}
-func initialPassword(path string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return "", err
-	}
-	if info, err := os.Lstat(path); err == nil {
-		if !info.Mode().IsRegular() {
-			return "", errors.New("密码文件必须是普通文件")
-		}
-		if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
-			return "", errors.New("密码文件必须为 0600 权限")
-		}
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		random := make([]byte, 16)
-		if _, err = rand.Read(random); err != nil {
-			return "", err
-		}
-		file, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if e != nil {
-			return "", e
-		}
-		_, err = file.WriteString("Ks341-7" + hex.EncodeToString(random) + "\n")
-		closeErr := file.Close()
-		if err != nil {
-			return "", err
-		}
-		if closeErr != nil {
-			return "", closeErr
-		}
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	password := strings.TrimSuffix(string(raw), "\n")
-	if len(password) < 8 || len(password) > 64 || !regexp.MustCompile(`[A-Z]`).MatchString(password) || !regexp.MustCompile(`[a-z]`).MatchString(password) || !regexp.MustCompile(`[0-9]`).MatchString(password) {
-		return "", errors.New("密码必须 8~64 字符并包含大小写字母和数字")
-	}
-	return password, nil
 }
 func renderKSConfig(template []byte, storage, password string) ([]byte, error) {
 	var data map[string]any
@@ -294,4 +278,36 @@ func renderKSConfig(template []byte, storage, password string) ([]byte, error) {
 	}
 	auth["adminPassword"] = password
 	return yaml.Marshal(data)
+}
+
+func waitKubeSphereCore(ctx context.Context, interval time.Duration, read func(context.Context) ([]byte, error)) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("等待 KubeSphere core enabled: %w", err)
+		}
+		raw, err := read(ctx)
+		if err != nil {
+			return fmt.Errorf("读取 KubeSphere 安装状态: %w", err)
+		}
+		var resource struct {
+			Status struct {
+				Core struct {
+					Status string `json:"status"`
+				} `json:"core"`
+			} `json:"status"`
+		}
+		if err := json.Unmarshal(raw, &resource); err != nil {
+			return fmt.Errorf("解析 KubeSphere 安装状态: %w", err)
+		}
+		if resource.Status.Core.Status == "enabled" {
+			return nil
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("等待 KubeSphere core enabled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }

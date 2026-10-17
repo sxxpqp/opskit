@@ -26,9 +26,7 @@ install:
   kind:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # KIND_DOWNLOAD_BASE / kind install --download-base
   kubectl:
-    download_base: https://storage.googleapis.com/kubernetes-release/release  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
-    # Nexus 可选根地址：https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
-    # 当前探测：Nexus v1.24.7 linux/amd64 校验文件可读，完整二进制回源返回 504，需先修复上游访问。
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
     # 可换官方 https://dl.k8s.io/release 或阿里云/OSS 自建镜像的兼容根地址。
     # 必须同时提供 <version>/bin/<os>/<arch>/kubectl[.exe] 和追加 .sha256 的校验文件。
   download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads，可覆盖
@@ -48,13 +46,13 @@ install:
 
 # kind 测试集群，不会连接或覆盖现有生产集群。
 kind:
-  name: kubesphere-341
+  name: kubesphere-341  # kind create/delete 等命令共用，--name 可覆盖
   workers: 2
   # 留空使用默认 ~/.kube/kind-<name>.config；相对路径以本配置文件为基准。
-  kubeconfig: ""
+  kubeconfig: ""  # KS 未指定路径时使用 KUBECONFIG 或 ~/.kube/config；--kind 可推导专用路径
   # 留空先查版本隔离安装目录，再查 PATH；不要求用户安装 Go。
   binary: ""
-  console_port: 30880  # KubeSphere 控制台，保持监听 127.0.0.1
+  console_port: 30880  # KubeSphere 控制台，监听 0.0.0.0
   # Ingress 宿主机端口 → 控制平面节点 80/443，监听所有 IPv4 网卡；仅创建集群时生效。
   # Controller 需单独部署到 ingress-ready=true 节点并监听节点 80/443。
   http_port: 80
@@ -62,10 +60,11 @@ kind:
 
 # 项目镜像源基线：迁移自 linux/docker/containerd/mirrors.sh、docker/docker-mirror.sh
 # 以及 docs/infra-reference.md、aliyun-mirrors.md；内网地址需要运行环境可达。
-# 默认只预览，--apply 才备份并写入；容器清单保持上游 image。
+# 默认备份并写入，--dry-run 仅预览；标准 Docker 配置写入后自动重启服务；容器清单保持上游 image。
 mirrors:
   docker:
-    - https://dockerhub.ihome.sxxpqp.top:8443
+      - https://index.dockerhub.sxxpqp.top
+      - https://dockerhub.ihome.sxxpqp.top:8443
   # 沿用原 Docker 脚本的内网证书兼容设置；有可信证书时可删除相应项。
   docker_insecure_registries:
     - dockerhub.ihome.sxxpqp.top:8443
@@ -111,8 +110,8 @@ kubesphere:
   # 沿用原 kind 流程的公开安装器源；仅 --kind 预加载时读取。
   # 自建集群继续使用上游 image；此项不是个人阿里云 ACR 账号。
   installer_source: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
-  # 留空在 ~/.kube 中生成 0600 初始密码文件，不输出明文。
-  password_file: ""
+  # admin 初始密码；直接注入安装配置，不创建本地密码文件。
+  password: sxxpqp.top
 
 # 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
 # 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。
