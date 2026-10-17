@@ -25,7 +25,7 @@ func runKubectlInstall(parent context.Context, args []string, out, diag io.Write
 	f.SetOutput(diag)
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "kubectl 完整版本 vX.Y.Z；默认 versions.kubectl，否则跟随 versions.kubernetes")
-	base := f.String("kubectl-download-base", defaults.KubectlDownloadBase, "下载源根地址；对应 KUBECTL_DOWNLOAD_BASE 环境变量和 install.kubectl_download_base 配置")
+	base := f.String("kubectl-download-base", defaults.Kubectl.DownloadBase, "下载源根地址；对应 KUBECTL_DOWNLOAD_BASE 环境变量和 install.kubectl.download_base 配置")
 	binDir := f.String("bin-dir", "", "安装目录；默认 ~/.local/share/opskit/kubectl/<版本>")
 	linkDir := f.String("link-dir", "", "命令入口目录；优先复用 PATH 已有可写目录")
 	downloads := f.String("download-dir", "", "统一下载目录；默认 ~/.opskit/downloads")
@@ -47,7 +47,7 @@ func runKubectlInstall(parent context.Context, args []string, out, diag io.Write
 	setConfigFlag(f, "version", c.Versions.Kubectl)
 	setConfigFlag(f, "version", c.Versions.Kubernetes)
 	setEnvFlag(f, "kubectl-download-base", "KUBECTL_DOWNLOAD_BASE")
-	setConfigFlag(f, "kubectl-download-base", c.Install.KubectlDownloadBase)
+	setConfigFlag(f, "kubectl-download-base", c.Install.Kubectl.DownloadBase)
 	setConfigFlag(f, "download-dir", c.Install.DownloadDir)
 	if !versionPattern.MatchString(*version) {
 		return 2, errors.New("必须指定 --version vX.Y.Z 或配置 versions.kubectl/versions.kubernetes")

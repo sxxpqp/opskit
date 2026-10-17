@@ -309,7 +309,7 @@ opskit kubectl install --version v1.24.7 --dry-run
 
 先校验上游 SHA-256，再运行 `kubectl version --client=true --output=json` 验证客户端版本，成功后安装到 `~/.local/share/opskit/kubectl/<版本>/`。下载保留在统一 `.opskit/downloads` 目录；Unix 创建软链接，Windows 复制 exe。命令入口复用 PATH 中可写目录，找不到时才配置用户 PATH；已有其他来源的 kubectl 不覆盖。安装后检查实际 PATH 命中与客户端版本，新终端待生效时明确提示。安装不连接集群、不修改 kubeconfig，实际集群操作仍应选择匹配服务端的客户端版本。
 
-kubectl 默认使用官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`，已核验项目固定 v1.24.7 五种平台的文件头和校验文件可读取；本机完整安装下载仍超时，完整链路尚未验收；这不是国内镜像，目标网络速度需实际验证。其他版本须确认该源是否保留文件，可显式切换到官方 `https://dl.k8s.io/release` 或自建代理。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > `install.kubectl_download_base` > 默认值，空环境变量不覆盖配置。既有配置若仍填 dl.k8s.io，需要自行改为新源，或用环境变量/命令行覆盖；不会自动改写用户显式配置。
+kubectl 默认使用官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`，已核验项目固定 v1.24.7 五种平台的文件头和校验文件可读取；本机完整安装下载仍超时，完整链路尚未验收；这不是国内镜像，目标网络速度需实际验证。其他版本须确认该源是否保留文件，可显式切换到官方 `https://dl.k8s.io/release` 或自建代理。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > `install.kubectl.download_base` > 默认值，空环境变量不覆盖配置。既有配置若仍填 dl.k8s.io，需要自行改为新源，或用环境变量/命令行覆盖；不会自动改写用户显式配置。
 
 ```bash
 export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release
@@ -320,7 +320,7 @@ opskit kubectl install --version v1.24.7 --kubectl-download-base https://storage
 unset KUBECTL_DOWNLOAD_BASE
 ```
 
-kubectl 已移除旧参数 `--download-base`，只接受 `--kubectl-download-base`。配置键 `install.kubectl_download_base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、主参数 `--kubectl-download-base` 统一命名，不需要同时设置三个入口。
+kubectl 已移除旧参数 `--download-base`，只接受 `--kubectl-download-base`。配置键 `install.kubectl.download_base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、主参数 `--kubectl-download-base` 统一命名，不需要同时设置三个入口。
 
 Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://storage.googleapis.com/kubernetes-release/release'`。自建源需要保持同样路径结构并同时提供二进制和 `.sha256`。`--bin-dir`、`--link-dir` 和 `--download-dir` 分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
 
@@ -344,7 +344,7 @@ sudo systemctl restart containerd
 
 二进制安装先下载解包、检查版本和目标文件，再写入并启动 systemd 服务；拒绝覆盖已有二进制、unit 和 containerd 配置，已有安装的升级需单独迁移。官方下载脚本先保存到临时文件，再带完整版本执行，不通过管道运行。安装失败会返回错误，已经落盘的文件会保留供排查，不承诺自动回滚。
 
-`--url` 覆盖主包下载地址，`--sha256` 可校验已知摘要。未传摘要时使用 HTTPS 传输与二进制版本检查，不等同于供应链签名验证；containerd 的 runc/CNI 依赖从 `install.release_base` 下载，CNI 仅检查包内容。不要将示例版本视为最新安全版本或任意 Kubernetes 版本的兼容保证；安装器不会静默降级。
+`--url` 覆盖主包下载地址，`--sha256` 可校验已知摘要。未传摘要时使用 HTTPS 传输与二进制版本检查，不等同于供应链签名验证；containerd 的 runc/CNI 依赖分别从 `install.runc.download_base`、`install.cni_plugins.download_base` 下载，CNI 仅检查包内容。不要将示例版本视为最新安全版本或任意 Kubernetes 版本的兼容保证；安装器不会静默降级。
 
 containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sandbox image；主机网络内核参数及 CNI 网络部署需要按节点方案单独配置。cri-dockerd 直接监听 `unix:///run/cri-dockerd.sock`，kubeadm 需显式指定该 socket。更多字段见[配置指南](docs/configuration.md)。目前完成本地自动化验证，尚未进行真实 Linux 主机安装验收。
 
@@ -378,7 +378,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 ## 近期更新
 
-Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker_mirror` 支持 HTTP(S) URL 或 Aliyun / AzureChinaCloud。脚本下载地址独立由 `install.docker_script` 配置，模板指向 Nexus 的固定提交代理；代理端到端连通性尚未验证。详见 [清华接入配置](docs/configuration.md#docker-清华软件包源)。
+Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.mirror` 支持 HTTP(S) URL 或 Aliyun / AzureChinaCloud。脚本下载地址独立由 `install.docker.script` 配置，模板指向 Nexus 的固定提交代理；代理端到端连通性尚未验证。详见 [清华接入配置](docs/configuration.md#docker-清华软件包源)。
 
 下载地址均可通过统一 YAML 覆盖，完整对应表见 [下载源配置](docs/configuration.md#下载源配置)。kind 与运行时源相互独立；默认地址统一定义在配置模板。
 
@@ -387,8 +387,8 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker_m
 | [v0.1.8](https://github.com/sxxpqp/opskit/releases/tag/v0.1.8) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
-| main（未发布） | kind 下载配置改为 `install.kind.download_base`，按组件分组；旧平铺字段需迁移 |
-| main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / kubectl_download_base，移除旧 --download-base 参数 |
+| main（未发布） | 安装配置统一为 `install.<组件>.<参数>`，kind、kubectl、Docker 和运行时各自分组；旧平铺字段需迁移 |
+| main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / install.kubectl.download_base，移除旧 --download-base 参数 |
 | main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；默认官方存储直连，命令行 > 环境变量 > YAML > 默认值 |
 | main（未发布） | kind 控制平面补齐 Ingress 80/443 映射及 ingress-ready 标签；保留 KS 30880，校验端口冲突并支持配置覆盖 |
 | main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |

@@ -23,17 +23,24 @@ import (
 	"time"
 )
 
+type componentDownloadSettings struct {
+	DownloadBase string `yaml:"download_base"`
+}
+
 type runtimeInstallSettings struct {
-	Kind struct {
-		DownloadBase string `yaml:"download_base"`
-	} `yaml:"kind"`
-	KubectlDownloadBase string `yaml:"kubectl_download_base"`
-	DownloadDir         string `yaml:"download_dir"`
-	DockerMethod        string `yaml:"docker_method"`
-	DockerMirror        string `yaml:"docker_mirror"`
-	DockerScript        string `yaml:"docker_script"`
-	DockerBinaryBase    string `yaml:"docker_binary_base"`
-	ReleaseBase         string `yaml:"release_base"`
+	Kind        componentDownloadSettings `yaml:"kind"`
+	Kubectl     componentDownloadSettings `yaml:"kubectl"`
+	Containerd  componentDownloadSettings `yaml:"containerd"`
+	Runc        componentDownloadSettings `yaml:"runc"`
+	CNIPlugins  componentDownloadSettings `yaml:"cni_plugins"`
+	CRIDockerd  componentDownloadSettings `yaml:"cri_dockerd"`
+	DownloadDir string                    `yaml:"download_dir"`
+	Docker      struct {
+		Method     string `yaml:"method"`
+		Mirror     string `yaml:"mirror"`
+		Script     string `yaml:"script"`
+		BinaryBase string `yaml:"binary_base"`
+	} `yaml:"docker"`
 }
 
 type runtimePackage struct {
@@ -59,8 +66,8 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	timeout := f.Duration("timeout", 15*time.Minute, "安装总超时")
 	var method, mirror, runc, cni *string
 	if tool == "docker" {
-		method = f.String("method", "script", "script 或 binary")
-		mirror = f.String("mirror", defaults.DockerMirror, "官方脚本软件包源：HTTP(S) 根地址、Aliyun 或 AzureChinaCloud")
+		method = f.String("method", "script", "script 或 binary；配置 install.docker.method")
+		mirror = f.String("mirror", defaults.Docker.Mirror, "官方脚本软件包源：HTTP(S) 根地址、Aliyun 或 AzureChinaCloud；配置 install.docker.mirror")
 	}
 	if tool == "containerd" {
 		runc = f.String("runc-version", "v1.2.6", "配套 runc 版本")
@@ -89,8 +96,8 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	switch tool {
 	case "docker":
 		setConfigFlag(f, "version", c.Versions.Docker)
-		setConfigFlag(f, "method", c.Install.DockerMethod)
-		setConfigFlag(f, "mirror", c.Install.DockerMirror)
+		setConfigFlag(f, "method", c.Install.Docker.Method)
+		setConfigFlag(f, "mirror", c.Install.Docker.Mirror)
 	case "cri-dockerd":
 		setConfigFlag(f, "version", c.Versions.CRIDockerd)
 	case "containerd":
@@ -108,11 +115,12 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	if *timeout <= 0 {
 		return 2, errors.New("timeout 必须大于零")
 	}
-	base := c.Install.ReleaseBase
-	if base == "" {
-		base = defaults.ReleaseBase
+	baseFor := func(value, fallback string) string {
+		if value == "" {
+			value = fallback
+		}
+		return strings.TrimRight(value, "/")
 	}
-	base = strings.TrimRight(base, "/")
 	ver := strings.TrimPrefix(*version, "v")
 	packages := []runtimePackage{}
 	script := tool == "docker" && *method == "script"
@@ -126,29 +134,33 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 				return 2, err
 			}
 			if *source == "" {
-				*source = c.Install.DockerScript
+				*source = c.Install.Docker.Script
 			}
 			if *source == "" {
-				*source = defaults.DockerScript
+				*source = defaults.Docker.Script
 			}
 		} else {
 			a := "x86_64"
 			if *arch == "arm64" {
 				a = "aarch64"
 			}
-			b := c.Install.DockerBinaryBase
+			b := c.Install.Docker.BinaryBase
 			if b == "" {
-				b = defaults.DockerBinaryBase
+				b = defaults.Docker.BinaryBase
 			}
 			if *source == "" {
 				*source = fmt.Sprintf("%s/%s/docker-%s.tgz", strings.TrimRight(b, "/"), a, ver)
 			}
 		}
 	case "cri-dockerd":
+		base := baseFor(c.Install.CRIDockerd.DownloadBase, defaults.CRIDockerd.DownloadBase)
 		if *source == "" {
 			*source = fmt.Sprintf("%s/Mirantis/cri-dockerd/releases/download/%s/cri-dockerd-%s.%s.tgz", base, *version, ver, *arch)
 		}
 	case "containerd":
+		base := baseFor(c.Install.Containerd.DownloadBase, defaults.Containerd.DownloadBase)
+		runcBase := baseFor(c.Install.Runc.DownloadBase, defaults.Runc.DownloadBase)
+		cniBase := baseFor(c.Install.CNIPlugins.DownloadBase, defaults.CNIPlugins.DownloadBase)
 		if !strings.HasPrefix(*version, "v1.") && !strings.HasPrefix(*version, "v2.") {
 			return 2, errors.New("containerd 仅支持 1.x/2.x")
 		}
@@ -162,7 +174,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 		}
 		rv := "v" + strings.TrimPrefix(*runc, "v")
 		cv := "v" + strings.TrimPrefix(*cni, "v")
-		packages = append(packages, runtimePackage{name: "runc", version: rv, source: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.%s", base, rv, *arch), raw: true}, runtimePackage{name: "cni", version: cv, source: fmt.Sprintf("%s/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", base, cv, *arch, cv)})
+		packages = append(packages, runtimePackage{name: "runc", version: rv, source: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.%s", runcBase, rv, *arch), raw: true}, runtimePackage{name: "cni", version: cv, source: fmt.Sprintf("%s/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", cniBase, cv, *arch, cv)})
 	}
 	packages = append([]runtimePackage{{name: tool, version: *version, source: *source, checksum: *checksum}}, packages...)
 	for _, p := range packages {

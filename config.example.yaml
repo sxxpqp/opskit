@@ -25,13 +25,22 @@ versions:
 install:
   kind:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # KIND_DOWNLOAD_BASE / kind install --download-base
-  kubectl_download_base: https://storage.googleapis.com/kubernetes-release/release  # 官方存储直连，已验证 v1.24.7；支持 KUBECTL_DOWNLOAD_BASE / --kubectl-download-base 覆盖
-  download_dir: ""  # 默认用户目录 ~/.opskit/downloads（Windows 为 %USERPROFILE%\.opskit\downloads）；可覆盖
-  docker_method: script  # script / binary
-  docker_mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce  # 软件包源 URL；也支持 Aliyun / AzureChinaCloud
-  docker_script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
-  docker_binary_base: https://mirrors.aliyun.com/docker-ce/linux/static/stable
-  release_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  kubectl:
+    download_base: https://storage.googleapis.com/kubernetes-release/release  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
+  download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads，可覆盖
+  docker:
+    method: script  # script / binary
+    mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce  # 官方脚本软件包源，也支持 Aliyun / AzureChinaCloud
+    script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
+    binary_base: https://mirrors.aliyun.com/docker-ce/linux/static/stable
+  containerd:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  runc:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  cni_plugins:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  cri_dockerd:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 
 # kind 测试集群，不会连接或覆盖现有生产集群。
 kind:

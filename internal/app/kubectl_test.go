@@ -55,7 +55,7 @@ func TestKubectlHelpAndPlan(t *testing.T) {
 		t.Fatal("implicit version was selected without configuration")
 	}
 	config := "config.yaml"
-	if err := os.WriteFile(config, []byte("schema_version: 1\nversions:\n  kubernetes: v1.24.7\ninstall:\n  kubectl_download_base: https://packages.example/k8s\n  download_dir: downloads\n"), 0600); err != nil {
+	if err := os.WriteFile(config, []byte("schema_version: 1\nversions:\n  kubernetes: v1.24.7\ninstall:\n  kubectl:\n    download_base: https://packages.example/k8s\n  download_dir: downloads\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, version := range []string{"", "v1.25.0"} {
@@ -203,7 +203,7 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("KUBECTL_DOWNLOAD_BASE", c.env)
 			file := filepath.Join(t.TempDir(), "config.yaml")
-			text := "schema_version: 1\ninstall:\n  kubectl_download_base: " + fmt.Sprintf("%q", c.config) + "\n"
+			text := "schema_version: 1\ninstall:\n  kubectl:\n    download_base: " + fmt.Sprintf("%q", c.config) + "\n"
 			if err := os.WriteFile(file, []byte(text), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -239,7 +239,7 @@ func TestKubectlDownloadFlag(t *testing.T) {
 	}
 	t.Setenv("KUBECTL_DOWNLOAD_BASE", "https://env.example/release")
 	cfg := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(cfg, []byte("schema_version: 1\ninstall:\n  kubectl_download_base: https://config.example/release\n"), 0600); err != nil {
+	if err := os.WriteFile(cfg, []byte("schema_version: 1\ninstall:\n  kubectl:\n    download_base: https://config.example/release\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {

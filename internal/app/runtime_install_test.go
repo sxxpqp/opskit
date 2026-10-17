@@ -16,7 +16,7 @@ import (
 
 func TestRuntimeInstallPlans(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "config.yaml")
-	if e := os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  docker: v27.3.1\n  cri_dockerd: v0.3.22\n  containerd: v2.1.3\n  runc: v1.2.6\n  cni_plugins: v1.5.1\ninstall:\n  release_base: https://packages.example\n"), 0600); e != nil {
+	if e := os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  docker: v27.3.1\n  cri_dockerd: v0.3.22\n  containerd: v2.1.3\n  runc: v1.2.6\n  cni_plugins: v1.5.1\ninstall:\n  containerd:\n    download_base: https://packages.example\n  runc:\n    download_base: https://packages.example\n  cni_plugins:\n    download_base: https://packages.example\n  cri_dockerd:\n    download_base: https://packages.example\n"), 0600); e != nil {
 		t.Fatal(e)
 	}
 	cases := []struct {
@@ -187,7 +187,7 @@ func TestRuntimeDownloadDefaultsIgnoreKindEnvironment(t *testing.T) {
 	for _, tool := range []string{"containerd", "cri-dockerd"} {
 		var out bytes.Buffer
 		code, err := runRuntimeInstall(context.Background(), tool, []string{"--config", cfg, "--version", "v1.7.27", "--dry-run"}, &out, &out)
-		if code != 0 || err != nil || !strings.Contains(out.String(), defaults.ReleaseBase+"/") || strings.Contains(out.String(), "kind-only.example") {
+		if code != 0 || err != nil || !strings.Contains(out.String(), defaults.Containerd.DownloadBase+"/") || strings.Contains(out.String(), "kind-only.example") {
 			t.Fatalf("%s: %d %v %s", tool, code, err, out.String())
 		}
 	}
@@ -220,5 +220,65 @@ func TestDockerScriptCustomMirror(t *testing.T) {
 		if validateDockerMirror(invalid) == nil {
 			t.Fatalf("accepted %s", invalid)
 		}
+	}
+}
+
+func TestInstallComponentDownloadIsolation(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	body := `schema_version: 1
+versions:
+  containerd: v2.1.3
+  runc: v1.2.6
+  cni_plugins: v1.5.1
+  cri_dockerd: v0.3.22
+  docker: v27.3.1
+install:
+  containerd:
+    download_base: https://containerd.example
+  runc:
+    download_base: https://runc.example
+  cni_plugins:
+    download_base: https://cni.example
+  cri_dockerd:
+    download_base: https://cri.example
+  docker:
+    method: binary
+    binary_base: https://docker.example
+`
+	if err := os.WriteFile(cfg, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		tool string
+		want []string
+	}{
+		{"containerd", []string{"https://containerd.example/containerd/", "https://runc.example/opencontainers/", "https://cni.example/containernetworking/"}},
+		{"cri-dockerd", []string{"https://cri.example/Mirantis/"}},
+		{"docker", []string{"https://docker.example/x86_64/docker-27.3.1.tgz"}},
+	} {
+		var out bytes.Buffer
+		code, err := runRuntimeInstall(context.Background(), tc.tool, []string{"--config", cfg, "--arch", "amd64", "--dry-run"}, &out, &out)
+		if code != 0 || err != nil {
+			t.Fatalf("%s: %d %v %s", tc.tool, code, err, out.String())
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("%s missing %s: %s", tc.tool, want, out.String())
+			}
+		}
+	}
+}
+
+func TestRemovedFlatInstallKeysRejected(t *testing.T) {
+	for _, key := range []string{"kind_download_base", "kubectl_download_base", "docker_method", "docker_mirror", "docker_script", "docker_binary_base", "release_base"} {
+		t.Run(key, func(t *testing.T) {
+			cfg := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(cfg, []byte("schema_version: 1\ninstall:\n  "+key+": old\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := readFileConfig(cfg, true); err == nil {
+				t.Fatal("removed flat install key accepted")
+			}
+		})
 	}
 }

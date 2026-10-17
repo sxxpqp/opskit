@@ -162,7 +162,7 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 `versions.docker`、`cri_dockerd`、`containerd`、`runc`、`cni_plugins` 均为完整 vX.Y.Z；安装命令的 `--version` 优先于对应配置。containerd 另支持 `--runc-version` 和 `--cni-version`。Docker 27.3.1、cri-dockerd 0.3.22、containerd 2.1.3、CNI 1.5.1 来自 linux 项目；runc 固定为 1.2.6，不沿用原脚本的 1.1.10，不做 glibc 失败时静默降级。此版本组合尚未做真机兼容验收。
 
-`install.docker_method` 为 script 或 binary，`docker_mirror` 为官方脚本的软件包源（默认清华 URL，也支持 Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `docker_script` 默认通过 Nexus 代理获取固定提交的官方脚本；二进制源 `docker_binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`release_base` 用于 containerd、runc、CNI 和 cri-dockerd，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
+`install.docker.method` 为 script 或 binary，`install.docker.mirror` 为官方脚本的软件包源（默认清华 URL，也支持 Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `install.docker.script` 默认通过 Nexus 代理获取固定提交的官方脚本；二进制源 `install.docker.binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`install.containerd.download_base`、`install.runc.download_base`、`install.cni_plugins.download_base`、`install.cri_dockerd.download_base` 分别用于对应组件，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
 
 `--url` 只覆盖主包/脚本，`--sha256` 只校验该文件；runc/CNI 无单独摘要字段，使用源站 HTTPS。安装不改既有配置、不升级现有运行时，不自动修改主机网络参数。完整示例见首页运行时安装章节。既有 config/config.yaml 不自动覆盖；用 `opskit config init --config config/config.new.yaml` 生成对照模板，手工合并新字段。
 
@@ -181,11 +181,12 @@ versions:
   kubernetes: v1.24.7
   kubectl: ""  # 留空跟随 kubernetes，也可明确固定独立版本
 install:
-  kubectl_download_base: https://storage.googleapis.com/kubernetes-release/release
+  kubectl:
+    download_base: https://storage.googleapis.com/kubernetes-release/release
   download_dir: ""  # 默认用户目录 .opskit/downloads
 ```
 
-优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl_download_base > 默认官方存储直连；空环境变量不覆盖 YAML。该默认地址已核验项目 v1.24.7 的五种平台文件头与校验文件；本机完整下载仍超时，完整链路尚未验收，可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
+优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 默认官方存储直连；空环境变量不覆盖 YAML。该默认地址已核验项目 v1.24.7 的五种平台文件头与校验文件；本机完整下载仍超时，完整链路尚未验收，可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
@@ -197,19 +198,22 @@ install:
 
 下载源变量示例：`export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release`；用 `unset KUBECTL_DOWNLOAD_BASE` 取消覆盖。PowerShell 用 `$env:KUBECTL_DOWNLOAD_BASE = "..."`。已有配置若仍显式填写 dl.k8s.io 会继续使用该值，应按需修改配置或使用环境变量覆盖。默认官方存储地址不等于国内镜像，不保证在所有网络或任意版本可用；缺少目标文件时返回错误，不静默更换版本。
 
-下载源命名统一：CLI `--kubectl-download-base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、YAML `install.kubectl_download_base`。旧 `--download-base` 已移除，传入会报未知参数。命名变更只针对 kubectl，不改变 kind 的 --download-base。
+下载源命名统一：CLI `--kubectl-download-base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、YAML `install.kubectl.download_base`。旧 `--download-base` 已移除，传入会报未知参数。命名变更只针对 kubectl，不改变 kind 的 --download-base。
 
 ## 下载源配置
 
 | 下载内容 | YAML 配置项 |
 |---|---|
 | kind 二进制和校验文件 | `install.kind.download_base` |
-| kubectl 二进制和校验文件 | `install.kubectl_download_base` |
-| Docker 官方安装脚本 | `install.docker_script` |
-| Docker 静态安装包 | `install.docker_binary_base` |
-| cri-dockerd、containerd、runc、CNI plugins | `install.release_base` |
+| kubectl 二进制和校验文件 | `install.kubectl.download_base` |
+| Docker 官方安装脚本 | `install.docker.script` |
+| Docker 静态安装包 | `install.docker.binary_base` |
+| containerd | `install.containerd.download_base` |
+| runc | `install.runc.download_base` |
+| CNI plugins | `install.cni_plugins.download_base` |
+| cri-dockerd | `install.cri_dockerd.download_base` |
 
-默认地址只维护在 `config.example.yaml`，代码读取嵌入模板作为默认值；用户配置留空时使用该默认值。已有用户配置不自动覆写。kind 源优先级为 CLI `--download-base` > `KIND_DOWNLOAD_BASE` > YAML > 模板默认值；该环境变量不影响运行时安装。运行时 `--url` 可覆盖主包地址，containerd 配套 runc/CNI 仍使用 `release_base`。Docker 官方脚本内部的软件包源由 `docker_mirror` 控制。上述配置针对文件下载，容器镜像仍走 mirrors 配置。完整下载地址、版本与架构在执行日志中显示。
+默认地址只维护在 `config.example.yaml`，代码读取嵌入模板作为默认值；用户配置留空时使用该默认值。已有用户配置不自动覆写。kind 源优先级为 CLI `--download-base` > `KIND_DOWNLOAD_BASE` > YAML > 模板默认值；该环境变量不影响运行时安装。运行时 `--url` 可覆盖主包地址，containerd 配套 runc/CNI 分别使用自己的下载配置块。Docker 官方脚本内部的软件包源由 `install.docker.mirror` 控制。上述配置针对文件下载，容器镜像仍走 mirrors 配置。完整下载地址、版本与架构在执行日志中显示。
 
 ## Docker 清华软件包源
 
@@ -217,14 +221,15 @@ install:
 
 ```yaml
 install:
-  docker_method: script
-  docker_mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce
-  docker_script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
+  docker:
+    method: script
+    mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce
+    script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
 ```
 
 运行 `opskit docker install --version v27.3.1`，或用 `--mirror https://mirrors.tuna.tsinghua.edu.cn/docker-ce` 覆盖软件包源。URL 通过子进程环境 `DOWNLOAD_URL` 传递，此时不传脚本的 `--mirror`，避免其覆盖该地址；Aliyun / AzureChinaCloud 仍通过官方 `--mirror` 传递。
 
-清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `docker_script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `versions.docker` / `--version` 指定。
+清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `install.docker.script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `versions.docker` / `--version` 指定。
 
 ## kind 下载源分组
 
@@ -239,3 +244,31 @@ install:
 ```
 
 CLI `--download-base` > `KIND_DOWNLOAD_BASE` > `install.kind.download_base` > 模板默认值。版本仍由 `--version` 或 `versions.kind` 指定，不自动使用 latest。旧 `install.kind_download_base` 已移除，需迁移到上述嵌套结构。
+
+## install 统一组件分组
+
+所有组件专用选项统一为 `install.<组件>.<参数>`；共享的 `install.download_dir` 仍供所有组件使用。版本继续在 `versions` 下固定，或通过 `--version` 显式覆盖。
+
+```yaml
+install:
+  download_dir: ""
+  kind:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  kubectl:
+    download_base: https://storage.googleapis.com/kubernetes-release/release
+  docker:
+    method: script
+    mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce
+    script: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/docker/docker-install/ada7a567e59b3935bd601bb21e422da50e80e376/install.sh
+    binary_base: https://mirrors.aliyun.com/docker-ce/linux/static/stable
+  containerd:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  runc:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  cni_plugins:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+  cri_dockerd:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+```
+
+旧平铺字段 `kind_download_base`、`kubectl_download_base`、`docker_method`、`docker_mirror`、`docker_script`、`docker_binary_base`、`release_base` 已移除，读取时报未知字段。原 `release_base` 的值分别迁移到 containerd、runc、cni_plugins、cri_dockerd 块中的 `download_base`；各组件可单独指定来源，不再共用隐式发布地址。CLI 参数和环境变量名称保持原命名。
