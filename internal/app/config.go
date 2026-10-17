@@ -18,7 +18,13 @@ import (
 const defaultConfigPath = "config/config.yaml"
 
 type fileConfig struct {
+	Install  runtimeInstallSettings `yaml:"install"`
 	Versions struct {
+		Docker     string `yaml:"docker"`
+		CRIDockerd string `yaml:"cri_dockerd"`
+		Containerd string `yaml:"containerd"`
+		Runc       string `yaml:"runc"`
+		CNIPlugins string `yaml:"cni_plugins"`
 		Kind       string `yaml:"kind"`
 		Kubernetes string `yaml:"kubernetes"`
 		KubeSphere string `yaml:"kubesphere"`

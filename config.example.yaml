@@ -10,9 +10,23 @@ schema_version: 1
 
 # 固定安装版本；CLI --version 可覆盖。KS 当前仅支持内嵌的 v3.4.1 清单。
 versions:
+  docker: v27.3.1
+  cri_dockerd: v0.3.22
+  containerd: v2.1.3
+  runc: v1.2.6
+  cni_plugins: v1.5.1
   kind: v0.17.0
   kubernetes: v1.24.7
   kubesphere: v3.4.1
+
+# Linux systemd 主机安装；默认仅预览，--apply 执行。不覆盖已有运行时。
+# URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
+install:
+  docker_method: script  # script / binary
+  docker_mirror: Aliyun  # 官方脚本软件包源，注意大小写
+  docker_script: https://get.docker.com
+  docker_binary_base: https://mirrors.aliyun.com/docker-ce/linux/static/stable
+  release_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 
 # kind 测试集群，不会连接或覆盖现有生产集群。
 kind:

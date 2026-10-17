@@ -11,10 +11,11 @@
 
 <p align="center">
   <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
-  集群健康检查 · kind / mirror / KS 工作流（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
+  集群健康检查 · Docker / CRI / containerd 安装与 kind / mirror / KS 工作流（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
 </p>
 
 <p align="center">
+  <a href="#运行时安装main未发布">运行时安装</a> ·
   <a href="#快速上手">快速上手</a> ·
   <a href="#下载">下载</a> ·
   <a href="#配置文件">配置文件</a> ·
@@ -39,12 +40,13 @@
 
 项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。安装包提供 GitHub 与 Nexus 双入口，首页版本摘要、近期更新入口和下载表随正式发布自动刷新。网络排查、更多数据库备份和保留策略将逐步加入。
 
-main 分支新增 **kind 管理、统一镜像源和 KubeSphere 3.4.1 安装**（尚未发布），配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并；现有 Release 下载仍对应上方正式版。
+main 分支新增 **Docker 双方式 / cri-dockerd / containerd 安装、kind 管理、统一镜像源和 KubeSphere 3.4.1 安装**（尚未发布），配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并；现有 Release 下载仍对应上方正式版。
 
 ## 现在能做什么
 
 | 能力 | 当前行为 |
 |---|---|
+| 运行时安装（main，未发布） | Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI；指定版本与预览 |
 | kind 管理（main，未发布） | 版本安装、集群创建/状态/日志、context 切换及确认删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；预览、备份与显式写入 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
@@ -283,10 +285,36 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 快照流程依据 [etcd 官方恢复文档](https://etcd.io/docs/v3.6/op-guide/recovery/)。本项目尚未完成真实 etcd/MinIO 环境的恢复验收，生产使用前应进行恢复演练并核对业务数据。
 
+## 运行时安装（main，未发布）
+
+Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。所有命令默认仅输出计划，加 `--apply` 执行；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
+
+```bash
+# Docker 官方脚本：软件包源使用 Aliyun，不是镜像拉取代理
+opskit docker install --version v27.3.1 --method script --mirror Aliyun --apply
+# Docker 静态二进制：包含 dockerd 自带的 containerd/runc
+opskit docker install --version v27.3.1 --method binary --apply
+# 使用 Docker 作为 Kubernetes 运行时时再装 CRI 适配器
+opskit cri-dockerd install --version v0.3.22 --apply
+# 或单独安装 containerd（与上面的 Docker 路线二选一）
+opskit containerd install --version v2.1.3 --runc-version v1.2.6 --cni-version v1.5.1 --apply
+opskit mirror containerd --apply
+# 自行安排重启，使 mirror 生效
+sudo systemctl restart containerd
+```
+
+二进制安装先下载解包、检查版本和目标文件，再写入并启动 systemd 服务；拒绝覆盖已有二进制、unit 和 containerd 配置，已有安装的升级需单独迁移。官方下载脚本先保存到临时文件，再带完整版本执行，不通过管道运行。安装失败会返回错误，已经落盘的文件会保留供排查，不承诺自动回滚。
+
+`--url` 覆盖主包下载地址，`--sha256` 可校验已知摘要。未传摘要时使用 HTTPS 传输与二进制版本检查，不等同于供应链签名验证；containerd 的 runc/CNI 依赖从 `install.release_base` 下载，CNI 仅检查包内容。不要将示例版本视为最新安全版本或任意 Kubernetes 版本的兼容保证；安装器不会静默降级。
+
+containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sandbox image；主机网络内核参数及 CNI 网络部署需要按节点方案单独配置。cri-dockerd 直接监听 `unix:///run/cri-dockerd.sock`，kubeadm 需显式指定该 socket。更多字段见[配置指南](docs/configuration.md)。目前完成本地自动化验证，尚未进行真实 Linux 主机安装验收。
+
 ## 路线图
 
 下面是演进方向，未勾选的功能尚未实现。欢迎在 Issue 中分享使用场景，帮助确定优先级。
 
+- [x] Docker 双方式、cri-dockerd 和 containerd 版本安装（main，未发布）
+- [ ] 运行时安装 Linux 真机验收及升级迁移
 - [x] kind 显式版本安装、SHA-256 校验和版本隔离（main，未发布）
 - [x] kind 集群管理、统一 mirror 和 KS 3.4.1 安装工作流（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
@@ -311,6 +339,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
+| main（未发布） | 新增 Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI 安装，默认预览并拒绝覆盖已有运行时 |
 | main（未发布） | 迁入 kind/mirror/KS 流程与项目实际默认镜像源，支持 Docker insecure-registry 合并与 Go proxy 列表；配置集中到 config/config.yaml |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
