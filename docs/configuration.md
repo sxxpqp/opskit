@@ -203,7 +203,7 @@ install:
 
 | 下载内容 | YAML 配置项 |
 |---|---|
-| kind 二进制和校验文件 | `install.kind_download_base` |
+| kind 二进制和校验文件 | `install.kind.download_base` |
 | kubectl 二进制和校验文件 | `install.kubectl_download_base` |
 | Docker 官方安装脚本 | `install.docker_script` |
 | Docker 静态安装包 | `install.docker_binary_base` |
@@ -225,3 +225,17 @@ install:
 运行 `opskit docker install --version v27.3.1`，或用 `--mirror https://mirrors.tuna.tsinghua.edu.cn/docker-ce` 覆盖软件包源。URL 通过子进程环境 `DOWNLOAD_URL` 传递，此时不传脚本的 `--mirror`，避免其覆盖该地址；Aliyun / AzureChinaCloud 仍通过官方 `--mirror` 传递。
 
 清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `docker_script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `versions.docker` / `--version` 指定。
+
+## kind 下载源分组
+
+kind 安装文件的下载地址使用组件独立配置：
+
+```yaml
+versions:
+  kind: v0.17.0
+install:
+  kind:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
+```
+
+CLI `--download-base` > `KIND_DOWNLOAD_BASE` > `install.kind.download_base` > 模板默认值。版本仍由 `--version` 或 `versions.kind` 指定，不自动使用 latest。旧 `install.kind_download_base` 已移除，需迁移到上述嵌套结构。

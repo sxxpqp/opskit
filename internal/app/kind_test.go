@@ -135,3 +135,32 @@ func TestKindCommandRouting(t *testing.T) {
 		t.Fatal("version must be required through main CLI")
 	}
 }
+
+func TestKindNestedDownloadConfig(t *testing.T) {
+	defaults, err := defaultInstallSettings()
+	if err != nil || defaults.Kind.DownloadBase == "" {
+		t.Fatalf("nested template default missing: %v", err)
+	}
+	for _, tc := range []struct {
+		name, body string
+		valid      bool
+	}{
+		{"nested", "install:\n  kind:\n    download_base: https://kind.example.com\n", true},
+		{"removed-flat", "install:\n  kind_download_base: https://old.example.com\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte("schema_version: 1\n"+tc.body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			c, err := readFileConfig(path, true)
+			if tc.valid {
+				if err != nil || c.Install.Kind.DownloadBase != "https://kind.example.com" {
+					t.Fatalf("%v %v", c.Install.Kind.DownloadBase, err)
+				}
+			} else if err == nil {
+				t.Fatal("removed flat key accepted")
+			}
+		})
+	}
+}

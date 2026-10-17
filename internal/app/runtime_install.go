@@ -24,7 +24,9 @@ import (
 )
 
 type runtimeInstallSettings struct {
-	KindDownloadBase    string `yaml:"kind_download_base"`
+	Kind struct {
+		DownloadBase string `yaml:"download_base"`
+	} `yaml:"kind"`
 	KubectlDownloadBase string `yaml:"kubectl_download_base"`
 	DownloadDir         string `yaml:"download_dir"`
 	DockerMethod        string `yaml:"docker_method"`
