@@ -24,28 +24,57 @@ kind:
   binary: ""
   console_port: 30880
 
-# 单一镜像源配置：请填实际可用地址，不默认绑定个人 Harbor 或阿里云账号。
-# mirror 默认只预览，--apply 才备份并写入；容器清单保持上游 image。
+# 项目镜像源基线：迁移自 linux/docker/containerd/mirrors.sh、docker/docker-mirror.sh
+# 以及 docs/infra-reference.md、aliyun-mirrors.md；内网地址需要运行环境可达。
+# 默认只预览，--apply 才备份并写入；容器清单保持上游 image。
 mirrors:
-  docker: []
-  # 将 containerd: {} 替换为下方注释示例并填写 endpoint；未配置时明确报错。
-  containerd: {}
-  # containerd:
-  #   docker.io:
-  #     server: https://registry-1.docker.io
-  #     endpoint: https://your-registry.example.com/v2/dockerhub
-  #     skip_verify: false
-  #     override_path: true
-  go: ""
-  npm: ""
-  pip: ""
-  maven: ""
+  docker:
+    - https://dockerhub.ihome.sxxpqp.top:8443
+  # 沿用原 Docker 脚本的内网证书兼容设置；有可信证书时可删除相应项。
+  docker_insecure_registries:
+    - dockerhub.ihome.sxxpqp.top:8443
+    - ghcr.ihome.sxxpqp.top:8443
+    - quay.ihome.sxxpqp.top:8443
+    - k8s.ihome.sxxpqp.top:8443
+  containerd:
+    docker.io:
+      server: https://registry-1.docker.io
+      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/dockerhub
+      skip_verify: true
+      override_path: true
+    registry.k8s.io:
+      server: https://registry.k8s.io
+      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/google_containers
+      skip_verify: true
+      override_path: true
+    k8s.gcr.io:
+      server: https://k8s.gcr.io
+      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/google_containers
+      skip_verify: true
+      override_path: true
+    quay.io:
+      server: https://quay.io
+      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/quay
+      skip_verify: true
+      override_path: true
+    ghcr.io:
+      server: https://ghcr.io
+      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/ghcr
+      skip_verify: true
+      override_path: true
+    registry.cn-hangzhou.aliyuncs.com:
+      server: https://registry.cn-hangzhou.aliyuncs.com
+  go: https://goproxy.cn,direct
+  npm: https://registry.npmmirror.com
+  pip: https://pypi.tuna.tsinghua.edu.cn/simple/
+  maven: https://maven.aliyun.com/repository/public
 
 kubesphere:
   # 留空读取唯一默认 StorageClass；不会自动安装 OpenEBS/NFS 或把 SC 改成默认。
   storage_class: ""
-  # kind 可选择已确认的同版本安装器镜像源；留空保持 DockerHub 上游。
-  installer_source: ""
+  # 沿用原 kind 流程的公开安装器源；仅 --kind 预加载时读取。
+  # 自建集群继续使用上游 image；此项不是个人阿里云 ACR 账号。
+  installer_source: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
   # 留空在 ~/.kube 中生成 0600 初始密码文件，不输出明文。
   password_file: ""
 

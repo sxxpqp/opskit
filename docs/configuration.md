@@ -6,7 +6,7 @@ main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创�
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
-`mirror` 命令默认预览，`--apply` 才写入并保留备份；所有镜像源地址需自行提供。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
+`mirror` 命令默认预览，`--apply` 才写入并保留备份；模板镜像源已按 linux 项目原配置填充：Docker 多前端、containerd huball 和现有公共语言源。部署到其他环境时需替换地址；模板更新不会覆盖本地已生成配置。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
 
 kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和固定默认值；etcd/S3 保留已有参数及 AWS 默认凭据链语义。非空 YAML 账号信息仍按原规则优先于 AWS 环境凭据。请勿把全局的配置优先级理解成秘密管理机制。
 
@@ -145,3 +145,13 @@ s3:
 `provider` 支持 `minio`、`aws`、`custom`，只加载对应配置块，不回退到其他厂家。未填写 region 时默认 `us-east-1`；MinIO/custom 默认 path-style，AWS 默认虚拟主机方式。MinIO/custom 在启用上传时必须有 endpoint。其他 S3 厂家可使用 `custom`，按其文档设置 endpoint、region、path_style，兼容性仍需实际验证。
 
 旧版平铺的 `s3.bucket` / `s3.endpoint` 等仍可使用，但不能与 `provider` 混用。迁移时将原字段移入对应厂家块，再设置 `provider`。已有 opskit.yaml 不会被自动覆盖，可用 `opskit config init --config opskit.new.yaml` 生成新模板对照迁移。
+
+## 项目默认值来源
+
+- Docker：linux 仓库 `docker/docker-mirror.sh`，包括内网 insecure-registry 列表；写入时合并保留既有条目。
+- containerd：`docker/containerd/mirrors.sh`，包含 DockerHub、两个 Google registry 名称、Quay、GHCR 与阿里 ACR 直连。
+- Go/npm/pip：`docs/infra-reference.md` 和已使用的 CI/Dockerfile；Go 支持逗号/竖线分隔的代理链及 direct/off。
+- Maven：`aliyun-mirrors.md` 中的公开聚合源。
+- kind KS 安装器：原 `kubernetes/kubesphere/kind-3.4.1` 使用的公开 3.4.1 镜像源；自建集群不读取这个 kind 专用模板项。
+
+`kind.kubeconfig`、`kind.binary`、KS storage_class/password_file 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。

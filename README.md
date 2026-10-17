@@ -108,7 +108,7 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 
 ```sh
 ./opskit config init                    # 生成 config/config.yaml；不覆盖已有文件
-# 填写 mirrors.containerd 中实际可用的镜像源
+# 模板已带本项目镜像源；确认这些内网域名在当前环境可达
 ./opskit kind install --version v0.17.0
 ./opskit kind create --version v1.24.7 --workers 2     # 默认预览
 ./opskit kind create --version v1.24.7 --workers 2 --apply
@@ -139,7 +139,7 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
-Go 使用 `go env GOENV` 定位配置（也可 `--file`）；npm、pip、Maven 使用当前用户配置，支持 `--file` 指定。Docker Desktop 要显式指定导出的配置文件，不修改 Docker Desktop 内部虚拟机。源地址只来自用户配置或 `--url`，不默认绑定个人 Harbor/阿里云账号。优先级为显式参数 > 支持的环境变量 > YAML > 固定默认值；环境变量目前支持 KIND_DOWNLOAD_BASE、OPSKIT_KIND_VERSION、OPSKIT_KUBERNETES_VERSION、OPSKIT_KUBESPHERE_VERSION、OPSKIT_KIND_NAME、OPSKIT_KIND_BIN、KUBECONFIG。`kind use/unuse` 修改用户默认 kubeconfig 并备份，目标可用 OPSKIT_USER_KUBECONFIG 指定；不会修改终端环境变量。
+Go 使用 `go env GOENV` 定位配置（也可 `--file`）；npm、pip、Maven 使用当前用户配置，支持 `--file` 指定。Docker Desktop 要显式指定导出的配置文件，不修改 Docker Desktop 内部虚拟机。模板迁入了 linux 项目现有默认值：Docker 多前端、containerd huball 六份映射、Go/npm/清华 PyPI/阿里 Maven 公共源。内网代理需在当前环境可达；`docker_insecure_registries` 与 containerd 的 `skip_verify` 沿用原项目证书设置，可按实际可信 CA 情况调整。源地址仍只在配置文件或 `--url` 中维护。优先级为显式参数 > 支持的环境变量 > YAML > 固定默认值；环境变量目前支持 KIND_DOWNLOAD_BASE、OPSKIT_KIND_VERSION、OPSKIT_KUBERNETES_VERSION、OPSKIT_KUBESPHERE_VERSION、OPSKIT_KIND_NAME、OPSKIT_KIND_BIN、KUBECONFIG。`kind use/unuse` 修改用户默认 kubeconfig 并备份，目标可用 OPSKIT_USER_KUBECONFIG 指定；不会修改终端环境变量。
 
 ```sh
 go build -o opskit ./cmd/opskit
@@ -151,7 +151,7 @@ go build -o opskit ./cmd/opskit
 
 版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存，调用时使用对应路径或将所选目录加入 PATH，不自动修改 shell 配置。
 
-kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
+kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。kind 安装器源默认沿用已有公开 `registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1`，仅用于 `--kind` 预加载，不改上游清单；自建集群忽略该模板项。kind 工具发布包默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
 
 旧 `linux` 仓库脚本在 PATH 中找到 opskit（或设置 `OPSKIT_BIN`）时会调用本实现，并传递原版本和安装目录；未部署 opskit 的机器继续使用旧脚本。测试覆盖版本共存、重复安装、SHA/版本校验失败和 HTTP 失败保留原文件；新增工作流测试通过模拟工具验证命令顺序、预检阻断和秘密保护；macOS 做了安装器原生执行检查，尚未完成真实集群 KS 安装和 Windows/Linux 真机工作流验收。
 
@@ -185,6 +185,8 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 这里的 x86 指 64 位 x86_64，不提供 32 位 x86 安装包。下载后将文件重命名为 `opskit`（Windows 为 `opskit.exe`）；Linux/macOS 执行 `chmod +x opskit` 后运行，无需解压。请使用上表同版本的 SHA-256 校验文件核对完整性。
 
 ## 配置文件
+
+模板更新不会覆盖已有的 `config/config.yaml`。需要对照新默认值时执行 `opskit config init --config config/config.new.yaml`，检查后合并；程序仍只读取选中的一份配置，不自动合并新旧模板。
 
 在准备运行命令的目录生成配置模板：
 
@@ -309,7 +311,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
-| main（未发布） | 迁入 kind 创建/状态/日志/context/删除、统一 mirror、KS 3.4.1 安装；默认配置集中到 config/config.yaml，兼容旧文件 |
+| main（未发布） | 迁入 kind/mirror/KS 流程与项目实际默认镜像源，支持 Docker insecure-registry 合并与 Go proxy 列表；配置集中到 config/config.yaml |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |

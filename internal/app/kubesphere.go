@@ -56,7 +56,9 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 	setConfigFlag(f, "kind-bin", c.Kind.Binary)
 	setConfigFlag(f, "storage-class", c.KubeSphere.StorageClass)
 	setConfigFlag(f, "password-file", c.KubeSphere.PasswordFile)
-	setConfigFlag(f, "installer-source", c.KubeSphere.InstallerSource)
+	if *kindName != "" {
+		setConfigFlag(f, "installer-source", c.KubeSphere.InstallerSource)
+	}
 	*kindBin = configuredKindBinary(c, *kindBin)
 	if *version != "v3.4.1" {
 		return 2, errors.New("当前已验证的内嵌 KS 清单仅支持 --version v3.4.1；不猜测其他版本地址或改写镜像")

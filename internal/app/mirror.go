@@ -25,12 +25,13 @@ type registryMirror struct {
 	OverridePath bool   `yaml:"override_path"`
 }
 type mirrorSettings struct {
-	Docker     []string                  `yaml:"docker"`
-	Containerd map[string]registryMirror `yaml:"containerd"`
-	Go         string                    `yaml:"go"`
-	NPM        string                    `yaml:"npm"`
-	Pip        string                    `yaml:"pip"`
-	Maven      string                    `yaml:"maven"`
+	DockerInsecure []string                  `yaml:"docker_insecure_registries"`
+	Docker         []string                  `yaml:"docker"`
+	Containerd     map[string]registryMirror `yaml:"containerd"`
+	Go             string                    `yaml:"go"`
+	NPM            string                    `yaml:"npm"`
+	Pip            string                    `yaml:"pip"`
+	Maven          string                    `yaml:"maven"`
 }
 
 func validURL(s string) bool {
@@ -217,7 +218,16 @@ func replaceSetting(text, section, key, value string) string {
 	return strings.Join(result, "\n") + "\n"
 }
 func renderLanguage(tool string, old []byte, source string) ([]byte, error) {
-	if strings.ContainsAny(source, "\r\n") || !validURL(source) {
+	validSource := validURL(source)
+	if tool == "go" {
+		validSource = source != ""
+		for _, proxy := range strings.Split(strings.ReplaceAll(source, "|", ","), ",") {
+			if proxy != "direct" && proxy != "off" && !validURL(proxy) {
+				validSource = false
+			}
+		}
+	}
+	if strings.ContainsAny(source, "\r\n") || !validSource {
 		return nil, errors.New("镜像源须为有效 HTTP(S) 地址，不得包含换行或凭据")
 	}
 	switch tool {
@@ -374,8 +384,43 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 			return 2, errors.New("daemon.json 必须为 JSON 对象，不能是 null")
 		}
 		values["registry-mirrors"] = c.Mirrors.Docker
+		if len(c.Mirrors.DockerInsecure) > 0 {
+			seen := map[string]bool{}
+			merged := []string{}
+			if previous, ok := values["insecure-registries"]; ok {
+				items, ok := previous.([]any)
+				if !ok {
+					return 2, errors.New("现有 insecure-registries 必须为字符串数组")
+				}
+				for _, item := range items {
+					value, ok := item.(string)
+					if !ok {
+						return 2, errors.New("现有 insecure-registries 包含非字符串")
+					}
+					if !seen[value] {
+						seen[value] = true
+						merged = append(merged, value)
+					}
+				}
+			}
+			for _, value := range c.Mirrors.DockerInsecure {
+				if strings.ContainsAny(value, "/\\\r\n\t ") || value == "" {
+					return 2, errors.New("docker_insecure_registries 必须为 host[:port]")
+				}
+				if !seen[value] {
+					seen[value] = true
+					merged = append(merged, value)
+				}
+			}
+			values["insecure-registries"] = merged
+		}
+
 		data, err = json.MarshalIndent(values, "", "  ")
-		preview, _ = json.MarshalIndent(map[string]any{"registry-mirrors": c.Mirrors.Docker}, "", "  ")
+		previewSettings := map[string]any{"registry-mirrors": c.Mirrors.Docker}
+		if len(c.Mirrors.DockerInsecure) > 0 {
+			previewSettings["insecure-registries"] = c.Mirrors.DockerInsecure
+		}
+		preview, _ = json.MarshalIndent(previewSettings, "", "  ")
 	case "containerd":
 		files, e := renderHosts(c.Mirrors.Containerd)
 		if e != nil {

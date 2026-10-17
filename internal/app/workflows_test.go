@@ -440,3 +440,95 @@ func TestContextSwitchRestoresStateWithoutPrintingCredentials(t *testing.T) {
 		t.Fatal("previous context not restored")
 	}
 }
+
+func TestProjectTemplateDefaultsAreUsable(t *testing.T) {
+	t.Chdir(t.TempDir())
+	code, err, _ := workflowRun(t, "config", "init")
+	if code != 0 || err != nil {
+		t.Fatal(code, err)
+	}
+	c, err := readFileConfig(defaultConfigPath, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Mirrors.Docker) != 1 || len(c.Mirrors.Containerd) != 6 || len(c.Mirrors.DockerInsecure) != 4 {
+		t.Fatal("project runtime defaults missing")
+	}
+	if c.Mirrors.Containerd["docker.io"].Endpoint != "https://huball.ihome.sxxpqp.top:8443/v2/dockerhub" {
+		t.Fatal("wrong dockerhub endpoint")
+	}
+	if c.Mirrors.Containerd["registry.cn-hangzhou.aliyuncs.com"].Endpoint != "" {
+		t.Fatal("ACR should stay direct")
+	}
+	if _, err = renderHosts(c.Mirrors.Containerd); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"docker", "go", "npm", "pip", "maven"} {
+		file := filepath.Join(t.TempDir(), tool+".config")
+		code, err, _ = workflowRun(t, "mirror", tool, "--file", file)
+		if code != 0 || err != nil {
+			t.Fatal(tool, code, err)
+		}
+		if _, err = os.Stat(file); !os.IsNotExist(err) {
+			t.Fatal("preview wrote config")
+		}
+	}
+	if c.KubeSphere.InstallerSource != "registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1" {
+		t.Fatal("installer default missing")
+	}
+}
+func TestGoProxyList(t *testing.T) {
+	for _, source := range []string{"https://goproxy.cn,direct", "https://first.example.com|https://second.example.com,direct", "direct", "off"} {
+		text, err := renderLanguage("go", nil, source)
+		if err != nil || !strings.Contains(string(text), "GOPROXY="+source) {
+			t.Fatal(source, err, string(text))
+		}
+	}
+	for _, source := range []string{",direct", "https://ok.example.com,,direct", "https://ok.example.com,ftp://bad.example.com", "https://user:password@example.com,direct"} {
+		if _, err := renderLanguage("go", nil, source); err == nil {
+			t.Fatal("invalid proxy accepted", source)
+		}
+	}
+}
+func TestDockerInsecureMerge(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yaml")
+	target := filepath.Join(dir, "daemon.json")
+	if err := os.WriteFile(config, templates.ConfigTemplate, 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := []byte(`{"log-driver":"local","insecure-registries":["existing.internal:5000","dockerhub.ihome.sxxpqp.top:8443"]}`)
+	if err := os.WriteFile(target, old, 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, err, _ := workflowRun(t, "mirror", "docker", "--config", config, "--file", target, "--apply")
+	if code != 0 || err != nil {
+		t.Fatal(code, err)
+	}
+	raw, _ := os.ReadFile(target)
+	var data map[string]any
+	if err = json.Unmarshal(raw, &data); err != nil {
+		t.Fatal(err)
+	}
+	items := data["insecure-registries"].([]any)
+	if len(items) != 5 || data["log-driver"] != "local" {
+		t.Fatal(string(raw))
+	}
+}
+func TestSelfHostedIgnoresKindInstallerTemplate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := fakeTools(t)
+	config := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(config, templates.ConfigTemplate, 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, err, text := workflowRun(t, "kubesphere", "install", "--config", config, "--kubeconfig", filepath.Join(dir, "kube.config"), "--context", "self-hosted")
+	if code != 0 || err != nil {
+		t.Fatal(code, err, text)
+	}
+	events, _ := os.ReadFile(filepath.Join(dir, "events"))
+	if strings.Contains(string(events), "docker ") {
+		t.Fatal("self-hosted preflight tried kind preload")
+	}
+}
