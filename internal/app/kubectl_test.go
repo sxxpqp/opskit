@@ -37,6 +37,7 @@ func TestKubectlAssets(t *testing.T) {
 	}
 }
 func TestKubectlHelpAndPlan(t *testing.T) {
+	t.Setenv("KUBECTL_DOWNLOAD_BASE", "")
 	t.Chdir(t.TempDir())
 	t.Setenv("PATH", "")
 	for _, args := range [][]string{{"kubectl"}, {"kubectl", "-h"}, {"kubectl", "--help"}, {"kubectl", "install", "-h"}, {"kubectl", "install", "--help"}} {
@@ -184,5 +185,50 @@ func TestKubectlInstallVerifiedAndFailurePreservesOriginal(t *testing.T) {
 		if _, err = os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
 			t.Fatalf("unnecessary profile write: %s", name)
 		}
+	}
+}
+
+func TestKubectlDownloadSourcePrecedence(t *testing.T) {
+	if _, err := k8s.KubectlAsset(runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Skip(err)
+	}
+	cases := []struct{ name, config, env, cli, want string }{
+		{"default", "", "", "", defaultKubectlDownloadBase},
+		{"yaml", "https://config.example/release", "", "", "https://config.example/release"},
+		{"environment", "https://config.example/release", "https://env.example/release", "", "https://env.example/release"},
+		{"cli", "https://config.example/release", "https://env.example/release", "https://cli.example/release", "https://cli.example/release"},
+		{"empty environment", "https://config.example/release", "", "", "https://config.example/release"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("KUBECTL_DOWNLOAD_BASE", c.env)
+			file := filepath.Join(t.TempDir(), "config.yaml")
+			text := "schema_version: 1\ninstall:\n  kubectl_download_base: " + fmt.Sprintf("%q", c.config) + "\n"
+			if err := os.WriteFile(file, []byte(text), 0600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"kubectl", "install", "--config", file, "--version", "v1.24.7", "--dry-run"}
+			if c.cli != "" {
+				args = append(args, "--download-base", c.cli)
+			}
+			var out bytes.Buffer
+			code, err := Run(context.Background(), args, &out, &out, "dev")
+			if code != 0 || err != nil || !strings.Contains(out.String(), c.want+"/v1.24.7/bin/") {
+				t.Fatalf("%d %v %s", code, err, out.String())
+			}
+		})
+	}
+	t.Setenv("KUBECTL_DOWNLOAD_BASE", "https://user:secret@bad.example/release")
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfg, []byte("schema_version: 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	code, err := Run(context.Background(), []string{"kubectl", "install", "--config", cfg, "--version", "v1.24.7", "--dry-run"}, &out, &out, "dev")
+	if code == 0 || err == nil {
+		t.Fatal("invalid environment source silently ignored")
+	}
+	if strings.Contains(out.String(), "secret") {
+		t.Fatal("source credentials leaked")
 	}
 }

@@ -16,12 +16,14 @@ import (
 	"github.com/sxxpqp/opskit/internal/k8s"
 )
 
+const defaultKubectlDownloadBase = "https://storage.googleapis.com/kubernetes-release/release"
+
 func runKubectlInstall(parent context.Context, args []string, out, diag io.Writer) (int, error) {
 	f := flag.NewFlagSet("kubectl install", flag.ContinueOnError)
 	f.SetOutput(diag)
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "kubectl 完整版本 vX.Y.Z；默认 versions.kubectl，否则跟随 versions.kubernetes")
-	base := f.String("download-base", "https://dl.k8s.io/release", "下载源根地址，可在 install.kubectl_download_base 配置")
+	base := f.String("download-base", defaultKubectlDownloadBase, "下载源根地址；也可用 KUBECTL_DOWNLOAD_BASE 环境变量或 install.kubectl_download_base 配置")
 	binDir := f.String("bin-dir", "", "安装目录；默认 ~/.local/share/opskit/kubectl/<版本>")
 	linkDir := f.String("link-dir", "", "命令入口目录；优先复用 PATH 已有可写目录")
 	downloads := f.String("download-dir", "", "统一下载目录；默认 ~/.opskit/downloads")
@@ -42,6 +44,7 @@ func runKubectlInstall(parent context.Context, args []string, out, diag io.Write
 	}
 	setConfigFlag(f, "version", c.Versions.Kubectl)
 	setConfigFlag(f, "version", c.Versions.Kubernetes)
+	setEnvFlag(f, "download-base", "KUBECTL_DOWNLOAD_BASE")
 	setConfigFlag(f, "download-base", c.Install.KubectlDownloadBase)
 	setConfigFlag(f, "download-dir", c.Install.DownloadDir)
 	if !versionPattern.MatchString(*version) {

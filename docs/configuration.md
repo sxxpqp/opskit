@@ -181,11 +181,11 @@ versions:
   kubernetes: v1.24.7
   kubectl: ""  # 留空跟随 kubernetes，也可明确固定独立版本
 install:
-  kubectl_download_base: https://dl.k8s.io/release
+  kubectl_download_base: https://storage.googleapis.com/kubernetes-release/release
   download_dir: ""  # 默认用户目录 .opskit/downloads
 ```
 
-优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。`--download-base` 优先于 install.kubectl_download_base，官方默认源可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
+优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl_download_base > 默认官方存储直连；空环境变量不覆盖 YAML。该默认地址已核验项目 v1.24.7 的五种平台文件头与校验文件；本机完整下载仍超时，完整链路尚未验收，可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
@@ -194,3 +194,5 @@ install:
 `kind.http_port: 80`、`kind.https_port: 443` 分别映射到控制平面节点容器 80/443，绑定 `0.0.0.0`；CLI `--http-port` / `--https-port` 优先于 YAML。现有 `kind.console_port` 保持 127.0.0.1 上的 KubeSphere 30880 映射。端口范围为 1～65535，三项不能重复；被其他服务占用时须更换宿主机端口。
 
 创建前用 `opskit kind create --dry-run` 检查生成的 extraPortMappings。控制平面设置 `ingress-ready=true`，Ingress Controller 需另行部署到此节点并监听节点 80/443（例如 hostPort/hostNetwork）；端口映射不自动安装 Controller 或创建 Ingress 对象。已核对 kind v0.17.0 配置类型支持这些字段。已有集群的 Docker 映射不会变更，新版 opskit 不会自动删除旧集群；需使用新集群名或自行安排重建。实际集群 Ingress 连通性尚未验收。
+
+下载源变量示例：`export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release`；用 `unset KUBECTL_DOWNLOAD_BASE` 取消覆盖。PowerShell 用 `$env:KUBECTL_DOWNLOAD_BASE = "..."`。已有配置若仍显式填写 dl.k8s.io 会继续使用该值，应按需修改配置或使用环境变量覆盖。默认官方存储地址不等于国内镜像，不保证在所有网络或任意版本可用；缺少目标文件时返回错误，不静默更换版本。

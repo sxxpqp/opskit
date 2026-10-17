@@ -309,7 +309,18 @@ opskit kubectl install --version v1.24.7 --dry-run
 
 先校验上游 SHA-256，再运行 `kubectl version --client=true --output=json` 验证客户端版本，成功后安装到 `~/.local/share/opskit/kubectl/<版本>/`。下载保留在统一 `.opskit/downloads` 目录；Unix 创建软链接，Windows 复制 exe。命令入口复用 PATH 中可写目录，找不到时才配置用户 PATH；已有其他来源的 kubectl 不覆盖。安装后检查实际 PATH 命中与客户端版本，新终端待生效时明确提示。安装不连接集群、不修改 kubeconfig，实际集群操作仍应选择匹配服务端的客户端版本。
 
-项目未配置 kubectl 的内网文件代理，默认官方 `https://dl.k8s.io/release`；可通过 `install.kubectl_download_base` 或 `--download-base URL` 替换为实际可用、保持相同目录结构的源。`--bin-dir`、`--link-dir` 和 `--download-dir` 可分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
+kubectl 默认使用官方存储直连 `https://storage.googleapis.com/kubernetes-release/release`，已核验项目固定 v1.24.7 五种平台的文件头和校验文件可读取；本机完整安装下载仍超时，完整链路尚未验收；这不是国内镜像，目标网络速度需实际验证。其他版本须确认该源是否保留文件，可显式切换到官方 `https://dl.k8s.io/release` 或自建代理。下载源优先级为 `--download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > `install.kubectl_download_base` > 默认值，空环境变量不覆盖配置。既有配置若仍填 dl.k8s.io，需要自行改为新源，或用环境变量/命令行覆盖；不会自动改写用户显式配置。
+
+```bash
+export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release
+opskit kubectl install --version v1.24.7
+# 临时覆盖（旧版也支持 --download-base）
+opskit kubectl install --version v1.24.7 --download-base https://storage.googleapis.com/kubernetes-release/release
+# 取消环境变量覆盖
+unset KUBECTL_DOWNLOAD_BASE
+```
+
+Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://storage.googleapis.com/kubernetes-release/release'`。自建源需要保持同样路径结构并同时提供二进制和 `.sha256`。`--bin-dir`、`--link-dir` 和 `--download-dir` 分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
 
 ## 运行时安装（main，未发布）
 
@@ -370,6 +381,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 | [v0.1.8](https://github.com/sxxpqp/opskit/releases/tag/v0.1.8) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；默认官方存储直连，命令行 > 环境变量 > YAML > 默认值 |
 | main（未发布） | kind 控制平面补齐 Ingress 80/443 映射及 ingress-ready 标签；保留 KS 30880，校验端口冲突并支持配置覆盖 |
 | main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |
 | main（未发布） | kind create 默认执行创建，--dry-run 仅预览；删除操作仍需显式确认 |
