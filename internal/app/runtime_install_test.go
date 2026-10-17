@@ -173,3 +173,22 @@ func TestRuntimeInstallExecutesByDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeDownloadDefaultsIgnoreKindEnvironment(t *testing.T) {
+	t.Setenv("KIND_DOWNLOAD_BASE", "https://kind-only.example")
+	defaults, err := defaultInstallSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfg, []byte("schema_version: 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"containerd", "cri-dockerd"} {
+		var out bytes.Buffer
+		code, err := runRuntimeInstall(context.Background(), tool, []string{"--config", cfg, "--version", "v1.7.27", "--dry-run"}, &out, &out)
+		if code != 0 || err != nil || !strings.Contains(out.String(), defaults.ReleaseBase+"/") || strings.Contains(out.String(), "kind-only.example") {
+			t.Fatalf("%s: %d %v %s", tool, code, err, out.String())
+		}
+	}
+}

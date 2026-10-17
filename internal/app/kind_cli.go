@@ -21,6 +21,10 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	if len(args) < 2 || args[0] != "kind" || args[1] != "install" {
 		return errors.New("未知命令，请运行 opskit --help")
 	}
+	defaults, err := defaultInstallSettings()
+	if err != nil {
+		return err
+	}
 	f := flag.NewFlagSet("kind install", flag.ContinueOnError)
 	f.SetOutput(diag)
 	configPath := f.String("config", defaultConfigPath, "统一配置文件")
@@ -28,7 +32,7 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ~/.opskit/downloads")
 	linkDir := f.String("link-dir", "", "kind 命令入口目录；优先复用 PATH 已有可写目录，否则配置用户目录")
 	binDir := f.String("bin-dir", "", "安装目录，默认按版本隔离")
-	base := f.String("download-base", defaultDownloadBase(), "发布包下载源（默认 Nexus，支持 https://github.com）")
+	base := f.String("download-base", defaults.KindDownloadBase, "发布包下载源；对应 KIND_DOWNLOAD_BASE 和 install.kind_download_base")
 	if err := f.Parse(args[2:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -42,6 +46,8 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	if err != nil {
 		return err
 	}
+	setEnvFlag(f, "download-base", "KIND_DOWNLOAD_BASE")
+	setConfigFlag(f, "download-base", c.Install.KindDownloadBase)
 	setConfigFlag(f, "download-dir", c.Install.DownloadDir)
 	if *downloadDir == "" {
 		*downloadDir, err = defaultDownloadDir()
@@ -81,11 +87,4 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 		return err
 	}
 	return verifyKindCommand(ctx, *linkDir, *version, out)
-}
-
-func defaultDownloadBase() string {
-	if base := os.Getenv("KIND_DOWNLOAD_BASE"); base != "" {
-		return base
-	}
-	return "https://nexus.ihome.sxxpqp.top:8443/repository/raw-github"
 }

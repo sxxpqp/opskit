@@ -23,6 +23,7 @@ versions:
 # 工具与运行时安装；默认执行，--dry-run 仅预览。运行时要求 Linux systemd，不覆盖已有运行时。
 # URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
 install:
+  kind_download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # KIND_DOWNLOAD_BASE / kind install --download-base
   kubectl_download_base: https://storage.googleapis.com/kubernetes-release/release  # 官方存储直连，已验证 v1.24.7；支持 KUBECTL_DOWNLOAD_BASE / --kubectl-download-base 覆盖
   download_dir: ""  # 默认用户目录 ~/.opskit/downloads（Windows 为 %USERPROFILE%\.opskit\downloads）；可覆盖
   docker_method: script  # script / binary

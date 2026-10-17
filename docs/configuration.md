@@ -197,4 +197,16 @@ install:
 
 下载源变量示例：`export KUBECTL_DOWNLOAD_BASE=https://storage.googleapis.com/kubernetes-release/release`；用 `unset KUBECTL_DOWNLOAD_BASE` 取消覆盖。PowerShell 用 `$env:KUBECTL_DOWNLOAD_BASE = "..."`。已有配置若仍显式填写 dl.k8s.io 会继续使用该值，应按需修改配置或使用环境变量覆盖。默认官方存储地址不等于国内镜像，不保证在所有网络或任意版本可用；缺少目标文件时返回错误，不静默更换版本。
 
-下载源命名统一：CLI `--kubectl-download-base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、YAML `install.kubectl_download_base`。旧 `--download-base` 保留为兼容别名，共用一个值，仍高于环境变量与配置；若两个 CLI 名称同时使用，以最后一次传入为准。命名变更只针对 kubectl，不改变 kind 的 --download-base。
+下载源命名统一：CLI `--kubectl-download-base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、YAML `install.kubectl_download_base`。旧 `--download-base` 已移除，传入会报未知参数。命名变更只针对 kubectl，不改变 kind 的 --download-base。
+
+## 下载源配置
+
+| 下载内容 | YAML 配置项 |
+|---|---|
+| kind 二进制和校验文件 | `install.kind_download_base` |
+| kubectl 二进制和校验文件 | `install.kubectl_download_base` |
+| Docker 官方安装脚本 | `install.docker_script` |
+| Docker 静态安装包 | `install.docker_binary_base` |
+| cri-dockerd、containerd、runc、CNI plugins | `install.release_base` |
+
+默认地址只维护在 `config.example.yaml`，代码读取嵌入模板作为默认值；用户配置留空时使用该默认值。已有用户配置不自动覆写。kind 源优先级为 CLI `--download-base` > `KIND_DOWNLOAD_BASE` > YAML > 模板默认值；该环境变量不影响运行时安装。运行时 `--url` 可覆盖主包地址，containerd 配套 runc/CNI 仍使用 `release_base`。Docker 官方脚本内部的软件包源由 `docker_mirror` 控制。上述配置针对文件下载，容器镜像仍走 mirrors 配置。完整下载地址、版本与架构在执行日志中显示。

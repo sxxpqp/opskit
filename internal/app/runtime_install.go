@@ -24,6 +24,7 @@ import (
 )
 
 type runtimeInstallSettings struct {
+	KindDownloadBase    string `yaml:"kind_download_base"`
 	KubectlDownloadBase string `yaml:"kubectl_download_base"`
 	DownloadDir         string `yaml:"download_dir"`
 	DockerMethod        string `yaml:"docker_method"`
@@ -40,6 +41,10 @@ type runtimePackage struct {
 }
 
 func runRuntimeInstall(parent context.Context, tool string, args []string, out, diag io.Writer) (int, error) {
+	defaults, err := defaultInstallSettings()
+	if err != nil {
+		return 1, err
+	}
 	f := flag.NewFlagSet(tool+" install", flag.ContinueOnError)
 	f.SetOutput(diag)
 	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ~/.opskit/downloads")
@@ -103,7 +108,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	}
 	base := c.Install.ReleaseBase
 	if base == "" {
-		base = defaultDownloadBase()
+		base = defaults.ReleaseBase
 	}
 	base = strings.TrimRight(base, "/")
 	ver := strings.TrimPrefix(*version, "v")
@@ -122,7 +127,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 				*source = c.Install.DockerScript
 			}
 			if *source == "" {
-				*source = "https://get.docker.com"
+				*source = defaults.DockerScript
 			}
 		} else {
 			a := "x86_64"
@@ -131,7 +136,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 			}
 			b := c.Install.DockerBinaryBase
 			if b == "" {
-				b = "https://mirrors.aliyun.com/docker-ce/linux/static/stable"
+				b = defaults.DockerBinaryBase
 			}
 			if *source == "" {
 				*source = fmt.Sprintf("%s/%s/docker-%s.tgz", strings.TrimRight(b, "/"), a, ver)

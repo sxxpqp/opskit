@@ -392,6 +392,7 @@ func TestChooseKindLinkDirSkipsReadOnly(t *testing.T) {
 }
 
 func TestKindInstallReusesPathWithoutProfileChanges(t *testing.T) {
+	t.Setenv("KIND_DOWNLOAD_BASE", "")
 	if _, _, err := kindAsset(runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Skip(err)
 	}
@@ -427,10 +428,10 @@ func TestKindInstallReusesPathWithoutProfileChanges(t *testing.T) {
 	}))
 	defer server.Close()
 	cfg := filepath.Join(root, "config.yaml")
-	if err = os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  kind: v0.17.0\n"), 0600); err != nil {
+	if err = os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  kind: v0.17.0\ninstall:\n  kind_download_base: "+server.URL+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"kind", "install", "--config", cfg, "--bin-dir", filepath.Join(root, "versioned-kind"), "--download-dir", filepath.Join(root, "downloads"), "--download-base", server.URL}
+	args := []string{"kind", "install", "--config", cfg, "--bin-dir", filepath.Join(root, "versioned-kind"), "--download-dir", filepath.Join(root, "downloads")}
 	var out bytes.Buffer
 	for i := 0; i < 2; i++ {
 		out.Reset()

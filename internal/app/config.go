@@ -246,3 +246,10 @@ func initConfig(args []string, out, diag io.Writer) (int, error) {
 	fmt.Fprintln(out, "Created", *path)
 	return 0, nil
 }
+
+// Default download sources live only in the embedded configuration template.
+func defaultInstallSettings() (runtimeInstallSettings, error) {
+	var c fileConfig
+	err := yaml.Unmarshal(opskit.ConfigTemplate, &c)
+	return c.Install, err
+}

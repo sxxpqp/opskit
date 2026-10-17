@@ -161,7 +161,7 @@ go build -o opskit ./cmd/opskit
 
 版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存。安装后先查找 PATH 中已有且可写的目录创建 kind 命令入口，优先各平台常用目录，再按 PATH 顺序检查其他目录；跳过空项、相对路径、不存在的目录及不可写目录。找到后不修改 PATH 配置。找不到时使用平台默认目录：Linux root 使用 `/usr/local/bin`，普通用户使用 `~/.local/bin`；macOS 普通用户使用 `~/.local/bin`（已有 PATH 中的 `/opt/homebrew/bin`、`/usr/local/bin` 优先）；Windows 使用 `%LOCALAPPDATA%\opskit\bin`（未设置 LOCALAPPDATA 时按用户目录推导）。可用 `--link-dir` 覆盖。目录不在 PATH 时，Bash/Zsh/sh 自动备份并追加用户启动配置，Windows 通过 PowerShell 写入用户 PATH；当前终端无法由子进程修改，会打印立即生效的命令，新终端读取持久配置。其他 shell 会报出 PATH 尚未配置并提示人工处理。已有同版本安装也会补建入口；拒绝覆盖其他来源的 kind。Windows 复制 exe，无需符号链接权限。安装结束执行入口版本及 PATH 命中检查：命中其他 kind 时返回错误；当前终端尚未加载 PATH 时明确输出“PATH 待生效”，不宣称验证通过。Windows 写入 User PATH 后回读确认。自动化验收包含新 Bash/Zsh 进程，Windows CI 额外在临时 runner 中测试用户 PATH 写入、回读和幂等并恢复原值；这不替代用户终端中 alias/function 的检查。
 
-kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。kind 安装器源默认沿用已有公开 `registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1`，仅用于 `--kind` 预加载，不改上游清单；自建集群忽略该模板项。kind 工具发布包默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
+kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。kind 安装器源默认沿用已有公开 `registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1`，仅用于 `--kind` 预加载，不改上游清单；自建集群忽略该模板项。kind 工具发布包默认通过现有 Nexus `raw-github` 代理下载；可用配置 `install.kind_download_base`、`--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
 
 旧 `linux` 仓库脚本在 PATH 中找到 opskit（或设置 `OPSKIT_BIN`）时会调用本实现，并传递原版本和安装目录；未部署 opskit 的机器继续使用旧脚本。测试覆盖版本共存、重复安装、SHA/版本校验失败和 HTTP 失败保留原文件；新增工作流测试通过模拟工具验证命令顺序、预检阻断和秘密保护；macOS 做了安装器原生执行检查，尚未完成真实集群 KS 安装和 Windows/Linux 真机工作流验收。
 
@@ -320,7 +320,7 @@ opskit kubectl install --version v1.24.7 --kubectl-download-base https://storage
 unset KUBECTL_DOWNLOAD_BASE
 ```
 
-旧参数 `--download-base` 保留兼容，与 `--kubectl-download-base` 共用同一个值；两个参数都写时以后出现者为准。配置键 `install.kubectl_download_base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、主参数 `--kubectl-download-base` 统一命名，不需要同时设置三个入口。
+kubectl 已移除旧参数 `--download-base`，只接受 `--kubectl-download-base`。配置键 `install.kubectl_download_base`、环境变量 `KUBECTL_DOWNLOAD_BASE`、主参数 `--kubectl-download-base` 统一命名，不需要同时设置三个入口。
 
 Windows PowerShell 可用 `$env:KUBECTL_DOWNLOAD_BASE = 'https://storage.googleapis.com/kubernetes-release/release'`。自建源需要保持同样路径结构并同时提供二进制和 `.sha256`。`--bin-dir`、`--link-dir` 和 `--download-dir` 分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
 
@@ -378,12 +378,14 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 ## 近期更新
 
+下载地址均可通过统一 YAML 覆盖，完整对应表见 [下载源配置](docs/configuration.md#下载源配置)。kind 与运行时源相互独立；默认地址统一定义在配置模板。
+
 | 功能版本 | 变化 |
 |---|---|
 | [v0.1.8](https://github.com/sxxpqp/opskit/releases/tag/v0.1.8) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
-| main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / kubectl_download_base，保留 --download-base 兼容 |
+| main（未发布） | kubectl 下载源统一命名为 --kubectl-download-base / KUBECTL_DOWNLOAD_BASE / kubectl_download_base，移除旧 --download-base 参数 |
 | main（未发布） | kubectl 下载源支持 KUBECTL_DOWNLOAD_BASE；默认官方存储直连，命令行 > 环境变量 > YAML > 默认值 |
 | main（未发布） | kind 控制平面补齐 Ingress 80/443 映射及 ingress-ready 标签；保留 KS 30880，校验端口冲突并支持配置覆盖 |
 | main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |

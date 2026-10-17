@@ -79,7 +79,7 @@ func TestKubectlHelpAndPlan(t *testing.T) {
 	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl install: v1.23.9") {
 		t.Fatalf("%d %v %s", code, err, out.String())
 	}
-	for _, extra := range [][]string{{"--version", "latest"}, {"--version", "v1.24.7", "--download-base", "https://user:secret@example.com"}, {"--version", "v1.24.7", "--apply"}, {"--version", "v1.24.7", "unexpected"}} {
+	for _, extra := range [][]string{{"--version", "latest"}, {"--version", "v1.24.7", "--kubectl-download-base", "https://user:secret@example.com"}, {"--version", "v1.24.7", "--apply"}, {"--version", "v1.24.7", "unexpected"}} {
 		args := append([]string{"kubectl", "install", "--config", config, "--dry-run"}, extra...)
 		out.Reset()
 		if code, err := Run(context.Background(), args, &out, &out, "dev"); code == 0 || err == nil {
@@ -141,7 +141,7 @@ func TestKubectlInstallVerifiedAndFailurePreservesOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetDir := filepath.Join(root, "installed")
-	args := []string{"kubectl", "install", "--config", config, "--bin-dir", targetDir, "--download-base", server.URL}
+	args := []string{"kubectl", "install", "--config", config, "--bin-dir", targetDir, "--kubectl-download-base", server.URL}
 	var out bytes.Buffer
 	for i := 0; i < 2; i++ {
 		out.Reset()
@@ -193,7 +193,7 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 		t.Skip(err)
 	}
 	cases := []struct{ name, config, env, cli, want string }{
-		{"default", "", "", "", defaultKubectlDownloadBase},
+		{"default", "", "", "", "https://storage.googleapis.com/kubernetes-release/release"},
 		{"yaml", "https://config.example/release", "", "", "https://config.example/release"},
 		{"environment", "https://config.example/release", "https://env.example/release", "", "https://env.example/release"},
 		{"cli", "https://config.example/release", "https://env.example/release", "https://cli.example/release", "https://cli.example/release"},
@@ -233,7 +233,7 @@ func TestKubectlDownloadSourcePrecedence(t *testing.T) {
 	}
 }
 
-func TestKubectlDownloadFlagAliases(t *testing.T) {
+func TestKubectlDownloadFlag(t *testing.T) {
 	if _, err := k8s.KubectlAsset(runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Skip(err)
 	}
@@ -249,10 +249,6 @@ func TestKubectlDownloadFlagAliases(t *testing.T) {
 	}{
 		{"canonical", []string{"--kubectl-download-base", "https://cli.example/release"}, "https://cli.example/release"},
 		{"canonical equals", []string{"--kubectl-download-base=https://cli.example/release"}, "https://cli.example/release"},
-		{"old alias", []string{"--download-base", "https://legacy.example/release"}, "https://legacy.example/release"},
-		{"old alias equals", []string{"--download-base=https://legacy.example/release"}, "https://legacy.example/release"},
-		{"canonical last", []string{"--download-base", "https://legacy.example/release", "--kubectl-download-base", "https://cli.example/release"}, "https://cli.example/release"},
-		{"alias last", []string{"--kubectl-download-base", "https://cli.example/release", "--download-base", "https://legacy.example/release"}, "https://legacy.example/release"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -266,7 +262,17 @@ func TestKubectlDownloadFlagAliases(t *testing.T) {
 	}
 	var out bytes.Buffer
 	code, err := Run(context.Background(), []string{"kubectl", "install", "--help"}, &out, &out, "dev")
-	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl-download-base") || !strings.Contains(out.String(), "KUBECTL_DOWNLOAD_BASE") || !strings.Contains(out.String(), "兼容别名") {
+	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl-download-base") || !strings.Contains(out.String(), "KUBECTL_DOWNLOAD_BASE") || strings.Contains(out.String(), "兼容别名") {
 		t.Fatalf("%d %v %s", code, err, out.String())
+	}
+}
+
+func TestKubectlRejectsOldDownloadFlag(t *testing.T) {
+	for _, arg := range []string{"--download-base", "--download-base=https://old.example"} {
+		var out bytes.Buffer
+		code, err := Run(context.Background(), []string{"kubectl", "install", arg}, &out, &out, "dev")
+		if code == 0 || err == nil {
+			t.Fatalf("old flag accepted: %s", arg)
+		}
 	}
 }
