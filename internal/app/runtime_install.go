@@ -41,7 +41,7 @@ type runtimePackage struct {
 func runRuntimeInstall(parent context.Context, tool string, args []string, out, diag io.Writer) (int, error) {
 	f := flag.NewFlagSet(tool+" install", flag.ContinueOnError)
 	f.SetOutput(diag)
-	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ./downloads")
+	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ~/.opskit/downloads")
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "目标版本 vX.Y.Z；也可由 versions 配置")
 	dryRun := f.Bool("dry-run", false, "仅预览安装计划，不执行安装")

@@ -47,7 +47,7 @@ main 分支新增 **Docker 双方式 / cri-dockerd / containerd 安装、kind �
 | 能力 | 当前行为 |
 |---|---|
 | 运行时安装（main，未发布） | Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI；指定版本、默认执行、--dry-run 预览 |
-| kind 管理（main，未发布） | 版本安装、集群创建/状态/日志、context 切换及确认删除 |
+| kind 管理（main，未发布） | 版本安装与跨系统 PATH 配置、集群创建/状态/日志、context 切换及确认删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；预览、备份与显式写入 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
@@ -151,7 +151,7 @@ go build -o opskit ./cmd/opskit
 ./opskit kind install --version v0.17.0 --bin-dir /opt/kind-v0.17.0
 ```
 
-版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存。安装后自动创建 kind 命令入口：Linux/macOS root 使用 `/usr/local/bin/kind`，其他用户使用 `~/.local/bin/kind`；可通过 `--link-dir` 覆盖。目录不在 PATH 时打印当前终端设置命令，不修改 shell 配置。已有同版本安装也会补建入口；拒绝覆盖其他来源的 kind。Windows 复制到入口目录并打印 PowerShell PATH 提示。
+版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存。安装后自动创建 kind 命令入口：Linux root 使用 `/usr/local/bin`，普通用户使用 `~/.local/bin`；macOS 普通用户优先选择 PATH 中已有且可写的 `/opt/homebrew/bin` 或 `/usr/local/bin`，否则使用 `~/.local/bin`；Windows 使用 `%LOCALAPPDATA%\opskit\bin`（未设置 LOCALAPPDATA 时按用户目录推导）。可用 `--link-dir` 覆盖。目录不在 PATH 时，Bash/Zsh/sh 自动备份并追加用户启动配置，Windows 通过 PowerShell 写入用户 PATH；当前终端无法由子进程修改，会打印立即生效的命令，新终端读取持久配置。其他 shell 给出手动配置提示。已有同版本安装也会补建入口；拒绝覆盖其他来源的 kind。Windows 复制 exe，无需符号链接权限。
 
 kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。kind 安装器源默认沿用已有公开 `registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1`，仅用于 `--kind` 预加载，不改上游清单；自建集群忽略该模板项。kind 工具发布包默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
 
@@ -285,7 +285,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 快照流程依据 [etcd 官方恢复文档](https://etcd.io/docs/v3.6/op-guide/recovery/)。本项目尚未完成真实 etcd/MinIO 环境的恢复验收，生产使用前应进行恢复演练并核对业务数据。
 
-下载文件统一保存在 `install.download_dir`：模板为项目 `downloads/`，无配置时为当前目录 `downloads/`，可通过 `--download-dir` 覆盖。kind、Docker 脚本/静态包、cri-dockerd、containerd/runc/CNI 按组件、版本、源 URL 摘要分目录保留；安装时仍重新下载并执行原有校验，不把已有文件当成可信缓存。临时解压文件安装结束后清理。
+下载文件统一保存在 `install.download_dir`：模板留空，默认用户目录下的 `~/.opskit/downloads/`（Windows 为 `%USERPROFILE%\.opskit\downloads`），不随项目工作目录变化，可通过 `--download-dir` 覆盖。kind、Docker 脚本/静态包、cri-dockerd、containerd/runc/CNI 按组件、版本、源 URL 摘要分目录保留；安装时仍重新下载并执行原有校验，不把已有文件当成可信缓存。临时解压文件安装结束后清理。
 
 ## 运行时安装（main，未发布）
 
@@ -317,7 +317,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 - [x] Docker 双方式、cri-dockerd 和 containerd 版本安装（main，未发布）
 - [ ] 运行时安装 Linux 真机验收及升级迁移
-- [x] kind 显式版本安装、SHA-256 校验和版本隔离（main，未发布）
+- [x] kind 显式版本安装、SHA-256 校验、版本隔离和跨系统 PATH 配置（main，未发布）
 - [x] kind 集群管理、统一 mirror 和 KS 3.4.1 安装工作流（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
 - [x] S3 兼容上传与远端 metadata 验证
@@ -342,7 +342,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 | 功能版本 | 变化 |
 |---|---|
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
-| main（未发布） | 安装文件统一保留到 downloads/；kind 自动创建 PATH 命令入口，保留版本隔离目录 |
+| main（未发布） | 安装文件默认统一保留到 ~/.opskit/downloads/；kind 按 Windows/Linux/macOS 选择命令入口并持久化用户 PATH，保留版本隔离目录 |
 | main（未发布） | 新增 Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI 安装，默认直接安装、--dry-run 预览，并拒绝覆盖已有运行时 |
 | main（未发布） | 迁入 kind/mirror/KS 流程与项目实际默认镜像源，支持 Docker insecure-registry 合并与 Go proxy 列表；配置集中到 config/config.yaml |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |

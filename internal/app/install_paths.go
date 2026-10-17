@@ -55,16 +55,39 @@ func downloadRetained(ctx context.Context, source string, dst io.Writer, root, t
 	return os.Rename(f.Name(), target)
 }
 
-func defaultDownloadDir() (string, error) { return filepath.Abs("downloads") }
-func defaultKindLinkDir() (string, error) {
-	if runtime.GOOS != "windows" && os.Geteuid() == 0 {
-		return "/usr/local/bin", nil
-	}
+func defaultDownloadDir() (string, error) {
 	home, e := os.UserHomeDir()
 	if e != nil {
 		return "", e
 	}
-	return filepath.Join(home, ".local", "bin"), nil
+	return filepath.Join(home, ".opskit", "downloads"), nil
+}
+func defaultKindLinkDir() (string, error) {
+	home, e := os.UserHomeDir()
+	if e != nil {
+		return "", e
+	}
+	candidates := kindLinkCandidates(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"), os.Geteuid() == 0)
+	for _, dir := range candidates {
+		if !pathIncludes(os.Getenv("PATH"), dir) {
+			continue
+		}
+		f, e := os.CreateTemp(dir, ".opskit-path-check-*")
+		if e != nil {
+			continue
+		}
+		name := f.Name()
+		ce := f.Close()
+		re := os.Remove(name)
+		if ce != nil {
+			return "", ce
+		}
+		if re != nil {
+			return "", re
+		}
+		return dir, nil
+	}
+	return candidates[len(candidates)-1], nil
 }
 
 func exposeKind(target, dir string, out io.Writer) error {
@@ -78,7 +101,7 @@ func exposeKind(target, dir string, out io.Writer) error {
 	}
 	dest := filepath.Join(dir, filepath.Base(target))
 	if dest == target {
-		return nil
+		return finishKindPath(dir, out)
 	}
 	if e = os.MkdirAll(dir, 0755); e != nil {
 		return e
@@ -90,7 +113,7 @@ func exposeKind(target, dir string, out io.Writer) error {
 				b, eb := os.ReadFile(target)
 				if ea == nil && eb == nil && bytes.Equal(a, b) {
 					fmt.Fprintln(out, "命令入口:", dest)
-					return nil
+					return finishKindPath(dir, out)
 				}
 			}
 
@@ -145,15 +168,5 @@ func exposeKind(target, dir string, out io.Writer) error {
 		}
 	}
 	fmt.Fprintln(out, "命令入口:", dest)
-	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
-		if filepath.Clean(p) == dir {
-			return nil
-		}
-	}
-	if runtime.GOOS == "windows" {
-		fmt.Fprintf(out, "当前终端 PATH 未包含目录；PowerShell 执行: $env:Path = '%s;' + $env:Path\n", strings.ReplaceAll(dir, "'", "''"))
-	} else {
-		fmt.Fprintf(out, "当前终端 PATH 未包含目录；执行: export PATH='%s':\"$PATH\"\n", strings.ReplaceAll(dir, "'", "'\"'\"'"))
-	}
-	return nil
+	return finishKindPath(dir, out)
 }

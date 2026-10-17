@@ -166,4 +166,6 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 `--url` 只覆盖主包/脚本，`--sha256` 只校验该文件；runc/CNI 无单独摘要字段，使用源站 HTTPS。安装不改既有配置、不升级现有运行时，不自动修改主机网络参数。完整示例见首页运行时安装章节。既有 config/config.yaml 不自动覆盖；用 `opskit config init --config config/config.new.yaml` 生成对照模板，手工合并新字段。
 
-安装下载统一使用 `install.download_dir`；模板 `../downloads` 按配置文件目录解析，未填写时使用当前工作目录 downloads。CLI `--download-dir` 优先，按当前目录解析。kind `--link-dir` 指定 PATH 入口目录，默认 root /usr/local/bin、其他用户 ~/.local/bin；目录不在 PATH 时打印设置命令。已有其他来源的入口不覆盖。
+安装下载统一使用 `install.download_dir`；模板留空，默认用户目录下的 `.opskit/downloads`，不随工作目录变化。配置非空相对路径仍按配置文件目录解析；CLI `--download-dir` 优先，按当前目录解析。既有显式配置不自动改变，想使用新默认值请将 download_dir 设为 ""。
+
+kind `--link-dir` 指定命令入口目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 需自行配置，已有其他来源的 kind 入口不覆盖。
