@@ -96,7 +96,13 @@ func fakeTools(t *testing.T) string {
 			name += ".exe"
 		}
 		path := filepath.Join(dir, name)
-		if e = os.Link(exe, path); e != nil {
+		// Windows cannot delete hard links to the running test executable.
+		// Give each fake tool its own file so TempDir cleanup can remove it.
+		linked := false
+		if runtime.GOOS != "windows" {
+			linked = os.Link(exe, path) == nil
+		}
+		if !linked {
 			data, err := os.ReadFile(exe)
 			if err != nil {
 				t.Fatal(err)
@@ -112,6 +118,34 @@ func fakeTools(t *testing.T) string {
 	t.Setenv("OPSKIT_FAKE_DIR", dir)
 	return dir
 }
+func TestFakeToolsCanBeRemoved(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows executable sharing regression")
+	}
+	dir := fakeTools(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"kind.exe", "docker.exe", "kubectl.exe"} {
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if os.SameFile(original, info) {
+			t.Fatalf("%s shares the running test executable", name)
+		}
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("remove %s while test executable is running: %v", name, err)
+		}
+	}
+}
+
 func workflowRun(t *testing.T, args ...string) (int, error, string) {
 	t.Helper()
 	var output bytes.Buffer
