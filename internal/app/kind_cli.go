@@ -23,7 +23,8 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	}
 	f := flag.NewFlagSet("kind install", flag.ContinueOnError)
 	f.SetOutput(diag)
-	version := f.String("version", "", "必填，kind 版本，例如 v0.17.0")
+	configPath := f.String("config", defaultConfigPath, "统一配置文件")
+	version := f.String("version", "", "kind 版本，例如 v0.17.0；也可由 versions.kind 提供")
 	binDir := f.String("bin-dir", "", "安装目录，默认按版本隔离")
 	base := f.String("download-base", defaultDownloadBase(), "发布包下载源（默认 Nexus，支持 https://github.com）")
 	if err := f.Parse(args[2:]); err != nil {
@@ -35,8 +36,14 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	if f.NArg() != 0 {
 		return errors.New("存在多余参数，请使用 --version 指定版本")
 	}
+	c, err := commandConfig(f, *configPath)
+	if err != nil {
+		return err
+	}
+	setEnvFlag(f, "version", "OPSKIT_KIND_VERSION")
+	setConfigFlag(f, "version", c.Versions.Kind)
 	if !versionPattern.MatchString(*version) {
-		return errors.New("必须指定 --version vX.Y.Z")
+		return errors.New("必须指定 --version vX.Y.Z 或配置 versions.kind")
 	}
 	if *binDir == "" {
 		home, err := os.UserHomeDir()

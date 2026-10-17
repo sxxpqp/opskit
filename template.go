@@ -7,3 +7,13 @@ import _ "embed"
 //
 //go:embed config.example.yaml
 var ConfigTemplate []byte
+
+// KSInstaller is the audited upstream KubeSphere 3.4.1 installer manifest.
+//
+//go:embed assets/ks-installer-v3.4.1.yaml
+var KSInstaller []byte
+
+// KSConfiguration is the minimal component template; secrets are injected at runtime.
+//
+//go:embed assets/ks-config-v3.4.1.yaml
+var KSConfiguration []byte

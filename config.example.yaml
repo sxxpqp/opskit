@@ -1,12 +1,54 @@
-# opskit 配置模板：执行 opskit config init，或复制此文件为 ./opskit.yaml。
+# opskit 配置模板：执行 opskit config init，或复制此文件为 ./config/config.yaml。
 # 默认场景：在 kubeadm 控制平面节点上备份本机 etcd；不填写 bucket 时仅本地备份。
 # K3s、RKE2、外置 etcd、自定义证书目录等环境，请修改下面的地址与证书路径。
 # 当前工作目录决定默认加载位置；--config 可指定其他文件，不自动合并配置。
-# 优先级：命令行参数 > 此配置 > 程序内置默认值。
+# 优先级：命令行参数 > 已支持的环境变量 > 此配置 > 程序内置默认值。
 # 路径：配置中的相对路径以本文件所在目录为准；绝对路径原样使用。
 # 不执行 ${ENV_VAR}、~、日期变量或其他模板展开；凭据按下方环境变量方式传入。
 
 schema_version: 1
+
+# 固定安装版本；CLI --version 可覆盖。KS 当前仅支持内嵌的 v3.4.1 清单。
+versions:
+  kind: v0.17.0
+  kubernetes: v1.24.7
+  kubesphere: v3.4.1
+
+# kind 测试集群，不会连接或覆盖现有生产集群。
+kind:
+  name: kubesphere-341
+  workers: 2
+  # 留空使用默认 ~/.kube/kind-<name>.config；相对路径以本配置文件为基准。
+  kubeconfig: ""
+  # 留空先查版本隔离安装目录，再查 PATH；不要求用户安装 Go。
+  binary: ""
+  console_port: 30880
+
+# 单一镜像源配置：请填实际可用地址，不默认绑定个人 Harbor 或阿里云账号。
+# mirror 默认只预览，--apply 才备份并写入；容器清单保持上游 image。
+mirrors:
+  docker: []
+  # 将 containerd: {} 替换为下方注释示例并填写 endpoint；未配置时明确报错。
+  containerd: {}
+  # containerd:
+  #   docker.io:
+  #     server: https://registry-1.docker.io
+  #     endpoint: https://your-registry.example.com/v2/dockerhub
+  #     skip_verify: false
+  #     override_path: true
+  go: ""
+  npm: ""
+  pip: ""
+  maven: ""
+
+kubesphere:
+  # 留空读取唯一默认 StorageClass；不会自动安装 OpenEBS/NFS 或把 SC 改成默认。
+  storage_class: ""
+  # kind 可选择已确认的同版本安装器镜像源；留空保持 DockerHub 上游。
+  installer_source: ""
+  # 留空在 ~/.kube 中生成 0600 初始密码文件，不输出明文。
+  password_file: ""
+
 # 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
 # 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。
 timeout: 1h
@@ -21,7 +63,7 @@ etcd:
 
   # 本地备份根目录；每次生成独立任务子目录，内含 snapshot.db 和 manifest.json。
   # 上传失败也保留本地快照；当前不会自动轮转或删除旧备份。
-  directory: ./data/backups/etcd
+  directory: ../data/backups/etcd
 
   # 官方客户端的可执行文件名或路径，需要自行安装并匹配 etcd 版本。
   # 裸名称从 PATH 查找；./bin/etcdctl 等路径相对于本配置文件。

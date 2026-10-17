@@ -67,7 +67,7 @@ func TestInitAndDefaultConfig(t *testing.T) {
 	if code, err := Run(context.Background(), []string{"config", "init"}, &output, &output, "test"); code != 0 || err != nil {
 		t.Fatalf("%d %v", code, err)
 	}
-	original, err := os.ReadFile("opskit.yaml")
+	original, err := os.ReadFile(defaultConfigPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestInitAndDefaultConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OPSKIT_FAKE_ETCD", "1")
-	// With only the executable override, backup settings must come from cwd/opskit.yaml.
+	// With only the executable override, backup settings must come from cwd/config/config.yaml.
 	if code, err := Run(context.Background(), []string{"etcd", "backup", "--etcdctl", exe}, &output, &output, "test"); code != 0 || err != nil {
 		t.Fatalf("%d %v %s", code, err, output.String())
 	}
@@ -91,7 +91,7 @@ func TestInitAndDefaultConfig(t *testing.T) {
 		t.Fatal(files)
 	}
 	// Invalid default config fails before export; help remains available.
-	if err = os.WriteFile("opskit.yaml", []byte("unknown: value"), 0600); err != nil {
+	if err = os.WriteFile(defaultConfigPath, []byte("unknown: value"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if code, err := Run(context.Background(), []string{"etcd", "backup"}, &output, &output, "test"); code != 2 || err == nil {

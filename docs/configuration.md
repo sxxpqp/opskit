@@ -1,4 +1,15 @@
-# 配置示例：Kubernetes etcd + MinIO / S3
+# 统一配置与生产模板
+
+main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创建；正式版 v0.1.5 仍使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
+
+版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和密码文件路径放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
+
+这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
+
+`mirror` 命令默认预览，`--apply` 才写入并保留备份；所有镜像源地址需自行提供。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
+
+kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和固定默认值；etcd/S3 保留已有参数及 AWS 默认凭据链语义。非空 YAML 账号信息仍按原规则优先于 AWS 环境凭据。请勿把全局的配置优先级理解成秘密管理机制。
+
 
 完整字段说明在 [config.example.yaml](../config.example.yaml)。以下示例均使用当前实现支持的字段。
 
@@ -6,7 +17,7 @@
 
 ```sh
 ./opskit config init
-# 确认 opskit.yaml 中地址、证书路径正确，且 etcdctl 已安装：
+# main：确认 config/config.yaml 中地址、证书路径正确，且 etcdctl 已安装：
 ./opskit etcd backup
 ```
 

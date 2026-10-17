@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
-  集群健康检查 · kind 版本安装（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
+  集群健康检查 · kind / mirror / KS 工作流（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
 </p>
 
 <p align="center">
@@ -39,17 +39,19 @@
 
 项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。安装包提供 GitHub 与 Nexus 双入口，首页版本摘要、近期更新入口和下载表随正式发布自动刷新。网络排查、更多数据库备份和保留策略将逐步加入。
 
-main 分支新增 **指定版本安装 kind**（尚未发布），支持 SHA-256 校验和多版本共存；现有 Release 下载仍对应上方正式版。
+main 分支新增 **kind 管理、统一镜像源和 KubeSphere 3.4.1 安装**（尚未发布），配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并；现有 Release 下载仍对应上方正式版。
 
 ## 现在能做什么
 
 | 能力 | 当前行为 |
 |---|---|
-| kind 安装（main，未发布） | 显式 `--version`、系统架构识别、SHA-256 校验、按版本隔离安装 |
+| kind 管理（main，未发布） | 版本安装、集群创建/状态/日志、context 切换及确认删除 |
+| 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；预览、备份与显式写入 |
+| KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
 | S3 连通性 | 检查桶访问，区分 HTTP 权限错误与连接失败，可选对象 HEAD |
 | etcd 快照 | 调用官方 `etcdctl`，支持 CA、客户端证书与任务超时 |
-| 当前目录配置 | 自动加载 `./opskit.yaml`，内置模板，一条命令生成 |
+| 统一配置 | main 默认读取 `./config/config.yaml`；兼容旧 `./opskit.yaml`，内置模板一条命令生成 |
 | 备份清单 | 为每次任务生成独立目录，记录文件大小、SHA-256 和上传状态 |
 | 厂家配置 | `provider: minio / aws / custom`，仅填写选中厂家的配置块 |
 | S3 上传 | 内置 Go SDK，支持配置凭据、环境变量或默认凭据链 |
@@ -88,6 +90,9 @@ chmod +x opskit
 |---|---|
 | 查看版本 | `opskit version` |
 | 安装指定 kind 版本（main） | `opskit kind install --version v0.17.0` |
+| 预览 / 创建集群（main） | `opskit kind create --version v1.24.7` / 追加 `--apply` |
+| 修改 kind 镜像源（main） | `opskit mirror containerd --kind kubesphere-341 --apply` |
+| 安装 KS（main） | `opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --apply` |
 | 生成当前目录配置 | `opskit config init` |
 | 检查 etcd 集群 | `opskit etcd check --timeout 30s` |
 | 检查 S3 桶连通性 | `opskit s3 check --timeout 15s` |
@@ -95,11 +100,46 @@ chmod +x opskit
 | 备份 etcd，按配置上传 | `opskit etcd backup` |
 | 单独上传文件 | `opskit s3 upload --key manual/snapshot.db ./snapshot.db` |
 
-etcd / S3 命令默认读取当前目录的 `opskit.yaml`；需要时在子命令后追加 `--config ./other.yaml`。检查输出为 JSON，部分节点异常也会返回非零退出码。S3 HEAD 检查不会测试写入权限。
+main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Release 仍使用 `opskit.yaml`）；需要时在子命令后追加 `--config ./other.yaml`。检查输出为 JSON，部分节点异常也会返回非零退出码。S3 HEAD 检查不会测试写入权限。
 
-## kind 版本安装（main，尚未发布）
+## kind / mirror / KS（main，尚未发布）
 
-此能力从 `linux/opskit` 迁移到本项目，使用已有的 `cmd/opskit` 主入口；已有 etcd/S3 命令保持不变。当前正式版 v0.1.5 不包含此命令，请先从 main 构建。
+这些功能从 linux 仓库中的运维流程迁入已有 `cmd/opskit` 入口；etcd/S3 命令继续可用。当前正式版 v0.1.5 不包含这些命令，请先从 main 构建。
+
+```sh
+./opskit config init                    # 生成 config/config.yaml；不覆盖已有文件
+# 填写 mirrors.containerd 中实际可用的镜像源
+./opskit kind install --version v0.17.0
+./opskit kind create --version v1.24.7 --workers 2     # 默认预览
+./opskit kind create --version v1.24.7 --workers 2 --apply
+./opskit mirror containerd --kind kubesphere-341       # 预检全部节点，不写入
+./opskit mirror containerd --kind kubesphere-341 --apply
+# 确认集群已有可供卷的默认 StorageClass；本工具不会安装存储驱动
+./opskit kubesphere install --version v3.4.1 --kind kubesphere-341
+./opskit kubesphere install --version v3.4.1 --kind kubesphere-341 --apply
+./opskit kind status
+./opskit kind logs
+# 删除需 apply 与完整集群名两项确认
+./opskit kind delete --name kubesphere-341 --apply --confirm-name kubesphere-341
+```
+
+`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
+
+自建集群 KS 安装使用 `--kubeconfig FILE --context NAME`，不传 `--kind`；各节点 mirror 请先执行 `mirror containerd --apply` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。密码保存在本机 0600 文件，不打印明文；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
+
+`mirror docker/containerd/go/npm/pip/maven` 共用 `mirrors` 配置；不再将 mirror 归属于 kind。默认只预览，`--apply` 备份后写入。宿主机 Docker/containerd 修改后不自动重启服务，需自行安排维护窗口；kind 节点逐台重启并检查 CRI、验证 DockerHub 拉取。Maven 已有自定义 mirrors 或 containerd 旧认证配置时要求人工合并，不覆盖未知配置。
+
+```sh
+./opskit mirror docker                         # 预览 Linux /etc/docker/daemon.json
+./opskit mirror go --url https://your-go-proxy.example.com
+./opskit mirror npm --url https://your-npm.example.com --apply
+./opskit mirror pip --url https://your-pypi.example.com/simple --apply
+./opskit mirror maven --url https://your-maven.example.com/repository --apply
+```
+
+这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
+
+Go 使用 `go env GOENV` 定位配置（也可 `--file`）；npm、pip、Maven 使用当前用户配置，支持 `--file` 指定。Docker Desktop 要显式指定导出的配置文件，不修改 Docker Desktop 内部虚拟机。源地址只来自用户配置或 `--url`，不默认绑定个人 Harbor/阿里云账号。优先级为显式参数 > 支持的环境变量 > YAML > 固定默认值；环境变量目前支持 KIND_DOWNLOAD_BASE、OPSKIT_KIND_VERSION、OPSKIT_KUBERNETES_VERSION、OPSKIT_KUBESPHERE_VERSION、OPSKIT_KIND_NAME、OPSKIT_KIND_BIN、KUBECONFIG。`kind use/unuse` 修改用户默认 kubeconfig 并备份，目标可用 OPSKIT_USER_KUBECONFIG 指定；不会修改终端环境变量。
 
 ```sh
 go build -o opskit ./cmd/opskit
@@ -109,11 +149,11 @@ go build -o opskit ./cmd/opskit
 ./opskit kind install --version v0.17.0 --bin-dir /opt/kind-v0.17.0
 ```
 
-`--version` 必填，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存，调用时使用对应路径或将所选目录加入 PATH，不自动修改 shell 配置。
+版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存，调用时使用对应路径或将所选目录加入 PATH，不自动修改 shell 配置。
 
-kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。该命令不读取 `opskit.yaml`，运行不依赖 Bash、curl 或 Go。仅安装 kind 工具，不创建集群，也不安装 Docker、kubectl 或 KubeSphere。
+kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
 
-旧 `linux` 仓库脚本在 PATH 中找到 opskit（或设置 `OPSKIT_BIN`）时会调用本实现，并传递原版本和安装目录；未部署 opskit 的机器继续使用旧脚本。测试覆盖版本共存、重复安装、SHA/版本校验失败和 HTTP 失败保留原文件；macOS 做了原生执行检查，其他平台完成交叉编译，尚未完成 Windows/Linux 真机安装验收。
+旧 `linux` 仓库脚本在 PATH 中找到 opskit（或设置 `OPSKIT_BIN`）时会调用本实现，并传递原版本和安装目录；未部署 opskit 的机器继续使用旧脚本。测试覆盖版本共存、重复安装、SHA/版本校验失败和 HTTP 失败保留原文件；新增工作流测试通过模拟工具验证命令顺序、预检阻断和秘密保护；macOS 做了安装器原生执行检查，尚未完成真实集群 KS 安装和 Windows/Linux 真机工作流验收。
 
 ## 下载
 
@@ -150,19 +190,19 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 
 ```sh
 ./opskit config init
-# 编辑当前目录生成的 opskit.yaml，然后运行：
+# main 编辑 config/config.yaml；正式版 v0.1.5 编辑 opskit.yaml，然后运行：
 ./opskit etcd backup
 ```
 
-模板默认采用 **kubeadm 控制平面节点的本机 etcd 地址与证书路径**，逐项说明备份目录、TLS、MinIO/S3 和三种 key 的区别。其他 Kubernetes 发行版或外置 etcd 需修改实际路径。完整示例见 [Kubernetes + MinIO/S3 配置指南](docs/configuration.md)。也可查看仓库的 [配置模板](config.example.yaml)，或从 [最新版本附件](https://github.com/sxxpqp/opskit/releases/latest) 下载 `config.example.yaml` 后复制为 `opskit.yaml`。二进制内置同一份模板，无需额外下载即可生成。
+模板默认采用 **kubeadm 控制平面节点的本机 etcd 地址与证书路径**，逐项说明备份目录、TLS、MinIO/S3 和三种 key 的区别。其他 Kubernetes 发行版或外置 etcd 需修改实际路径。完整示例见 [Kubernetes + MinIO/S3 配置指南](docs/configuration.md)。也可查看仓库的 [配置模板](config.example.yaml)，或从 [最新版本附件](https://github.com/sxxpqp/opskit/releases/latest) 下载 `config.example.yaml` 后按所用版本放置为 `config/config.yaml`（main）或 `opskit.yaml`（v0.1.5）。二进制内置同一份模板，无需额外下载即可生成。
 
 **读取规则：命令行参数 > 配置文件 > 内置默认值。**
 
-- 默认只读取**当前工作目录**的 `opskit.yaml`，不是可执行文件所在目录。
+- main 从**当前工作目录**查找 `config/config.yaml`，不存在时回退旧 `opskit.yaml`，不合并；不是可执行文件所在目录。
 - 默认文件不存在时仍可使用命令行参数；使用 `--config` 显式指定的文件不存在则报错。
 - 配置文件中的相对路径按配置文件所在目录解析；命令行中的相对路径按工作目录解析。
 - 配置拒绝未知字段、重复字段、多个 YAML 文档及无效超时，帮助尽早发现拼写错误。
-- `config init` 不覆盖已有文件。`opskit.yaml` 已加入 `.gitignore`；访问密钥可配置在所选厂家块，也可通过环境变量或 SDK 凭据链传入；请勿提交真实凭据。
+- `config init` 不覆盖已有文件；发现旧 `opskit.yaml` 时要求先迁移或显式选择模板目标。`config/config.yaml` 与 `opskit.yaml` 已加入 `.gitignore`；访问密钥可配置在所选厂家块，也可通过环境变量或 SDK 凭据链传入；请勿提交真实凭据。
 
 ```sh
 # 生成模板到指定位置（父目录需已存在）
@@ -179,7 +219,7 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 
 ## 连通性与集群健康检查
 
-复用当前目录的 `opskit.yaml`，或用 `--config` 指定其他文件：
+main 复用 `config/config.yaml`，旧版本复用 `opskit.yaml`，或用 `--config` 指定其他文件：
 
 ```sh
 # 检查选中厂家的 S3 桶（不上传文件、不创建桶）
@@ -246,6 +286,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 下面是演进方向，未勾选的功能尚未实现。欢迎在 Issue 中分享使用场景，帮助确定优先级。
 
 - [x] kind 显式版本安装、SHA-256 校验和版本隔离（main，未发布）
+- [x] kind 集群管理、统一 mirror 和 KS 3.4.1 安装工作流（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
 - [x] S3 兼容上传与远端 metadata 验证
 - [x] S3 桶连通性与 etcd 集群成员 / 健康检查
@@ -268,7 +309,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 | 功能版本 | 变化 |
 |---|---|
-| main（未发布） | 从 linux 仓库迁入 kind 版本安装器，支持显式版本、多版本隔离和失败保留；不包含 KS 部署迁移 |
+| main（未发布） | 迁入 kind 创建/状态/日志/context/删除、统一 mirror、KS 3.4.1 安装；默认配置集中到 config/config.yaml，兼容旧文件 |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |
 | [v0.1.5](https://github.com/sxxpqp/opskit/releases/tag/v0.1.5) | 新增 `s3 check` 与 `etcd check`，展示桶访问、成员数量、逐节点健康和观察到的 quorum |
 | [v0.1.4](https://github.com/sxxpqp/opskit/releases/tag/v0.1.4) | 按 MinIO / AWS / custom 选择配置，分别使用厂家默认值与凭据 |

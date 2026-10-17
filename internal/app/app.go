@@ -48,7 +48,7 @@ func (s *storage) flags(f *flag.FlagSet) {
 
 func Run(ctx context.Context, args []string, out, diag io.Writer, version string) (int, error) {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		fmt.Fprintln(out, "opskit version | config init | kind install --version VERSION [flags] | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./opskit.yaml; override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
+		fmt.Fprintln(out, "opskit version | config init | kind install/create/status/logs/delete/use/unuse [flags] | mirror docker/containerd/go/npm/pip/maven [flags] | kubesphere install --version VERSION [flags] | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./config/config.yaml (legacy ./opskit.yaml fallback); override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
 		return 0, nil
 	}
 	if args[0] == "version" {
@@ -56,9 +56,19 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 		return 0, nil
 	}
 	if len(args) < 2 {
-		return 2, errors.New("expected etcd backup or s3 upload")
+		return 2, errors.New("expected GROUP COMMAND; run opskit --help")
 	}
 	command := strings.Join(args[:2], " ")
+	if args[0] == "kind" && args[1] != "install" {
+		return runKind(ctx, args[1:], out, diag)
+	}
+	if args[0] == "mirror" {
+		return runMirror(ctx, args[1:], out, diag)
+	}
+	if command == "kubesphere install" {
+		return runKubeSphere(ctx, args[2:], out, diag)
+	}
+
 	if command == "kind install" {
 		if err := runKindInstall(ctx, args, out, diag); err != nil {
 			return 1, err
@@ -74,7 +84,7 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 	}
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
 	f.SetOutput(diag)
-	configPath := f.String("config", "opskit.yaml", "configuration file (default: current directory)")
+	configPath := f.String("config", defaultConfigPath, "configuration file (default: current directory)")
 	var s storage
 	s.flags(f)
 	defaultTimeout := time.Hour

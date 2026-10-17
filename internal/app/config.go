@@ -15,7 +15,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const defaultConfigPath = "config/config.yaml"
+
 type fileConfig struct {
+	Versions struct {
+		Kind       string `yaml:"kind"`
+		Kubernetes string `yaml:"kubernetes"`
+		KubeSphere string `yaml:"kubesphere"`
+	} `yaml:"versions"`
+	Kind struct {
+		Name        string `yaml:"name"`
+		Workers     *int   `yaml:"workers"`
+		Kubeconfig  string `yaml:"kubeconfig"`
+		Binary      string `yaml:"binary"`
+		ConsolePort int    `yaml:"console_port"`
+	} `yaml:"kind"`
+	Mirrors    mirrorSettings `yaml:"mirrors"`
+	KubeSphere struct {
+		StorageClass    string `yaml:"storage_class"`
+		InstallerSource string `yaml:"installer_source"`
+		PasswordFile    string `yaml:"password_file"`
+	} `yaml:"kubesphere"`
+
 	SchemaVersion int    `yaml:"schema_version"`
 	Timeout       string `yaml:"timeout"`
 	Etcd          struct {
@@ -84,26 +105,48 @@ func (c *fileConfig) selectStorage() (providerConfig, error) {
 	return result, nil
 }
 
-func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage) error {
+func readFileConfig(path string, required bool) (fileConfig, error) {
+	var c fileConfig
+	if path == defaultConfigPath && !required {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			if _, oldErr := os.Stat("opskit.yaml"); oldErr == nil {
+				path = "opskit.yaml"
+			}
+		}
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) && !required {
-		return nil
+		return c, nil
 	}
 	if err != nil {
-		return fmt.Errorf("read config %s: %w", path, err)
+		return c, fmt.Errorf("read config %s: %w", path, err)
 	}
-	var c fileConfig
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
 	decoder.KnownFields(true)
 	if err = decoder.Decode(&c); err != nil {
-		return fmt.Errorf("invalid config %s: %w", path, err)
+		return c, fmt.Errorf("invalid config %s: %w", path, err)
 	}
 	var extra any
 	if err = decoder.Decode(&extra); err != io.EOF {
-		return errors.New("config must contain exactly one YAML document")
+		return c, errors.New("config must contain exactly one YAML document")
 	}
 	if c.SchemaVersion != 1 {
-		return errors.New("config schema_version must be 1")
+		return c, errors.New("config schema_version must be 1")
+	}
+
+	return c, nil
+}
+
+func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage) error {
+	c, err := readFileConfig(path, required)
+	if err != nil {
+		return err
+	}
+	// Legacy fallback paths are relative to the selected legacy file's directory (cwd).
+	if path == defaultConfigPath && !required {
+		if _, e := os.Stat(path); errors.Is(e, os.ErrNotExist) {
+			path = "opskit.yaml"
+		}
 	}
 	if c.Timeout != "" {
 		d, e := time.ParseDuration(c.Timeout)
@@ -162,7 +205,7 @@ func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage)
 func initConfig(args []string, out, diag io.Writer) (int, error) {
 	f := flag.NewFlagSet("config init", flag.ContinueOnError)
 	f.SetOutput(diag)
-	path := f.String("config", "opskit.yaml", "template destination (never overwrites existing files)")
+	path := f.String("config", defaultConfigPath, "template destination (never overwrites existing files)")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
@@ -171,6 +214,14 @@ func initConfig(args []string, out, diag io.Writer) (int, error) {
 	}
 	if f.NArg() != 0 {
 		return 2, errors.New("unexpected positional arguments")
+	}
+	if *path == defaultConfigPath && !explicitFlag(f, "config") {
+		if _, err := os.Stat("opskit.yaml"); err == nil {
+			return 1, errors.New("已存在旧 opskit.yaml；请迁移旧文件并核对相对路径，或显式 --config 指定模板目标，不自动创建第二套配置")
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(*path), 0700); err != nil {
+		return 1, err
 	}
 	file, err := os.OpenFile(*path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {

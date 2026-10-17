@@ -6,7 +6,7 @@
 
 ```sh
 opskit s3 check --timeout 15s
-opskit s3 check --config ./opskit.yaml --key existing/snapshot.db --timeout 15s
+opskit s3 check --config ./config/config.yaml --key existing/snapshot.db --timeout 15s
 ```
 
 必须配置 bucket。先使用 SDK 默认重试策略与任务总超时进行 HeadBucket，成功后如有 key 再做 HeadObject。不会上传测试文件或修改 bucket。

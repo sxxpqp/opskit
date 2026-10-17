@@ -10,3 +10,5 @@
 
 /opskit.yaml
 __pycache__/
+
+/config/config.yaml
