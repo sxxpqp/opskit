@@ -117,7 +117,8 @@ func chooseKindLinkDir(pathList string, preferred []string) (string, error) {
 	return preferred[len(preferred)-1], nil
 }
 
-func exposeKind(target, dir string, out io.Writer) error {
+func exposeKind(target, dir string, out io.Writer) error { return exposeTool(target, dir, "kind", out) }
+func exposeTool(target, dir, tool string, out io.Writer) error {
 	target, e := filepath.Abs(target)
 	if e != nil {
 		return e
@@ -128,7 +129,7 @@ func exposeKind(target, dir string, out io.Writer) error {
 	}
 	dest := filepath.Join(dir, filepath.Base(target))
 	if dest == target {
-		return finishKindPath(dir, out)
+		return finishToolPath(dir, tool, out)
 	}
 	if e = os.MkdirAll(dir, 0755); e != nil {
 		return e
@@ -140,11 +141,11 @@ func exposeKind(target, dir string, out io.Writer) error {
 				b, eb := os.ReadFile(target)
 				if ea == nil && eb == nil && bytes.Equal(a, b) {
 					fmt.Fprintln(out, "命令入口:", dest)
-					return finishKindPath(dir, out)
+					return finishToolPath(dir, tool, out)
 				}
 			}
 
-			return fmt.Errorf("kind 已安装到 %s，但 PATH 入口 %s 已存在，未覆盖", target, dest)
+			return fmt.Errorf("%s 已安装到 %s，但 PATH 入口 %s 已存在，未覆盖", tool, target, dest)
 		}
 		old, e := os.Readlink(dest)
 		if e != nil {
@@ -158,7 +159,7 @@ func exposeKind(target, dir string, out io.Writer) error {
 			if e != nil {
 				return e
 			}
-			managed := filepath.Join(home, ".local", "share", "opskit", "kind") + string(os.PathSeparator)
+			managed := filepath.Join(home, ".local", "share", "opskit", tool) + string(os.PathSeparator)
 			if !strings.HasPrefix(filepath.Clean(old), managed) {
 				return fmt.Errorf("PATH 入口指向其他安装 %s，未覆盖", old)
 			}
@@ -175,7 +176,7 @@ func exposeKind(target, dir string, out io.Writer) error {
 			return e
 		}
 	} else {
-		f, e := os.CreateTemp(dir, ".opskit-kind-*")
+		f, e := os.CreateTemp(dir, ".opskit-"+tool+"-*")
 		if e != nil {
 			return e
 		}
@@ -195,5 +196,5 @@ func exposeKind(target, dir string, out io.Writer) error {
 		}
 	}
 	fmt.Fprintln(out, "命令入口:", dest)
-	return finishKindPath(dir, out)
+	return finishToolPath(dir, tool, out)
 }

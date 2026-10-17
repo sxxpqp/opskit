@@ -3,6 +3,16 @@ package app
 func helpArgument(s string) bool { return s == "-h" || s == "--help" || s == "help" }
 
 var commandGroupHelp = map[string]string{
+	"kubectl": `用法: opskit kubectl install [参数]
+安装 Kubernetes 客户端 kubectl，不创建集群或修改 kubeconfig。
+自动识别 Linux/macOS amd64、arm64 或 Windows amd64；校验 SHA-256、客户端版本和 PATH。
+默认直接安装，--dry-run 仅预览。
+版本优先级: --version > versions.kubectl > versions.kubernetes。
+示例:
+  opskit kubectl install
+  opskit kubectl install --version v1.24.7
+  opskit kubectl install --dry-run
+使用 opskit kubectl install -h 或 --help 查看完整参数。`,
 	"kind": `用法: opskit kind <命令> [参数]
 
 命令:

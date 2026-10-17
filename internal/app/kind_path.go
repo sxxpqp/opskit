@@ -91,7 +91,8 @@ foreach ($part in ($saved -split ';')) {
 }
 if (-not $verified) { throw 'User PATH read-back verification failed' }`
 
-func finishKindPath(dir string, out io.Writer) error {
+func finishKindPath(dir string, out io.Writer) error { return finishToolPath(dir, "kind", out) }
+func finishToolPath(dir, tool string, out io.Writer) error {
 	if pathIncludes(os.Getenv("PATH"), dir) {
 		return nil
 	}
@@ -104,7 +105,7 @@ func finishKindPath(dir string, out io.Writer) error {
 			executable, e = exec.LookPath("pwsh.exe")
 		}
 		if e != nil {
-			return fmt.Errorf("kind 命令入口已创建；持久化 PATH 需要 PowerShell: %w", e)
+			return fmt.Errorf("%s 命令入口已创建；持久化 PATH 需要 PowerShell: %w", tool, e)
 		}
 		cmd := exec.CommandContext(ctx, executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", windowsKindPathScript)
 		cmd.Env = append(os.Environ(), "OPSKIT_KIND_LINK_DIR="+dir)
@@ -130,7 +131,7 @@ func finishKindPath(dir string, out io.Writer) error {
 	line := shellPathLine(dir)
 	profiles := kindPathProfiles(home, shell, os.Getenv("ZDOTDIR"))
 	if len(profiles) == 0 {
-		return fmt.Errorf("kind 入口已创建，shell %s 不支持自动 PATH 配置；请将 %s 加入 PATH 后运行 kind version 验证", shell, dir)
+		return fmt.Errorf("%s 入口已创建，shell %s 不支持自动 PATH 配置；请将 %s 加入 PATH", tool, shell, dir)
 	}
 	for _, profile := range profiles {
 		text, e := readOptional(profile)
@@ -138,9 +139,9 @@ func finishKindPath(dir string, out io.Writer) error {
 			return e
 		}
 		if !strings.Contains(string(text), line) {
-			data := append(append([]byte{}, text...), []byte("\n# opskit kind PATH\n"+line+"\n")...)
+			data := append(append([]byte{}, text...), []byte("\n# opskit "+tool+" PATH\n"+line+"\n")...)
 			if e = writeConfigFile(profile, data, out); e != nil {
-				return fmt.Errorf("kind 入口已创建，但写入 PATH 配置失败: %w", e)
+				return fmt.Errorf("%s 入口已创建，但写入 PATH 配置失败: %w", tool, e)
 			}
 		}
 		fmt.Fprintln(out, "PATH 配置:", profile)
@@ -151,12 +152,15 @@ func finishKindPath(dir string, out io.Writer) error {
 
 // Verify the installed entry separately from the command that the current PATH resolves.
 func verifyKindCommand(ctx context.Context, dir, version string, out io.Writer) error {
-	var err error
-	dir, err = filepath.Abs(dir)
+	_, binary, err := kindAsset(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return err
 	}
-	_, binary, err := kindAsset(runtime.GOOS, runtime.GOARCH)
+	return verifyToolCommand(ctx, dir, "kind", binary, version, verifyKind, out)
+}
+func verifyToolCommand(ctx context.Context, dir, tool, binary, version string, verify func(context.Context, string, string) error, out io.Writer) error {
+	var err error
+	dir, err = filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
@@ -164,8 +168,8 @@ func verifyKindCommand(ctx context.Context, dir, version string, out io.Writer) 
 	if err != nil {
 		return err
 	}
-	if err = verifyKind(ctx, entry, version); err != nil {
-		return fmt.Errorf("kind 命令入口验证失败: %w", err)
+	if err = verify(ctx, entry, version); err != nil {
+		return fmt.Errorf("%s 命令入口验证失败: %w", tool, err)
 	}
 	resolved, lookupErr := exec.LookPath(binary)
 	if !pathIncludes(os.Getenv("PATH"), dir) {
@@ -173,11 +177,11 @@ func verifyKindCommand(ctx context.Context, dir, version string, out io.Writer) 
 		if lookupErr == nil {
 			fmt.Fprintln(out, "当前 PATH 仍命中:", resolved)
 		}
-		fmt.Fprintln(out, "PATH 待生效：按以上提示更新当前终端，或重开终端后运行 kind version 验证。")
+		fmt.Fprintf(out, "PATH 待生效：请按以上提示更新当前终端，或重开终端后验证 %s 客户端版本。\n", tool)
 		return nil
 	}
 	if lookupErr != nil {
-		return fmt.Errorf("kind 入口存在，但当前 PATH 无法找到 kind: %w", lookupErr)
+		return fmt.Errorf("%s 入口存在，但当前 PATH 无法找到命令: %w", tool, lookupErr)
 	}
 	actual, err := filepath.EvalSymlinks(resolved)
 	if err != nil {
@@ -200,10 +204,10 @@ func verifyKindCommand(ctx context.Context, dir, version string, out io.Writer) 
 		matches = strings.EqualFold(filepath.Clean(actual), filepath.Clean(expected))
 	}
 	if !matches {
-		return fmt.Errorf("PATH 优先命中其他 kind: %s；本次入口为 %s，请调整 PATH 顺序后重试", resolved, entry)
+		return fmt.Errorf("PATH 优先命中其他 %s: %s；本次入口为 %s，请调整 PATH 顺序后重试", tool, resolved, entry)
 	}
-	if err = verifyKind(ctx, resolved, version); err != nil {
-		return fmt.Errorf("PATH 中的 kind 版本验证失败: %w", err)
+	if err = verify(ctx, resolved, version); err != nil {
+		return fmt.Errorf("PATH 中的 %s 版本验证失败: %w", tool, err)
 	}
 	fmt.Fprintf(out, "PATH 验证通过: %s (%s)\n", resolved, version)
 	return nil

@@ -27,6 +27,7 @@ type fileConfig struct {
 		CNIPlugins string `yaml:"cni_plugins"`
 		Kind       string `yaml:"kind"`
 		Kubernetes string `yaml:"kubernetes"`
+		Kubectl    string `yaml:"kubectl"`
 		KubeSphere string `yaml:"kubesphere"`
 	} `yaml:"versions"`
 	Kind struct {

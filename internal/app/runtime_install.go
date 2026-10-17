@@ -24,12 +24,13 @@ import (
 )
 
 type runtimeInstallSettings struct {
-	DownloadDir      string `yaml:"download_dir"`
-	DockerMethod     string `yaml:"docker_method"`
-	DockerMirror     string `yaml:"docker_mirror"`
-	DockerScript     string `yaml:"docker_script"`
-	DockerBinaryBase string `yaml:"docker_binary_base"`
-	ReleaseBase      string `yaml:"release_base"`
+	KubectlDownloadBase string `yaml:"kubectl_download_base"`
+	DownloadDir         string `yaml:"download_dir"`
+	DockerMethod        string `yaml:"docker_method"`
+	DockerMirror        string `yaml:"docker_mirror"`
+	DockerScript        string `yaml:"docker_script"`
+	DockerBinaryBase    string `yaml:"docker_binary_base"`
+	ReleaseBase         string `yaml:"release_base"`
 }
 
 type runtimePackage struct {

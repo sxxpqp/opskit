@@ -53,6 +53,12 @@ func fakeWorkflowTool() {
 	}
 	if name == "kubectl" {
 		switch {
+		case args == "version --client=true --output=json":
+			if os.Getenv("OPSKIT_FAKE_KUBECTL_JSON") == "invalid" {
+				fmt.Print("not-json")
+			} else {
+				fmt.Printf(`{"clientVersion":{"gitVersion":%q}}`, envOr("OPSKIT_FAKE_KUBECTL_VERSION", "v1.24.7"))
+			}
 		case strings.Contains(args, "config view -o jsonpath="):
 			fmt.Print("original-context")
 		case args == "config view --raw --flatten":

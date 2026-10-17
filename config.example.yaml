@@ -17,11 +17,13 @@ versions:
   cni_plugins: v1.5.1
   kind: v0.17.0
   kubernetes: v1.24.7
+  kubectl: ""  # 留空跟随 kubernetes；CLI --version 优先
   kubesphere: v3.4.1
 
-# Linux systemd 主机安装；默认执行，--dry-run 仅预览。不覆盖已有运行时。
+# 工具与运行时安装；默认执行，--dry-run 仅预览。运行时要求 Linux systemd，不覆盖已有运行时。
 # URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
 install:
+  kubectl_download_base: https://dl.k8s.io/release  # 官方源；可替换为实际已配置的代理根地址
   download_dir: ""  # 默认用户目录 ~/.opskit/downloads（Windows 为 %USERPROFILE%\.opskit\downloads）；可覆盖
   docker_method: script  # script / binary
   docker_mirror: Aliyun  # 官方脚本软件包源，注意大小写

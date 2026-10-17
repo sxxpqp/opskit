@@ -11,11 +11,12 @@
 
 <p align="center">
   <strong>一个 Go 运维工具箱，检查集群健康，备份 etcd，归档到 S3。</strong><br>
-  集群健康检查 · Docker / CRI / containerd 安装与 kind / mirror / KS 工作流（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
+  集群健康检查 · kubectl / Docker / CRI / containerd 安装与 kind / mirror / KS 工作流（main） · MinIO / AWS 厂家配置 · GitHub / Nexus 双下载入口
 </p>
 
 <p align="center">
   <a href="#运行时安装main未发布">运行时安装</a> ·
+  <a href="#kubectl-安装main未发布">kubectl 安装</a> ·
   <a href="#快速上手">快速上手</a> ·
   <a href="#下载">下载</a> ·
   <a href="#配置文件">配置文件</a> ·
@@ -40,7 +41,7 @@
 
 项目正在早期迭代，当前已支持 **etcd 集群健康检查、快照备份、S3 连通性检查与上传**，以及 **MinIO / AWS / 自定义 S3 厂家配置**。安装包提供 GitHub 与 Nexus 双入口，首页版本摘要、近期更新入口和下载表随正式发布自动刷新。网络排查、更多数据库备份和保留策略将逐步加入。
 
-main 分支新增 **Docker 双方式 / cri-dockerd / containerd 安装、kind 管理、统一镜像源和 KubeSphere 3.4.1 安装**（尚未发布），配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并；现有 Release 下载仍对应上方正式版。
+main 分支新增 **kubectl 版本安装、Docker 双方式 / cri-dockerd / containerd 安装、kind 管理、统一镜像源和 KubeSphere 3.4.1 安装**（尚未发布），配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并；现有 Release 下载仍对应上方正式版。
 
 命令帮助支持 `opskit -h` / `--help`；命令组如 `opskit kind`、`opskit kind -h`、`opskit kind --help` 均显示子命令列表，其他已有命令组同样适用。具体参数使用 `opskit kind install --help` 等形式查看，帮助不依赖配置文件或外部工具。
 
@@ -49,6 +50,7 @@ main 分支新增 **Docker 双方式 / cri-dockerd / containerd 安装、kind �
 | 能力 | 当前行为 |
 |---|---|
 | 运行时安装（main，未发布） | Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI；指定版本、默认执行、--dry-run 预览 |
+| kubectl 安装（main，未发布） | 按版本与系统架构下载，SHA-256 与客户端版本校验，复用 PATH；支持 -h / --help |
 | kind 管理（main，未发布） | 版本安装与跨系统 PATH 配置、集群创建/状态/日志、context 切换及确认删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；预览、备份与显式写入 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
@@ -93,6 +95,7 @@ chmod +x opskit
 | 目的 | 命令 |
 |---|---|
 | 查看版本 | `opskit version` |
+| 安装 kubectl（main） | `opskit kubectl install --version v1.24.7` |
 | 安装指定 kind 版本（main） | `opskit kind install --version v0.17.0` |
 | 创建 / 预览集群（main） | `opskit kind create --version v1.24.7` / 追加 `--dry-run` |
 | 修改 kind 镜像源（main） | `opskit mirror containerd --kind kubesphere-341 --apply` |
@@ -114,6 +117,7 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 ./opskit config init                    # 生成 config/config.yaml；不覆盖已有文件
 # 模板已带本项目镜像源；确认这些内网域名在当前环境可达
 ./opskit kind install --version v0.17.0
+./opskit kubectl install --version v1.24.7
 ./opskit kind create --version v1.24.7 --workers 2 --dry-run  # 仅预览
 ./opskit kind create --version v1.24.7 --workers 2            # 实际创建
 ./opskit mirror containerd --kind kubesphere-341       # 预检全部节点，不写入
@@ -289,6 +293,22 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 下载文件统一保存在 `install.download_dir`：模板留空，默认用户目录下的 `~/.opskit/downloads/`（Windows 为 `%USERPROFILE%\.opskit\downloads`），不随项目工作目录变化，可通过 `--download-dir` 覆盖。kind、Docker 脚本/静态包、cri-dockerd、containerd/runc/CNI 按组件、版本、源 URL 摘要分目录保留；安装时仍重新下载并执行原有校验，不把已有文件当成可信缓存。临时解压文件安装结束后清理。
 
+## kubectl 安装（main，未发布）
+
+```bash
+opskit kubectl                      # 命令说明；也支持 -h / --help / help
+opskit kubectl install -h           # 安装参数；也支持 --help
+opskit kubectl install              # 默认执行，版本跟随统一配置
+opskit kubectl install --version v1.24.7
+opskit kubectl install --version v1.24.7 --dry-run
+```
+
+版本优先级为 `--version` > `versions.kubectl` > `versions.kubernetes`，均须明确为 vX.Y.Z，不读取 latest。自动识别 Linux/macOS amd64、arm64 和 Windows amd64，下载对应 kubectl（Windows 为 kubectl.exe）。Windows ARM64 当前不支持安装该客户端。代码按 K8s 工具放在 `internal/k8s`，命令保持独立。
+
+先校验上游 SHA-256，再运行 `kubectl version --client=true --output=json` 验证客户端版本，成功后安装到 `~/.local/share/opskit/kubectl/<版本>/`。下载保留在统一 `.opskit/downloads` 目录；Unix 创建软链接，Windows 复制 exe。命令入口复用 PATH 中可写目录，找不到时才配置用户 PATH；已有其他来源的 kubectl 不覆盖。安装后检查实际 PATH 命中与客户端版本，新终端待生效时明确提示。安装不连接集群、不修改 kubeconfig，实际集群操作仍应选择匹配服务端的客户端版本。
+
+项目未配置 kubectl 的内网文件代理，默认官方 `https://dl.k8s.io/release`；可通过 `install.kubectl_download_base` 或 `--download-base URL` 替换为实际可用、保持相同目录结构的源。`--bin-dir`、`--link-dir` 和 `--download-dir` 可分别覆盖版本目录、命令入口目录和下载目录。配置详见[配置指南](docs/configuration.md)。
+
 ## 运行时安装（main，未发布）
 
 Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。运行时安装命令默认直接执行，添加 `--dry-run` 仅预览；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
@@ -319,6 +339,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 - [x] Docker 双方式、cri-dockerd 和 containerd 版本安装（main，未发布）
 - [ ] 运行时安装 Linux 真机验收及升级迁移
+- [x] kubectl 版本安装、SHA-256/客户端版本及 PATH 校验，支持完整帮助（main，未发布）
 - [x] kind 显式版本安装、SHA-256 校验、版本隔离和跨系统 PATH 配置（main，未发布）
 - [x] kind 集群管理、统一 mirror 和 KS 3.4.1 安装工作流（main，未发布）
 - [x] etcd 快照、SHA-256 清单、失败保留
@@ -345,6 +366,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 |---|---|
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | 新增 kubectl install：版本跟随统一配置，跨系统下载与校验，支持 -h / --help 和显式 dry-run |
 | main（未发布） | kind create 默认执行创建，--dry-run 仅预览；删除操作仍需显式确认 |
 | main（未发布） | 修复 kind 等命令组的裸命令、-h、--help、help 帮助入口，不再作为未知子命令处理 |
 | main（未发布） | kind 优先复用 PATH 中已有可写目录，保留 Linux/macOS 软链接和 Windows exe 复制；无可用目录才配置用户 PATH |

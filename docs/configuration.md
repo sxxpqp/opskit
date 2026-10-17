@@ -2,7 +2,7 @@
 
 main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创建；正式版 v0.1.5 仍使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
 
-版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和密码文件路径放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
+版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubectl` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和密码文件路径放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
@@ -171,3 +171,20 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
 
 `kind create` 默认执行创建，版本仍由 `versions.kubernetes` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群仍需 `--apply --confirm-name`。
+
+## kubectl 安装（main，未发布）
+
+`opskit kubectl`、`opskit kubectl -h`、`opskit kubectl --help` 显示说明；`opskit kubectl install -h/--help` 显示全部参数。帮助不依赖配置或外部工具。
+
+```yaml
+versions:
+  kubernetes: v1.24.7
+  kubectl: ""  # 留空跟随 kubernetes，也可明确固定独立版本
+install:
+  kubectl_download_base: https://dl.k8s.io/release
+  download_dir: ""  # 默认用户目录 .opskit/downloads
+```
+
+优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。`--download-base` 优先于 install.kubectl_download_base，官方默认源可替换为实际已部署的代理；URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`。下载源需同时提供二进制和校验文件，不跳过 TLS 校验。
+
+默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。

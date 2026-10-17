@@ -19,7 +19,7 @@ func TestGroupHelpWithoutConfigOrTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", "")
-	for _, group := range []string{"kind", "mirror", "docker", "cri-dockerd", "containerd", "kubesphere", "config", "etcd", "s3"} {
+	for _, group := range []string{"kubectl", "kind", "mirror", "docker", "cri-dockerd", "containerd", "kubesphere", "config", "etcd", "s3"} {
 		for _, help := range []string{"", "-h", "--help", "help"} {
 			t.Run(group+"/"+help, func(t *testing.T) {
 				args := []string{group}
