@@ -26,7 +26,7 @@ func runKindInstall(parent context.Context, args []string, out, diag io.Writer) 
 	configPath := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "kind 版本，例如 v0.17.0；也可由 versions.kind 提供")
 	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ~/.opskit/downloads")
-	linkDir := f.String("link-dir", "", "kind 命令入口目录；默认按系统选择并自动配置用户 PATH")
+	linkDir := f.String("link-dir", "", "kind 命令入口目录；优先复用 PATH 已有可写目录，否则配置用户目录")
 	binDir := f.String("bin-dir", "", "安装目录，默认按版本隔离")
 	base := f.String("download-base", defaultDownloadBase(), "发布包下载源（默认 Nexus，支持 https://github.com）")
 	if err := f.Parse(args[2:]); err != nil {

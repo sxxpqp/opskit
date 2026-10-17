@@ -67,9 +67,36 @@ func defaultKindLinkDir() (string, error) {
 	if e != nil {
 		return "", e
 	}
-	candidates := kindLinkCandidates(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"), os.Geteuid() == 0)
+	preferred := kindLinkCandidates(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"), os.Geteuid() == 0)
+	return chooseKindLinkDir(os.Getenv("PATH"), preferred)
+}
+
+// Prefer conventional directories already on PATH, then other existing PATH directories.
+// Empty/relative entries depend on the working directory and are not stable install locations.
+func chooseKindLinkDir(pathList string, preferred []string) (string, error) {
+	candidates := []string{}
+	for _, dir := range preferred {
+		if pathIncludes(pathList, dir) {
+			candidates = append(candidates, dir)
+		}
+	}
+	candidates = append(candidates, filepath.SplitList(pathList)...)
+	seen := map[string]bool{}
 	for _, dir := range candidates {
-		if !pathIncludes(os.Getenv("PATH"), dir) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		dir = filepath.Clean(dir)
+		key := dir
+		if runtime.GOOS == "windows" {
+			key = strings.ToLower(key)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		info, e := os.Stat(dir)
+		if e != nil || !info.IsDir() {
 			continue
 		}
 		f, e := os.CreateTemp(dir, ".opskit-path-check-*")
@@ -87,7 +114,7 @@ func defaultKindLinkDir() (string, error) {
 		}
 		return dir, nil
 	}
-	return candidates[len(candidates)-1], nil
+	return preferred[len(preferred)-1], nil
 }
 
 func exposeKind(target, dir string, out io.Writer) error {

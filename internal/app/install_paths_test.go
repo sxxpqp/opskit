@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -324,5 +327,127 @@ if ($matchingEntries.Count -ne 1) { throw 'PATH registration was not idempotent'
 	cmd.Env = append(os.Environ(), "OPSKIT_KIND_LINK_DIR="+filepath.Join(t.TempDir(), "tools space's"))
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Windows user PATH: %v %s", err, b)
+	}
+}
+
+func TestChooseKindLinkDir(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "path tools")
+	preferred := filepath.Join(root, "preferred")
+	fallback := filepath.Join(root, "fallback")
+	for _, d := range []string{existing, preferred} {
+		if err := os.Mkdir(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(file, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(os.PathListSeparator)
+	paths := strings.Join([]string{"", "relative-bin", file, filepath.Join(root, "missing"), existing}, sep)
+	got, err := chooseKindLinkDir(paths, []string{preferred, fallback})
+	if err != nil || got != existing {
+		t.Fatalf("existing custom PATH directory not reused: %s %v", got, err)
+	}
+	got, err = chooseKindLinkDir(existing+sep+preferred, []string{preferred, fallback})
+	if err != nil || got != preferred {
+		t.Fatalf("preferred PATH directory not selected: %s %v", got, err)
+	}
+	got, err = chooseKindLinkDir(strings.Join([]string{"", "relative-bin", file, filepath.Join(root, "missing")}, sep), []string{preferred, fallback})
+	if err != nil || got != fallback {
+		t.Fatalf("fallback: %s %v", got, err)
+	}
+	// Choosing a directory must not create the fallback or leave probe files.
+	if _, err = os.Stat(fallback); !os.IsNotExist(err) {
+		t.Fatalf("fallback created prematurely: %v", err)
+	}
+	for _, d := range []string{existing, preferred} {
+		files, err := os.ReadDir(d)
+		if err != nil || len(files) != 0 {
+			t.Fatalf("probe files left in %s: %v %v", d, files, err)
+		}
+	}
+}
+func TestChooseKindLinkDirSkipsReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("Unix non-root permission check")
+	}
+	root := t.TempDir()
+	locked := filepath.Join(root, "locked")
+	writable := filepath.Join(root, "writable")
+	for _, d := range []string{locked, writable} {
+		if err := os.Mkdir(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(locked, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0755) })
+	got, err := chooseKindLinkDir(locked+string(os.PathListSeparator)+writable, []string{filepath.Join(root, "fallback")})
+	if err != nil || got != writable {
+		t.Fatalf("read-only directory not skipped: %s %v", got, err)
+	}
+}
+
+func TestKindInstallReusesPathWithoutProfileChanges(t *testing.T) {
+	if _, _, err := kindAsset(runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Skip(err)
+	}
+	fakeTools(t)
+	root := t.TempDir()
+	bin := filepath.Join(root, "custom-path-bin")
+	if err := os.Mkdir(bin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", root)
+	} else {
+		t.Setenv("HOME", root)
+	}
+	t.Setenv("SHELL", "/bin/bash")
+	t.Setenv("PATH", bin)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if strings.HasSuffix(r.URL.Path, ".sha256sum") {
+			fmt.Fprintf(w, "%x  kind\n", sha256.Sum256(data))
+			return
+		}
+		w.Write(data)
+	}))
+	defer server.Close()
+	cfg := filepath.Join(root, "config.yaml")
+	if err = os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  kind: v0.17.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"kind", "install", "--config", cfg, "--bin-dir", filepath.Join(root, "versioned-kind"), "--download-dir", filepath.Join(root, "downloads"), "--download-base", server.URL}
+	var out bytes.Buffer
+	for i := 0; i < 2; i++ {
+		out.Reset()
+		code, err := Run(context.Background(), args, &out, &out, "dev")
+		if err != nil || code != 0 {
+			t.Fatalf("install %d: %d %v %s", i, code, err, out.String())
+		}
+		if !strings.Contains(out.String(), "PATH 验证通过") || !strings.Contains(out.String(), bin) {
+			t.Fatal(out.String())
+		}
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("same version downloaded again: %d requests", requests.Load())
+	}
+	for _, name := range []string{".bashrc", ".profile", ".zshrc"} {
+		if _, err = os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
+			t.Fatalf("unnecessary profile write: %s %v", name, err)
+		}
 	}
 }
