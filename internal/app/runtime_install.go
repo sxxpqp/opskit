@@ -24,6 +24,7 @@ import (
 )
 
 type runtimeInstallSettings struct {
+	DownloadDir      string `yaml:"download_dir"`
 	DockerMethod     string `yaml:"docker_method"`
 	DockerMirror     string `yaml:"docker_mirror"`
 	DockerScript     string `yaml:"docker_script"`
@@ -40,6 +41,7 @@ type runtimePackage struct {
 func runRuntimeInstall(parent context.Context, tool string, args []string, out, diag io.Writer) (int, error) {
 	f := flag.NewFlagSet(tool+" install", flag.ContinueOnError)
 	f.SetOutput(diag)
+	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ./downloads")
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "目标版本 vX.Y.Z；也可由 versions 配置")
 	dryRun := f.Bool("dry-run", false, "仅预览安装计划，不执行安装")
@@ -68,6 +70,13 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 	c, err := commandConfig(f, *config)
 	if err != nil {
 		return 1, err
+	}
+	setConfigFlag(f, "download-dir", c.Install.DownloadDir)
+	if *downloadDir == "" {
+		*downloadDir, err = defaultDownloadDir()
+		if err != nil {
+			return 1, err
+		}
 	}
 	switch tool {
 	case "docker":
@@ -160,6 +169,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 			return 2, errors.New("sha256 必须为 64 位十六进制")
 		}
 	}
+	fmt.Fprintln(out, "下载目录:", *downloadDir)
 	fmt.Fprintf(out, "安装计划: %s %s，Linux/%s\n", tool, *version, *arch)
 	if script {
 		fmt.Fprintf(out, "方式: 官方脚本 --mirror %s --version %s\n", *mirror, ver)
@@ -233,7 +243,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 			return 1, e
 		}
 		defer os.Remove(tmp.Name())
-		e = download(ctx, *source, tmp)
+		e = downloadRetained(ctx, *source, tmp, *downloadDir, tool, *version)
 		closeErr := tmp.Close()
 		if e != nil {
 			return 1, e
@@ -264,7 +274,7 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 		for i := range packages {
 			p := &packages[i]
 			var b runtimeDownloadBuffer
-			if e = download(ctx, p.source, &b); e != nil {
+			if e = downloadRetained(ctx, p.source, &b, *downloadDir, p.name, p.version); e != nil {
 				return 1, e
 			}
 			data := b.Bytes()

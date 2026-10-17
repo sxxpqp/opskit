@@ -151,7 +151,7 @@ go build -o opskit ./cmd/opskit
 ./opskit kind install --version v0.17.0 --bin-dir /opt/kind-v0.17.0
 ```
 
-版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存，调用时使用对应路径或将所选目录加入 PATH，不自动修改 shell 配置。
+版本必须由 `--version` 或统一配置的 `versions.kind` 明确提供，不隐式选择 latest。默认安装位置为 `~/.local/share/opskit/kind/<版本>/kind`，Windows 为 `kind.exe`；日志展示版本和实际路径。不同版本目录可共存。安装后自动创建 kind 命令入口：Linux/macOS root 使用 `/usr/local/bin/kind`，其他用户使用 `~/.local/bin/kind`；可通过 `--link-dir` 覆盖。目录不在 PATH 时打印当前终端设置命令，不修改 shell 配置。已有同版本安装也会补建入口；拒绝覆盖其他来源的 kind。Windows 复制到入口目录并打印 PowerShell PATH 提示。
 
 kind 发布包支持 Linux/macOS amd64、arm64 和 Windows amd64；Windows 原生 ARM64 的 kind 安装暂不支持（opskit 自身仍可构建该平台）。kind 安装器源默认沿用已有公开 `registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1`，仅用于 `--kind` 预加载，不改上游清单；自建集群忽略该模板项。kind 工具发布包默认通过现有 Nexus `raw-github` 代理下载；可用 `--download-base https://github.com` 或环境变量 `KIND_DOWNLOAD_BASE` 显式选择来源。安装器读取统一配置；运行不依赖 Bash、curl 或 Go。`kind install` 只安装 kind 工具，其他动作使用相应子命令。
 
@@ -285,6 +285,8 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 快照流程依据 [etcd 官方恢复文档](https://etcd.io/docs/v3.6/op-guide/recovery/)。本项目尚未完成真实 etcd/MinIO 环境的恢复验收，生产使用前应进行恢复演练并核对业务数据。
 
+下载文件统一保存在 `install.download_dir`：模板为项目 `downloads/`，无配置时为当前目录 `downloads/`，可通过 `--download-dir` 覆盖。kind、Docker 脚本/静态包、cri-dockerd、containerd/runc/CNI 按组件、版本、源 URL 摘要分目录保留；安装时仍重新下载并执行原有校验，不把已有文件当成可信缓存。临时解压文件安装结束后清理。
+
 ## 运行时安装（main，未发布）
 
 Linux systemd 主机使用；macOS/Windows 可以预览，实际安装需进入 Linux VM 或启用 systemd 的 WSL2。运行时安装命令默认直接执行，添加 `--dry-run` 仅预览；安装目标版本写在 `config/config.yaml` 的 `versions`，CLI 可覆盖。
@@ -340,6 +342,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 | 功能版本 | 变化 |
 |---|---|
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
+| main（未发布） | 安装文件统一保留到 downloads/；kind 自动创建 PATH 命令入口，保留版本隔离目录 |
 | main（未发布） | 新增 Docker 官方脚本 / 二进制、cri-dockerd、containerd + runc + CNI 安装，默认直接安装、--dry-run 预览，并拒绝覆盖已有运行时 |
 | main（未发布） | 迁入 kind/mirror/KS 流程与项目实际默认镜像源，支持 Docker insecure-registry 合并与 Go proxy 列表；配置集中到 config/config.yaml |
 | main（发布流程更新） | 新增 Nexus 备用下载；Release 自动附带主 / 备用链接，首页版本摘要、近期更新入口与下载表随正式发布自动同步 |

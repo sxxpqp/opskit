@@ -165,3 +165,5 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 `install.docker_method` 为 script 或 binary，`docker_mirror` 为官方脚本的软件包源（Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `docker_script` 默认 get.docker.com；二进制源 `docker_binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`release_base` 用于 containerd、runc、CNI 和 cri-dockerd，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
 
 `--url` 只覆盖主包/脚本，`--sha256` 只校验该文件；runc/CNI 无单独摘要字段，使用源站 HTTPS。安装不改既有配置、不升级现有运行时，不自动修改主机网络参数。完整示例见首页运行时安装章节。既有 config/config.yaml 不自动覆盖；用 `opskit config init --config config/config.new.yaml` 生成对照模板，手工合并新字段。
+
+安装下载统一使用 `install.download_dir`；模板 `../downloads` 按配置文件目录解析，未填写时使用当前工作目录 downloads。CLI `--download-dir` 优先，按当前目录解析。kind `--link-dir` 指定 PATH 入口目录，默认 root /usr/local/bin、其他用户 ~/.local/bin；目录不在 PATH 时打印设置命令。已有其他来源的入口不覆盖。

@@ -78,7 +78,7 @@ func TestInstallVersionsAndFailures(t *testing.T) {
 	defer server.Close()
 	root := t.TempDir()
 	install := func(dir string) error {
-		return installKind(context.Background(), kindOptions{version, dir, server.URL, runtime.GOOS, runtime.GOARCH}, io.Discard)
+		return installKind(context.Background(), kindOptions{version, dir, server.URL, runtime.GOOS, runtime.GOARCH, ""}, io.Discard)
 	}
 	first := filepath.Join(root, version)
 	if err := install(first); err != nil {

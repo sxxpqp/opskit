@@ -59,6 +59,7 @@ func commandConfig(f *flag.FlagSet, path string) (fileConfig, error) {
 		}
 		return s
 	}
+	c.Install.DownloadDir = resolve(c.Install.DownloadDir)
 	c.Kind.Kubeconfig = resolve(c.Kind.Kubeconfig)
 	if strings.ContainsAny(c.Kind.Binary, "/\\") {
 		c.Kind.Binary = resolve(c.Kind.Binary)

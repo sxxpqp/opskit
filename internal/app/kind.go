@@ -19,7 +19,7 @@ import (
 
 var versionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 
-type kindOptions struct{ version, binDir, base, platform, arch string }
+type kindOptions struct{ version, binDir, base, platform, arch, downloadDir string }
 
 func kindAsset(platform, arch string) (string, string, error) {
 	if (platform != "linux" && platform != "darwin" && platform != "windows") ||
@@ -103,7 +103,7 @@ func installKind(ctx context.Context, o kindOptions, out io.Writer) error {
 	source := strings.TrimRight(o.base, "/") + "/kubernetes-sigs/kind/releases/download/" + o.version + "/" + asset
 	fmt.Fprintf(out, "下载 kind %s (%s/%s)\n", o.version, o.platform, o.arch)
 	var checksum strings.Builder
-	if err := download(ctx, source+".sha256sum", &checksum); err != nil {
+	if err := downloadRetained(ctx, source+".sha256sum", &checksum, o.downloadDir, "kind", o.version); err != nil {
 		return err
 	}
 	fields := strings.Fields(checksum.String())
@@ -120,7 +120,7 @@ func installKind(ctx context.Context, o kindOptions, out io.Writer) error {
 		return err
 	}
 	hash := sha256.New()
-	downloadErr := download(ctx, source, io.MultiWriter(f, hash))
+	downloadErr := downloadRetained(ctx, source, io.MultiWriter(f, hash), o.downloadDir, "kind", o.version)
 	closeErr := f.Close()
 	if downloadErr != nil {
 		return downloadErr
