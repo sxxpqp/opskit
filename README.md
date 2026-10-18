@@ -135,7 +135,7 @@ main 中所有命令默认读取当前目录的 `config/config.yaml`（旧 Relea
 
 `kind create` 默认实际创建，不需要 `--apply`；仅预览时显式使用 `--dry-run`。`kind create --version` 指 Kubernetes 节点版本，`kind install --version` 指 kind 工具版本，`kubesphere install --version` 指 KS 版本。模板提供经过确认的 kind v0.17.0 / K8s v1.24.7 / KS v3.4.1 组合；创建时若配置指定 kind 版本，将验证实际工具版本一致。已有同名集群会报错并保留，不自动删除、重建或调整拓扑。kind 命令仍需 Docker、kubectl；安装 kind 本身无需 Go。
 
-KS 安装等待共用总超时（默认 45 分钟，可用 `--timeout 45m` 延长）。KS 安装默认直接安装，`--dry-run` 仅做只读预检；读取 `KUBECONFIG` 或 `~/.kube/config` 的 current-context，也可用 `--kubeconfig FILE --context NAME` 显式指定；自建集群不传 `--kind`；各节点 mirror 请先执行 `mirror containerd` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。初始密码从 `kubesphere.password` 读取，可用 `--password` 覆盖，不创建密码文件；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
+KS 安装等待共用总超时（默认 45 分钟，可用 `--timeout 45m` 延长）。KS 安装默认直接安装，`--dry-run` 仅做只读预检；读取 `KUBECONFIG` 或 `~/.kube/config` 的 current-context，也可用 `--kubeconfig FILE --context NAME` 显式指定；自建集群不传 `--kind`；各节点 mirror 请先执行 `mirror containerd` 配置。本次未迁移 SSH 节点批量管理。KS 仅支持已核对的内嵌 3.4.1 清单，校验 K8s 1.20～1.26、节点 Ready、cluster-admin 和唯一默认 StorageClass。已有 `kubesphere-system` 时停止，不覆盖实例和密码。完成条件是核心 enabled 和三个核心 Deployment 就绪，监控需另查状态。初始密码从 `kubesphere.password` 读取并直接注入，预检要求包含大小写字母和数字，可用 `--password` 覆盖，不创建密码文件；ARM 上游尚未完全支持，需要自行验证所选组件镜像。
 
 `mirror docker/containerd/go/npm/pip/maven` 共用 `mirrors` 配置；不再将 mirror 归属于 kind。默认备份后写入，`--dry-run` 仅预览。Linux 标准 Docker 配置写入后自动重启并检查服务；自定义 Docker 配置文件和宿主机 containerd 需手动安排重启；kind 节点逐台重启并检查 CRI、验证 DockerHub 拉取。Maven 已有自定义 mirrors 或 containerd 旧认证配置时要求人工合并，不覆盖未知配置。
 
@@ -390,7 +390,10 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.m
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
 | main（未发布） | kubectl 补充 Nexus / 阿里云兼容镜像配置与下载要求，标明实际可达性限制 |
 | main（未发布） | 安装配置统一为 `install.<组件>.<参数>`，kind、kubectl、Docker 和运行时各自分组；旧平铺字段需迁移 |
-| main（未发布） | KS 使用 kubesphere.password 设置初始密码，默认 sxxpqp.top，移除密码文件 |
+| main（未发布） | kind mirror 重启 containerd 后最多等待 60 秒确认 CRI 就绪，失败输出服务状态和日志 |
+| main（未发布） | containerd registry 配置识别支持单引号 plugin 节名及 kind 隐式 registry 父表 |
+| main（未发布） | KS 安装成功摘要显示 admin 和配置的实际登录密码 |
+| main（未发布） | KS 使用 kubesphere.password 设置初始密码，默认 Sxxpqp.top1，移除密码文件 |
 | main（未发布） | KS 默认总超时延长至 45 分钟，核心 Deployment 进度期限跟随 --timeout |
 | main（未发布） | KS 安装器、core 状态和核心 Deployment 等待共用 --timeout 总期限，取消固定 180 秒 / 900 秒限制 |
 | main（未发布） | kind KS 控制台端口改为监听 0.0.0.0，支持通过宿主机 IP 访问；已有集群需重建映射 |

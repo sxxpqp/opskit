@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -60,6 +61,14 @@ func renderHosts(registries map[string]registryMirror) (map[string][]byte, error
 }
 func configureRegistry(text string, allowLegacy bool) (string, error) {
 	// Recognize containerd 1.x config v2 and containerd 2.x config v3. Unknown layouts fail closed.
+	// TOML literal and basic quoted plugin names are equivalent. Normalize
+	// section headers only; registry values and credentials must stay unchanged.
+	header := regexp.MustCompile(`^(\s*\[plugins\.)'([^']+)'(.*)$`)
+	inputLines := strings.Split(text, "\n")
+	for i, line := range inputLines {
+		inputLines[i] = header.ReplaceAllString(line, `${1}"${2}"${3}`)
+	}
+	text = strings.Join(inputLines, "\n")
 	section := ""
 	for _, candidate := range []string{`[plugins."io.containerd.grpc.v1.cri".registry]`, `[plugins."io.containerd.cri.v1.images".registry]`} {
 		if strings.Contains(text, candidate) {
@@ -68,7 +77,25 @@ func configureRegistry(text string, allowLegacy bool) (string, error) {
 		}
 	}
 	if section == "" {
-		return "", errors.New("未识别的 containerd registry 配置；请先使用受支持的 containerd 主配置")
+		// TOML parent tables may be implicit, as in kind's default config.
+		for _, plugin := range []string{"io.containerd.grpc.v1.cri", "io.containerd.cri.v1.images"} {
+			candidate := `[plugins."` + plugin + `".registry]`
+			prefix := strings.TrimSuffix(candidate, "]")
+			for _, line := range strings.Split(text, "\n") {
+				trim := strings.TrimSpace(line)
+				if trim == `[plugins."`+plugin+`"]` || strings.HasPrefix(trim, prefix+".") {
+					section = candidate
+					break
+				}
+			}
+			if section != "" {
+				break
+			}
+		}
+		if section == "" {
+			return "", errors.New("未识别的 containerd registry 配置；请先使用受支持的 containerd 主配置")
+		}
+		text += "\n" + section + "\n"
 	}
 	prefix := strings.TrimSuffix(section, "]")
 	var lines []string
@@ -595,8 +622,18 @@ func mirrorKindNodes(ctx context.Context, name, binary string, registries map[st
 		if e = commandRun(ctx, nil, out, diag, "docker", "exec", node, "systemctl", "--no-pager", "restart", "containerd"); e != nil {
 			return e
 		}
-		if _, e = commandOutput(ctx, nil, "docker", "exec", node, "crictl", "--runtime-endpoint", "unix:///run/containerd/containerd.sock", "info"); e != nil {
-			return e
+		fmt.Fprintf(out, "%s: 等待 containerd CRI 就绪…\n", node)
+		readyCtx, readyCancel := context.WithTimeout(ctx, time.Minute)
+		e = waitContainerdReady(readyCtx, time.Second, func(probeCtx context.Context) error {
+			_, err := commandOutput(probeCtx, nil, "docker", "exec", node, "crictl", "--timeout=5s", "--runtime-endpoint", "unix:///run/containerd/containerd.sock", "info")
+			return err
+		})
+		readyCancel()
+		if e != nil {
+			fmt.Fprintf(diag, "%s: containerd 状态及最近日志：\n", node)
+			_ = commandRun(ctx, nil, diag, diag, "docker", "exec", node, "systemctl", "--no-pager", "--full", "status", "containerd")
+			_ = commandRun(ctx, nil, diag, diag, "docker", "exec", node, "journalctl", "--no-pager", "-u", "containerd", "-n", "50")
+			return fmt.Errorf("%s: CRI 就绪检查失败；备份: %s: %w", node, backup, e)
 		}
 		if _, ok := registries["docker.io"]; ok {
 			if e = commandRun(ctx, nil, out, diag, "docker", "exec", node, "crictl", "--runtime-endpoint", "unix:///run/containerd/containerd.sock", "--image-endpoint", "unix:///run/containerd/containerd.sock", "pull", "docker.io/library/busybox:1.36"); e != nil {
@@ -606,4 +643,24 @@ func mirrorKindNodes(ctx context.Context, name, binary string, registries map[st
 		fmt.Fprintf(out, "已更新 %s；备份: %s\n", node, backup)
 	}
 	return nil
+}
+
+func waitContainerdReady(ctx context.Context, interval time.Duration, probe func(context.Context) error) error {
+	var lastErr error
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("等待 containerd CRI 就绪: %w；最后检查: %v", err, lastErr)
+		}
+		lastErr = probe(ctx)
+		if lastErr == nil {
+			return nil
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("等待 containerd CRI 就绪: %w；最后检查: %v", ctx.Err(), lastErr)
+		case <-timer.C:
+		}
+	}
 }

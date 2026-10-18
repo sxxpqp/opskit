@@ -58,6 +58,9 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 	setConfigFlag(f, "kind-bin", c.Kind.Binary)
 	setConfigFlag(f, "storage-class", c.KubeSphere.StorageClass)
 	setConfigFlag(f, "password", c.KubeSphere.Password)
+	if err := validateKSPassword(*password); err != nil {
+		return 2, err
+	}
 	if *kindName != "" {
 		setConfigFlag(f, "installer-source", c.KubeSphere.InstallerSource)
 	}
@@ -193,9 +196,6 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 		fmt.Fprintln(out, "预检通过；去掉 --dry-run 执行安装。存储驱动和节点 mirror 不会自动安装。")
 		return 0, nil
 	}
-	if len(*password) < 8 || len(*password) > 64 {
-		return 2, errors.New("kubesphere.password 必须 8~64 字节")
-	}
 	configuration, err := renderKSConfig(templates.KSConfiguration, *storageClass, *password)
 	if err != nil {
 		return 1, err
@@ -255,7 +255,7 @@ func runKubeSphere(parent context.Context, args []string, out, diag io.Writer) (
 			return 1, err
 		}
 	}
-	fmt.Fprintf(out, "KS %s 核心服务已就绪；账号 admin；密码使用 kubesphere.password 或 --password 指定值；控制台端口 30880\n", *version)
+	fmt.Fprintf(out, "KS %s 核心服务已就绪；控制台端口 30880\nAccount: admin\nPassword: %s\n", *version, *password)
 	return 0, kubeRun(nil, "-n", "kubesphere-system", "get", "service", "ks-console")
 }
 func renderKSConfig(template []byte, storage, password string) ([]byte, error) {
@@ -310,4 +310,11 @@ func waitKubeSphereCore(ctx context.Context, interval time.Duration, read func(c
 		case <-timer.C:
 		}
 	}
+}
+
+func validateKSPassword(password string) error {
+	if len(password) < 8 || len(password) > 64 || !regexp.MustCompile(`[a-z]`).MatchString(password) || !regexp.MustCompile(`[A-Z]`).MatchString(password) || !regexp.MustCompile(`[0-9]`).MatchString(password) {
+		return errors.New("kubesphere.password 必须 8~64 字节，并包含大写字母、小写字母和数字")
+	}
+	return nil
 }

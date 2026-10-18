@@ -41,6 +41,14 @@ func fakeWorkflowTool() {
 		}
 	}
 	if name == "docker" {
+		if os.Getenv("OPSKIT_FAKE_CRI_DELAY") == "yes" && strings.Contains(args, "crictl --timeout=5s") {
+			marker := filepath.Join(dir, "cri-first-check")
+			if _, err := os.Stat(marker); os.IsNotExist(err) {
+				_ = os.WriteFile(marker, []byte("failed"), 0600)
+				fmt.Fprintln(os.Stderr, "containerd.sock: no such file or directory")
+				os.Exit(1)
+			}
+		}
 		switch {
 		case strings.Contains(args, "cat /etc/containerd/config.toml"):
 			if strings.Contains(args, os.Getenv("OPSKIT_FAKE_FAIL_NODE")) && os.Getenv("OPSKIT_FAKE_FAIL_NODE") != "" {
@@ -255,6 +263,7 @@ func TestContainerdCompatibilityAndTraversal(t *testing.T) {
 	}
 }
 func TestKindMirrorPreflightBeforeWrites(t *testing.T) {
+	t.Setenv("OPSKIT_FAKE_CRI_DELAY", "yes")
 	t.Chdir(t.TempDir())
 	dir := fakeTools(t)
 	config := filepath.Join(dir, "config.yaml")
@@ -313,12 +322,43 @@ func TestKubeSpherePreflightDefaultInstallAndProtection(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
-	if strings.Contains(text, "ConfigPassword123!") {
-		t.Fatal("password leaked")
+	if !strings.Contains(text, "Account: admin\nPassword: ConfigPassword123!\n") {
+		t.Fatal("login summary missing configured password")
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "applied.yaml"))
-	if !strings.Contains(string(raw), "openebs-hostpath") || !strings.Contains(string(raw), "adminPassword: ConfigPassword123!") {
+	if !strings.Contains(string(raw), "openebs-hostpath") {
 		t.Fatal("runtime configuration not injected")
+	}
+	var configResult struct {
+		Spec struct {
+			Authentication struct {
+				AdminPassword string `yaml:"adminPassword"`
+			} `yaml:"authentication"`
+		} `yaml:"spec"`
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	for {
+		var document struct {
+			Kind string `yaml:"kind"`
+		}
+		var node yaml.Node
+		if err := decoder.Decode(&node); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if err := node.Decode(&document); err != nil {
+			t.Fatal(err)
+		}
+		if document.Kind == "ClusterConfiguration" {
+			if err := node.Decode(&configResult); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if configResult.Spec.Authentication.AdminPassword != "ConfigPassword123!" {
+		t.Fatal("configured password changed")
 	}
 	events, _ := os.ReadFile(filepath.Join(dir, "events"))
 	for _, component := range []string{"ks-installer", "ks-apiserver", "ks-controller-manager", "ks-console"} {
@@ -665,5 +705,55 @@ func TestDeleteDefaultExecutionAndDryRun(t *testing.T) {
 	events, _ := os.ReadFile(filepath.Join(dir, "events"))
 	if !strings.Contains(string(events), "kind delete cluster --name test") {
 		t.Fatal(string(events))
+	}
+}
+
+func TestRegistryLiteralQuotedPlugins(t *testing.T) {
+	for _, plugin := range []string{"io.containerd.grpc.v1.cri", "io.containerd.cri.v1.images"} {
+		source := "version = 2\n[plugins.'" + plugin + "'.registry]\n  config_path = ''\n[plugins.'" + plugin + "'.containerd]\n  snapshotter = 'overlayfs'\n"
+		converted, err := configureRegistry(source, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(converted, `config_path = "/etc/containerd/certs.d"`) || !strings.Contains(converted, "snapshotter = 'overlayfs'") {
+			t.Fatal(converted)
+		}
+		again, err := configureRegistry(converted, true)
+		if err != nil || again != converted {
+			t.Fatal("not idempotent", err)
+		}
+		auth := source + "[plugins.'" + plugin + "'.registry.configs.'private.example'.auth]\n username = 'user'\n"
+		if _, err := configureRegistry(auth, true); err == nil {
+			t.Fatal("legacy authentication accepted")
+		}
+	}
+}
+
+func TestRegistryImplicitParentKind(t *testing.T) {
+	source := `version = 2
+[plugins."io.containerd.grpc.v1.cri".containerd]
+  snapshotter = "overlayfs"
+[plugins."io.containerd.grpc.v1.cri"]
+  sandbox_image = "registry.k8s.io/pause:3.7"
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
+  endpoint = ["https://registry.k8s.io", "https://k8s.gcr.io",]
+`
+	result, err := configureRegistry(source, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result, "[plugins.\"io.containerd.grpc.v1.cri\".registry]\n  config_path = \"/etc/containerd/certs.d\"") || strings.Contains(result, ".registry.mirrors") || !strings.Contains(result, `sandbox_image = "registry.k8s.io/pause:3.7"`) || !strings.Contains(result, `snapshotter = "overlayfs"`) {
+		t.Fatal(result)
+	}
+	again, err := configureRegistry(result, true)
+	if err != nil || result != again {
+		t.Fatal("migration not idempotent", err)
+	}
+	if _, err := configureRegistry(source, false); err == nil {
+		t.Fatal("host legacy mirrors accepted")
+	}
+	auth := source + "\n[plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"private.example\".auth]\n username = \"user\"\n"
+	if _, err := configureRegistry(auth, true); err == nil {
+		t.Fatal("legacy auth accepted")
 	}
 }

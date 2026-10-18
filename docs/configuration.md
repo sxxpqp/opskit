@@ -303,6 +303,14 @@ KS 提交 ClusterConfiguration 后每 5 秒读取资源 JSON，等待 `status.co
 
 KS 安装提交配置后先执行 `rollout status deployment/ks-installer`，等待期限使用安装总超时的剩余时间，就绪后输出最近 100 行安装器日志，再继续轮询 core 状态及检查核心 Deployment。不使用阻塞的 `logs -f`；需要持续查看时可在另一个终端执行 `kubectl -n kubesphere-system logs deployment/ks-installer -f`。
 
-KS 初始账号为 `admin`；`kubesphere.password` 默认 `sxxpqp.top`，`--password` 可覆盖。直接注入安装配置，不创建本地密码文件。旧 `password_file` 和 `--password-file` 已移除，需迁移为 `password`。仅影响全新安装，不会修改已安装集群的账号密码。密码长度为 8～64 字节；真实 KS 登录尚未验证。
+KS 初始账号为 `admin`；`kubesphere.password` 默认 `Sxxpqp.top1`，`--password` 可覆盖。直接以明文注入安装配置，不创建本地密码文件。旧 `password_file` 和 `--password-file` 已移除，需迁移为 `password`。仅影响全新安装，不会修改已安装集群的账号密码。密码须包含大写字母、小写字母和数字，长度为 8～64 字节，预检时校验；真实 KS 登录尚未验证。
 
 KS 安装总超时默认 45 分钟，`--timeout 60m` 可延长。core enabled 后先将三个核心 Deployment 的 `progressDeadlineSeconds` 设为该总超时的秒数，再检查 rollout，避免服务端进度期限先于客户端等待结束。整个流程仍受同一个总期限约束。
+
+KS 核心服务就绪后，opskit 最终摘要输出 `Account: admin` 和 `Password: <配置的明文密码>`，用于登录。安装器日志与 opskit 摘要均使用配置中的实际密码。
+
+containerd registry 配置识别支持 `plugins."io.containerd.grpc.v1.cri"` / `plugins."io.containerd.cri.v1.images"` 及其单引号等价写法；仍拒绝未知布局和未迁移的认证/TLS 配置。
+
+kind 节点的默认 containerd 配置可能仅声明 `.registry.mirrors` 子表，而省略 `.registry` 父表。`mirror containerd --kind NAME` 支持补齐该父表、设置 certs.d 并迁移旧 mirror；保留 sandbox_image、运行时和快照设置，旧认证/TLS 配置仍要求人工迁移。宿主机旧 mirror 配置仍不自动迁移。
+
+kind mirror 重启节点 containerd 后，每秒检查 CRI，最多等待 60 秒（受 mirror 总超时约束）；就绪后才验证镜像拉取并处理下一个节点。等待失败输出该节点 containerd 的 systemd 状态、最近 50 行日志及备份目录，便于区分启动延迟和配置错误。

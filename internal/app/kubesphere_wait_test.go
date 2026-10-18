@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,7 +49,7 @@ func TestKubeSpherePasswordConfiguration(t *testing.T) {
 	if err := yaml.Unmarshal(templates.ConfigTemplate, &defaults); err != nil {
 		t.Fatal(err)
 	}
-	if defaults.KubeSphere.Password != "sxxpqp.top" {
+	if defaults.KubeSphere.Password != "Sxxpqp.top1" {
 		t.Fatal("incorrect default password")
 	}
 	_, err := readFileConfig(writeKubeSphereLegacyConfig(t), true)
@@ -68,4 +69,21 @@ func writeKubeSphereLegacyConfig(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestKSPasswordPolicy(t *testing.T) {
+	for _, password := range []string{"Sxxpqp.top1", "Custom123!"} {
+		if err := validateKSPassword(password); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, password := range []string{"sxxpqp.top", "Sxxpqp.top", "sxxpqp.top1", "Short1", strings.Repeat("Ab1", 22)} {
+		if err := validateKSPassword(password); err == nil {
+			t.Fatal("invalid password accepted")
+		}
+	}
+	code, err, _ := workflowRun(t, "kubesphere", "install", "--password", "sxxpqp.top", "--dry-run")
+	if code == 0 || err == nil || !strings.Contains(err.Error(), "kubesphere.password") {
+		t.Fatal("invalid password not caught in preflight", code, err)
+	}
 }

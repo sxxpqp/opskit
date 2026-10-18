@@ -110,8 +110,8 @@ kubesphere:
   # 沿用原 kind 流程的公开安装器源；仅 --kind 预加载时读取。
   # 自建集群继续使用上游 image；此项不是个人阿里云 ACR 账号。
   installer_source: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
-  # admin 初始密码；直接注入安装配置，不创建本地密码文件。
-  password: sxxpqp.top
+  # admin 初始密码；直接注入安装配置，须包含大小写字母和数字，不创建本地密码文件。
+  password: Sxxpqp.top1
 
 # 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
 # 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。
