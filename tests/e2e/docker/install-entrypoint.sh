@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ "${OPSKIT_FULL_INSTALL_E2E:-}" != "1" ]]; then
+  echo "Refusing unexpected real-install entrypoint" >&2
+  exit 2
+fi
+
+umask 077
+mkdir -p /artifacts/full-install
+report=/artifacts/full-install
+cfg=/tmp/opskit-real-install.yaml
+
+if [[ ! -s /run/e2e/password || ! -s /run/e2e/id_ed25519 ]]; then
+  echo "Ephemeral SSH credentials not initialized" >&2
+  exit 1
+fi
+export OPSKIT_DOCKER_E2E_PASSWORD
+OPSKIT_DOCKER_E2E_PASSWORD="$(cat /run/e2e/password)"
+
+/usr/local/bin/opskit-e2e-generate-config   /etc/opskit/config.example.yaml "$cfg" | tee "$report/config-summary.log"
+
+echo "Running REAL OpsKit k8s create --dry-run..."
+/usr/local/bin/opskit k8s create --config "$cfg" --dry-run > "$report/dry-run.log" 2>&1
+
+echo "Running REAL OpsKit k8s create (downloads, runtime, kubeadm init, Calico)..."
+set +e
+/usr/local/bin/opskit k8s create --config "$cfg" --timeout 32m   > "$report/install.log" 2>&1
+status=$?
+set -e
+
+# Do not dump kubeconfig or bootstrap credentials into public CI logs.
+tail -n 60 "$report/install.log" | sed -E 's/[a-z0-9]{6}[.][a-z0-9]{16}/<join-token>/g'
+
+if [[ "$status" -ne 0 ]]; then
+  printf 'FAILED: opskit k8s create exit code %s\n' "$status" | tee "$report/result.txt"
+  exit "$status"
+fi
+
+kubeconfig=/tmp/opskit-real-install-output/kubeconfig
+if [[ ! -s "$kubeconfig" ]]; then
+  echo "Installer returned success but no kubeconfig exists" | tee "$report/result.txt"
+  exit 1
+fi
+
+# Download and SHA-256 verify the official kubectl client independently.
+arch="$(dpkg --print-architecture)"
+version=v1.28.15
+base="https://dl.k8s.io/release/${version}/bin/linux/${arch}/kubectl"
+curl --fail --location --silent --show-error --retry 3 "$base" -o /tmp/e2e-kubectl
+curl --fail --location --silent --show-error --retry 3 "$base.sha256" -o /tmp/e2e-kubectl.sha256
+printf '%s  %s\n' "$(tr -d ' \r\n' < /tmp/e2e-kubectl.sha256)" /tmp/e2e-kubectl | sha256sum --check
+chmod 0755 /tmp/e2e-kubectl
+
+echo "Verifying actual API /readyz, Node Ready, CoreDNS, and Calico..."
+{
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" get --raw=/readyz
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" wait --for=condition=Ready node/master --timeout=5m
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" -n kube-system rollout status daemonset/calico-node --timeout=5m
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" -n kube-system rollout status deployment/coredns --timeout=5m
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" get nodes -o wide
+  /tmp/e2e-kubectl --kubeconfig "$kubeconfig" get pods -A
+} > "$report/verify.log" 2>&1 || {
+  cat "$report/verify.log"
+  echo "FAILED: Kubernetes post-install verification" | tee "$report/result.txt"
+  exit 1
+}
+
+echo "PASS: OpsKit installed and verified Kubernetes on a new Linux systemd test container" | tee "$report/result.txt"
+cat "$report/verify.log"
