@@ -80,10 +80,13 @@ class StreamInstallLogTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 17)
             self.assertIn("[STDOUT] control plane initialized", result.stdout)
-            self.assertIn("[STDERR] Calico failed: not a shared mount", result.stdout)
-            self.assertNotIn("abcdef.0123456789abcdef", result.stdout)
-            self.assertIn("[STDERR] kubeadm join", result.stdout)
-            self.assertEqual(Path(path).read_text(), result.stdout)
+            self.assertIn("[STDERR] Calico failed: not a shared mount", result.stderr)
+            self.assertNotIn("abcdef.0123456789abcdef", result.stdout + result.stderr)
+            self.assertIn("[STDERR] kubeadm join", result.stderr)
+            combined = Path(path).read_text()
+            self.assertIn("[STDOUT] control plane initialized", combined)
+            self.assertIn("[STDERR] Calico failed: not a shared mount", combined)
+            self.assertNotIn("abcdef.0123456789abcdef", combined)
 
     def test_successful_command_returns_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
