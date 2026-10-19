@@ -71,6 +71,7 @@ opskit completion powershell > opskit.ps1
 | kind 管理（main，未发布） | 版本安装与跨系统 PATH 配置、集群创建/状态/日志、context 切换及按配置删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；默认备份后写入，--dry-run 预览 |
 | K8s SSH（main，未发布） | KK 风格配置、密码/密钥/sudo、下载复用、自动加入及固定版本 Calico；单 master、未真机验收 |
+| Docker K8s 集成测试（PR 待合并） | Ubuntu systemd/SSH 容器验证真实 SSH、sudo、文件上传、节点预检；Kind 双节点验证 API、Node Ready 和 CoreDNS；**不等于从零安装 kubeadm 成功** |
 | kubeadm（main，未发布） | install/prepare/init/join，containerd 兼容检查、systemd、单控制平面和工作节点；未真机验收 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
@@ -83,6 +84,8 @@ opskit completion powershell > opskit.ps1
 | 失败保留 | 上传失败仍保留完整本地快照，便于排查和重试 |
 | 跨平台交付 | Windows / Linux / macOS，amd64 与 arm64，直接下载可执行文件 |
 | 备用下载 | GitHub / Nexus 同版本双入口，发布成功后自动刷新首页版本与链接 |
+
+**K8s Docker 测试（开发中）**：执行 `bash tests/e2e/docker/run.sh` 可在 Docker 上启动两台带 systemd/SSH 的 Ubuntu 测试容器，使用 OpsKit 真正的 SSH 客户端检查密码/密钥、sudo、上传和主机预检；独立 Kind 作业检查两节点集群与 CoreDNS。详见 [Docker K8s E2E 测试指南](docs/k8s-docker-e2e.md) 和 [专用工作流](.github/workflows/k8s-docker-e2e.yml)。容器测试需要特权权限及合适的 cgroup 后端，不在共享生产 Docker 主机运行。**目前不执行 OpsKit 的 kubeadm init/join，不代表真机安装验收已完成。**
 
 S3 兼容服务的后端能力需实际验证。etcd 备份需要单独安装匹配版本的 `etcdctl`；当前尚未完成真实环境的恢复验收。
 
