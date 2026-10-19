@@ -139,20 +139,38 @@ separate product changes and testing.
 Logs are written to `tests/e2e/docker/artifacts/full-install/` and stored as
 short-lived GitHub Actions artifacts. **Installation progress, stage names and
 errors are shown live** in the `Install actual Kubernetes through OpsKit
-(live sanitized output)` Actions step; there is no need to wait for timeout
-to read the last 60 lines. The Python stream redactor removes known ephemeral
-passwords, bootstrap join tokens, kubeconfig key-data values, bearer tokens,
-PEM blocks and workflow command prefixes before any output is printed or
-written to `install.log`. It flushes each line immediately. The command exit
-status is taken from Bash `PIPESTATUS[0]`, never from `tee`.
+(live sanitized output)` Actions step. Each line is explicitly labeled
+`[STDOUT]` or `[STDERR]` so stderr errors can be distinguished from regular
+progress. The controller invokes OpsKit through a Python subprocess, consumes
+both pipes concurrently without deadlocks, redacts credentials, and writes
+sanitized output to the Actions console and `install.log` simultaneously.
+The Python wrapper propagates the original installation process exit status.
+Kubeadm join tokens, ephemeral passwords, kubeconfig key-data values, bearer
+tokens, PEM blocks and workflow command prefixes are suppressed before either
+destination receives output; each line is flushed immediately.
 
-The `Show sanitized node diagnostics after a failure` CI step prints a
-redacted, bounded (last 180 lines) summary of kubelet/containerd and Calico
-logs to help distinguish download, runtime and CNI startup errors. The
-`verify.log` contains post-install checks, `node-diagnostics.log` collects
-systemd/CRI/Calico events and journal output, and `result.txt` contains the
-final status. The CI job tests the redactor before beginning any privileged
-installation. Artifact logs remain available for deeper diagnosis.
+The `Show root-cause errors from Calico, Pod Events and CRI` Actions step
+runs **only after a failed installation**. Instead of showing the last 180
+noisy kubelet lines, it prioritizes failing Pod states, Calico events,
+container creation errors and mount propagation messages, deduplicates common
+errors, and finally passes the report through the credential redactor.
+
+A previously recorded failure in Actions run
+[39231668273](https://github.com/sxxpqp/opskit/actions/runs/39231668273)
+was not merely a Calico readiness timeout: the `calico-node` Pod remained in
+`Init:CreateContainerError` because the container runtime reported
+`path "/sys/fs/" is mounted on "/sys" but it is not a shared mount`.
+Because Calico could not finish initializing, its CNI plugin then failed
+to find `/var/lib/calico/nodename`, blocking CoreDNS. The better failure
+summary is designed to highlight this actual cause on the next CI run.
+It does **not** bypass mount-propagation checks or mark the installation as
+successful.
+
+The `verify.log` contains post-install checks, `node-diagnostics.log`
+collects systemd/CRI/Calico events and journal output, and `result.txt`
+contains the final status. The CI job tests the live log capture, redactor,
+and failure summary before beginning any privileged installation. Artifact
+logs remain available for deeper diagnosis.
 
 Generated kubeconfig, SSH key and install bundles are never included in the
 uploaded artifact paths. Redaction is best-effort: use only disposable test
