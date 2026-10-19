@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -287,8 +287,9 @@ func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
 	if o.NodeName != "" && !regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`).MatchString(o.NodeName) {
 		return nil, errors.New("node-name 必须是小写 DNS 名称")
 	}
+	// CRI endpoints belong to Linux nodes even when the management host is Windows.
 	u, err := url.Parse(o.CRISocket)
-	if err != nil || u.Scheme != "unix" || u.Host != "" || !filepath.IsAbs(u.Path) || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Scheme != "unix" || u.Host != "" || !path.IsAbs(u.Path) || u.RawQuery != "" || u.Fragment != "" {
 		return nil, errors.New("cri-socket 必须为本地 Unix socket URL")
 	}
 	registration := map[string]any{"criSocket": o.CRISocket}

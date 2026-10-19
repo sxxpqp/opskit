@@ -382,6 +382,8 @@ address 用于 SSH，internalAddress 用于 API/kubelet 集群通信。省略 in
 
 下载源继续统一放在 `install.<component>.download_base` / `install.docker.binary_base`，默认只定义于模板。管理机按节点架构下载一次，校验官方 SHA-256（kubeadm/kubelet/kubectl/crictl/containerd/runc/CNI plugins），然后分发。Docker 和 cri-dockerd 包使用 HTTPS 传输及节点实际版本检查，管理机另计算摘要验证分发内容，不把该摘要称为独立上游签名或摘要认证。节点离线缓存中的文件再次计算摘要，缺项不回源下载。各本地安装器继续验证实际二进制版本，不静默接受目标版本不一致。
 
+Windows/macOS 管理机预检 Linux 节点的 CRI socket 时，按 Unix 路径规则校验 `unix:///run/containerd/containerd.sock` / `unix:///run/cri-dockerd.sock`，不将其作为管理机本地路径解析；实际节点安装仍要求 Linux。
+
 Linux 同架构管理机直接分发当前 opskit 可执行文件。非 Linux 管理机或异构架构需配置 `nodeBinaries: {amd64: /path/opskit_linux_amd64, arm64: /path/opskit_linux_arm64}`；文件必须从相同代码构建，不得拿缺少内部节点协议的旧 Release 替代。目标主机不需要 Go。现有仓库发布包仍区分操作系统/架构；本功能尚未完成发布，不宣称当前公开附件已支持。
 
 `k8s.registry.imageRepository` 仅控制 kubeadm 系统镜像仓库。运行时镜像源统一读取顶层 `mirrors`：Docker 使用 `mirrors.docker` / `mirrors.docker_insecure_registries`；containerd 使用完整的 `mirrors.containerd`，保留各仓库 endpoint、server、skip_verify、override_path，不再由 DockerHub 列表覆盖。重复的 `k8s.registry.registryMirrors` 已删除，旧配置须移除此字段，读取时会报未知字段，不保留别名。Docker 的 registry-mirrors 仅加速 DockerHub；使用 Docker 时请将 imageRepository 按需设置为可访问的系统镜像仓库，insecure-registries 本身不会重写其他仓库地址。`network.manifest` 留空自动下载固定版本 Calico，校验 SHA-256 并按 Pod CIDR 渲染；填入本地 YAML 则优先使用，不下载、不改写，由部署者确认镜像、版本和 Pod CIDR 配套。CNI plugins 二进制不等于网络插件 Deployment/DaemonSet。网络和存储清单可以按环境准备，KS 默认关闭，不会自动安装存储驱动。

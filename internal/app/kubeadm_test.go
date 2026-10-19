@@ -228,3 +228,31 @@ func TestStageKubeadmTools(t *testing.T) {
 		t.Fatal("corrupt binary accepted")
 	}
 }
+
+// Keep this test enabled on Windows: the target socket is a Linux path.
+func TestKubeadmUnixSocketPathsAcrossManagementPlatforms(t *testing.T) {
+	var defaults fileConfig
+	if err := yaml.Unmarshal(templates.ConfigTemplate, &defaults); err != nil {
+		t.Fatal(err)
+	}
+	defaults.projectComponents()
+	o := defaults.Kubeadm
+	o.AdvertiseAddress = "192.168.10.10"
+	for _, socket := range []string{"unix:///run/containerd/containerd.sock", "unix:///run/cri-dockerd.sock", "unix:///var/run/containerd/containerd.sock"} {
+		t.Run(socket, func(t *testing.T) {
+			o.CRISocket = socket
+			raw, err := renderKubeadm("init", "v1.24.7", o)
+			if err != nil || !bytes.Contains(raw, []byte(socket)) {
+				t.Fatalf("Linux socket rejected on %s: %s: %v\n%s", runtime.GOOS, socket, err, raw)
+			}
+		})
+	}
+	for _, socket := range []string{"unix:run/containerd.sock", "unix://localhost/run/containerd.sock", "unix://C:/run/containerd.sock", "tcp://127.0.0.1:1234", "unix:///run/containerd.sock?option=value", "unix:///run/containerd.sock#fragment"} {
+		t.Run(socket, func(t *testing.T) {
+			o.CRISocket = socket
+			if _, err := renderKubeadm("init", "v1.24.7", o); err == nil {
+				t.Fatalf("invalid socket accepted: %s", socket)
+			}
+		})
+	}
+}
