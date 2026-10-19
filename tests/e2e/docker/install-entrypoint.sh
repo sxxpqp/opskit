@@ -10,6 +10,13 @@ umask 077
 mkdir -p /artifacts/full-install
 report=/artifacts/full-install
 cfg=/tmp/opskit-real-install.yaml
+# The test process runs as container root and creates mode 0600 logs. Grant
+# the disposable GitHub-hosted runner read access to *reports only*; the SSH
+# key, kubeconfig, YAML and kubeadm bootstrap files remain private.
+make_reports_readable() {
+  find "$report" -maxdepth 1 -type f \( -name '*.log' -o -name 'result.txt' \) -exec chmod 0644 {} +
+}
+trap make_reports_readable EXIT
 
 if [[ ! -s /run/e2e/password || ! -s /run/e2e/id_ed25519 ]]; then
   echo "Ephemeral SSH credentials not initialized" >&2
