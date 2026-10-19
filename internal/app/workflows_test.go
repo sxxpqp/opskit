@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/pflag"
 	templates "github.com/sxxpqp/opskit"
 	"gopkg.in/yaml.v3"
 )
@@ -295,7 +295,7 @@ func TestKubeSpherePreflightDefaultInstallAndProtection(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := fakeTools(t)
 	config := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(config, []byte("schema_version: 1\nkubesphere:\n  password: ConfigPassword123!\n"), 0600); err != nil {
+	if err := os.WriteFile(config, []byte("k8s:\n    kubesphere:\n        password: ConfigPassword123!\nkind:\n    kubesphere:\n        password: ConfigPassword123!\nschema_version: 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	args := []string{"kubesphere", "install", "--version", "v3.4.1", "--kind", "test", "--config", config, "--timeout", "45m"}
@@ -385,7 +385,7 @@ func TestKubeSpherePreflightDefaultInstallAndProtection(t *testing.T) {
 }
 func TestDefaultConfigAndLegacyFallback(t *testing.T) {
 	t.Chdir(t.TempDir())
-	if err := os.WriteFile("opskit.yaml", []byte("schema_version: 1\nversions:\n kind: v0.17.0\n"), 0600); err != nil {
+	if err := os.WriteFile("opskit.yaml", []byte("kind:\n    version: v0.17.0\nschema_version: 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := readFileConfig(defaultConfigPath, false)
@@ -408,7 +408,7 @@ func TestDefaultConfigAndLegacyFallback(t *testing.T) {
 }
 
 func TestClusterConfigPrecedence(t *testing.T) {
-	f := flag.NewFlagSet("test", flag.ContinueOnError)
+	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	o := clusterFlags(f)
 	if err := f.Parse([]string{"--workers", "3"}); err != nil {
 		t.Fatal(err)

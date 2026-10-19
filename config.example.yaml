@@ -2,27 +2,28 @@
 # 默认场景：在 kubeadm 控制平面节点上备份本机 etcd；不填写 bucket 时仅本地备份。
 # K3s、RKE2、外置 etcd、自定义证书目录等环境，请修改下面的地址与证书路径。
 # 当前工作目录决定默认加载位置；--config 可指定其他文件，不自动合并配置。
+# CLI 使用 Cobra：opskit <命令组> <命令> --help 查看参数，--config FILE 指定本文件。
 # 优先级：命令行参数 > 已支持的环境变量 > 此配置 > 程序内置默认值。
 # 路径：配置中的相对路径以本文件所在目录为准；绝对路径原样使用。
 # 不执行 ${ENV_VAR}、~、日期变量或其他模板展开；凭据按下方环境变量方式传入。
 
 schema_version: 1
 
-# 固定安装版本；CLI --version 可覆盖。KS 当前仅支持内嵌的 v3.4.1 清单。
-versions:
-  docker: v27.3.1
-  cri_dockerd: v0.3.22
-  containerd: v2.1.3
-  runc: v1.2.6
-  cni_plugins: v1.5.1
-  kind: v0.17.0
-  kubernetes: v1.24.7
-  kubectl: ""  # 留空跟随 kubernetes；CLI --version 优先
-  kubesphere: v3.4.1
-
 # 工具与运行时安装；默认执行，--dry-run 仅预览。运行时要求 Linux systemd，不覆盖已有运行时。
 # URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
 install:
+  calico:
+    download_base: https://raw.githubusercontent.com  # --calico-download-base / CALICO_DOWNLOAD_BASE
+    sha256: 2468a8c939658b959860b0e78c3d2f420c53bb08af7511f3d335e051f9db8b22  # 官方 v3.26.5 calico.yaml 的 SHA-256
+  go:
+    download_base: https://go.dev/dl  # GO_DOWNLOAD_BASE / --go-download-base
+    checksum_url: https://go.dev/dl/?mode=json&include=all  # --checksum-url；包含目标版本 SHA-256 的 Go 发布元数据
+  kubeadm:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBEADM_DOWNLOAD_BASE / --kubeadm-download-base
+  kubelet:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBELET_DOWNLOAD_BASE / --kubelet-download-base
+  cri_tools:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # CRI_TOOLS_DOWNLOAD_BASE / --cri-tools-download-base
   kind:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # KIND_DOWNLOAD_BASE / kind install --download-base
   kubectl:
@@ -30,6 +31,7 @@ install:
     # 可换官方 https://dl.k8s.io/release 或阿里云/OSS 自建镜像的兼容根地址。
     # 必须同时提供 <version>/bin/<os>/<arch>/kubectl[.exe] 和追加 .sha256 的校验文件。
   download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads，可覆盖
+  # Docker 安装自动持久化并应用 inotify 最小限额：instances=8192 / watches=524288，保留更高值。
   docker:
     method: script  # script / binary
     mirror: https://mirrors.tuna.tsinghua.edu.cn/docker-ce  # 官方脚本软件包源，也支持 Aliyun / AzureChinaCloud
@@ -44,8 +46,78 @@ install:
   cri_dockerd:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 
+# 独立 Go SDK 版本；安装后使用 mirrors.go 配置当前用户 GOPROXY。
+go:
+  version: 1.26.2
+
+# 原生 SSH 编排；不依赖 KK。示例沿用 KS 历史测试版本，不是新生产环境推荐。
+k8s:
+  name: sxxpqp  # k8s create 使用此名称，不接受 create <名称> 位置参数
+  hosts:
+    - {name: master1, address: 192.168.10.10, internalAddress: 192.168.10.10, port: 22, user: root, password: "请填写SSH密码"}
+    # - {name: worker1, address: 192.168.10.11, internalAddress: 192.168.10.11, port: 22, user: root, password: "请填写SSH密码"}
+    # - {name: worker2, address: 192.168.10.12, internalAddress: 192.168.10.12, port: 22, user: root, password: "请填写SSH密码"}
+    # 私钥登录：删除 password，填写 privateKeyPath: /home/admin/.ssh/id_ed25519。
+    # 也支持 passwordEnv、privateKeyPassphraseEnv；均为环境变量名。
+    # 普通用户自动 sudo，默认免密；需要密码时填写 sudoPassword 或 sudoPasswordEnv。
+  roleGroups:
+    etcd: [master1]
+    master: [master1]
+    # worker: [worker1, worker2]  # 与 hosts 中对应节点一起取消注释即可自动加入
+  controlPlaneEndpoint:
+    address: 192.168.10.10
+    port: 6443
+  kubernetes:
+    version: v1.24.7  # kubeadm/kubelet/kubectl 统一使用此版本，不提供独立版本字段
+    containerManager: containerd  # containerd / docker，所选运行时使用二进制包
+    clusterName: cluster.local
+  containerd:
+    version: v1.7.24
+  runc:
+    version: v1.2.6
+  criTools:
+    version: v1.24.2
+  cniPlugins:
+    version: v1.5.1
+  docker:
+    version: v27.3.1
+  criDockerd:
+    version: v0.3.22
+  network:
+    kubePodsCIDR: 10.244.0.0/16
+    kubeServiceCIDR: 10.96.0.0/12
+    # 留空自动下载并安装下方固定版本 Calico；填写本地清单则优先使用，不改写。
+    manifest: ""
+    calico:
+      version: v3.26.5  # 当前自动安装支持此版本，适配 Kubernetes 1.24～1.28
+  registry:
+    # kubeadm 系统镜像原始仓库；containerd 的代理映射见顶层 mirrors.containerd。
+    # Docker 的 registry-mirrors 仅加速 DockerHub；需要时将此项改为可访问的系统镜像仓库。
+    imageRepository: registry.k8s.io
+  kubesphere:
+    enabled: false
+    version: v3.4.1
+    password: Sxxpqp.top1
+    storageClass: ""
+    installerSource: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
+  deploy:
+    concurrency: 3
+    timeout: 45m
+    knownHostsFile: ""  # 留空读取管理机 ~/.ssh/known_hosts；不跳过主机身份验证
+    outputDir: ""  # 默认 ~/.opskit/clusters/<name>，保存 kubeconfig 和阶段日志
+    nodeBinaries: {}  # 非 Linux 管理机或异构节点，填 {amd64: /path/opskit_linux_amd64, arm64: /path/opskit_linux_arm64}
+
 # kind 测试集群，不会连接或覆盖现有生产集群。
 kind:
+  version: v0.17.0
+  kubernetes:
+    version: v1.24.7
+  kubesphere:
+    enabled: false
+    version: v3.4.1
+    password: Sxxpqp.top1
+    storageClass: ""
+    installerSource: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
   name: kubesphere-341  # kind create/delete 等命令共用，--name 可覆盖
   workers: 2
   # 留空使用默认 ~/.kube/kind-<name>.config；相对路径以本配置文件为基准。
@@ -60,11 +132,12 @@ kind:
 
 # 项目镜像源基线：迁移自 linux/docker/containerd/mirrors.sh、docker/docker-mirror.sh
 # 以及 docs/infra-reference.md、aliyun-mirrors.md；内网地址需要运行环境可达。
+# k8s create 也直接读取此处：Docker 用 docker/docker_insecure_registries，containerd 用 containerd；没有第二套 registryMirrors。
 # 默认备份并写入，--dry-run 仅预览；标准 Docker 配置写入后自动重启服务；容器清单保持上游 image。
 mirrors:
   docker:
-      - https://index.dockerhub.sxxpqp.top
-      - https://dockerhub.ihome.sxxpqp.top:8443
+    - https://index.dockerhub.sxxpqp.top
+    - https://dockerhub.ihome.sxxpqp.top:8443
   # 沿用原 Docker 脚本的内网证书兼容设置；有可信证书时可删除相应项。
   docker_insecure_registries:
     - dockerhub.ihome.sxxpqp.top:8443
@@ -104,14 +177,6 @@ mirrors:
   pip: https://pypi.tuna.tsinghua.edu.cn/simple/
   maven: https://maven.aliyun.com/repository/public
 
-kubesphere:
-  # 留空读取唯一默认 StorageClass；不会自动安装 OpenEBS/NFS 或把 SC 改成默认。
-  storage_class: ""
-  # 沿用原 kind 流程的公开安装器源；仅 --kind 预加载时读取。
-  # 自建集群继续使用上游 image；此项不是个人阿里云 ACR 账号。
-  installer_source: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
-  # admin 初始密码；直接注入安装配置，须包含大小写字母和数字，不创建本地密码文件。
-  password: Sxxpqp.top1
 
 # 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
 # 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。

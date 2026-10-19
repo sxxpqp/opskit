@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/url"
@@ -17,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 type registryMirror struct {
@@ -302,18 +303,9 @@ func renderLanguage(tool string, old []byte, source string) ([]byte, error) {
 	}
 	return nil, errors.New("未知语言镜像源")
 }
-func runMirror(parent context.Context, args []string, out, diag io.Writer) (int, error) {
-	if len(args) == 0 {
-		return 2, errors.New("mirror docker|containerd|go|npm|pip|maven")
-	}
-	tool := args[0]
-	switch tool {
-	case "docker", "containerd", "go", "npm", "pip", "maven":
-	default:
-		return 2, fmt.Errorf("未知 mirror 类型: %s", tool)
-	}
-	f := flag.NewFlagSet("mirror "+tool, flag.ContinueOnError)
-	f.SetOutput(diag)
+func newMirrorCommand(parent context.Context, tool string, out, diag io.Writer) (*cobra.Command, error) {
+	cmd := &cobra.Command{Use: tool}
+	f := cmd.Flags()
 	configPath := f.String("config", defaultConfigPath, "统一配置文件")
 	dryRun := f.Bool("dry-run", false, "仅预览；默认备份并写入配置，标准 Docker 配置写入后重启服务")
 	file := f.String("file", "", "覆盖配置文件路径")
@@ -321,218 +313,216 @@ func runMirror(parent context.Context, args []string, out, diag io.Writer) (int,
 	kindName := f.String("kind", "", "修改指定 kind 的全部 containerd 节点；不修改宿主机")
 	kindBin := f.String("kind-bin", "kind", "kind 可执行文件")
 	timeout := f.Duration("timeout", 15*time.Minute, "任务超时")
-	if err := f.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+	bindCommand(cmd, func() (int, error) {
+		if f.NArg() != 0 || *timeout <= 0 {
+			return 2, errors.New("参数或 timeout 无效")
+		}
+		c, err := commandConfig(f, *configPath)
+		if err != nil {
+			return 2, err
+		}
+		setEnvFlag(f, "kind-bin", "OPSKIT_KIND_BIN")
+		setConfigFlag(f, "kind-bin", c.Kind.Binary)
+		*kindBin = configuredKindBinary(c, *kindBin)
+		ctx, cancel := context.WithTimeout(parent, *timeout)
+		defer cancel()
+		if *kindName != "" {
+			if tool != "containerd" || *file != "" {
+				return 2, errors.New("--kind 仅与 mirror containerd 一起使用，不能指定 --file")
+			}
+			err = mirrorKindNodes(ctx, *kindName, *kindBin, c.Mirrors.Containerd, !*dryRun, out, diag)
+			if err != nil {
+				return 1, err
+			}
 			return 0, nil
 		}
-		return 2, err
-	}
-	if f.NArg() != 0 || *timeout <= 0 {
-		return 2, errors.New("参数或 timeout 无效")
-	}
-	c, err := commandConfig(f, *configPath)
-	if err != nil {
-		return 2, err
-	}
-	setEnvFlag(f, "kind-bin", "OPSKIT_KIND_BIN")
-	setConfigFlag(f, "kind-bin", c.Kind.Binary)
-	*kindBin = configuredKindBinary(c, *kindBin)
-	ctx, cancel := context.WithTimeout(parent, *timeout)
-	defer cancel()
-	if *kindName != "" {
-		if tool != "containerd" || *file != "" {
-			return 2, errors.New("--kind 仅与 mirror containerd 一起使用，不能指定 --file")
-		}
-		err = mirrorKindNodes(ctx, *kindName, *kindBin, c.Mirrors.Containerd, !*dryRun, out, diag)
+		home, err := os.UserHomeDir()
 		if err != nil {
 			return 1, err
 		}
-		return 0, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return 1, err
-	}
-	if *file == "" {
+		if *file == "" {
+			switch tool {
+			case "docker":
+				if runtime.GOOS != "linux" {
+					return 2, errors.New("Docker Desktop 请显式 --file 指定配置导出文件；本机 daemon.json 自动定位仅支持 Linux")
+				}
+				*file = "/etc/docker/daemon.json"
+			case "containerd":
+				if runtime.GOOS != "linux" {
+					return 2, errors.New("宿主机 containerd 仅支持 Linux；其他平台可使用 --kind")
+				}
+				*file = "/etc/containerd/config.toml"
+			case "go":
+				b, e := commandOutput(ctx, nil, "go", "env", "GOENV")
+				if e != nil {
+					return 3, e
+				}
+				*file = strings.TrimSpace(string(b))
+				if *file == "off" || *file == "" {
+					return 2, errors.New("Go GOENV 已关闭，请显式 --file")
+				}
+			case "npm":
+				*file = filepath.Join(home, ".npmrc")
+			case "pip":
+				if runtime.GOOS == "windows" {
+					*file = filepath.Join(os.Getenv("APPDATA"), "pip", "pip.ini")
+				} else {
+					*file = filepath.Join(home, ".config", "pip", "pip.conf")
+				}
+			case "maven":
+				*file = filepath.Join(home, ".m2", "settings.xml")
+			}
+		}
+		old, err := readOptional(*file)
+		if err != nil {
+			return 1, err
+		}
+		var data, preview []byte
 		switch tool {
 		case "docker":
-			if runtime.GOOS != "linux" {
-				return 2, errors.New("Docker Desktop 请显式 --file 指定配置导出文件；本机 daemon.json 自动定位仅支持 Linux")
+			if len(c.Mirrors.Docker) == 0 {
+				return 2, errors.New("请填写 mirrors.docker")
 			}
-			*file = "/etc/docker/daemon.json"
-		case "containerd":
-			if runtime.GOOS != "linux" {
-				return 2, errors.New("宿主机 containerd 仅支持 Linux；其他平台可使用 --kind")
-			}
-			*file = "/etc/containerd/config.toml"
-		case "go":
-			b, e := commandOutput(ctx, nil, "go", "env", "GOENV")
-			if e != nil {
-				return 3, e
-			}
-			*file = strings.TrimSpace(string(b))
-			if *file == "off" || *file == "" {
-				return 2, errors.New("Go GOENV 已关闭，请显式 --file")
-			}
-		case "npm":
-			*file = filepath.Join(home, ".npmrc")
-		case "pip":
-			if runtime.GOOS == "windows" {
-				*file = filepath.Join(os.Getenv("APPDATA"), "pip", "pip.ini")
-			} else {
-				*file = filepath.Join(home, ".config", "pip", "pip.conf")
-			}
-		case "maven":
-			*file = filepath.Join(home, ".m2", "settings.xml")
-		}
-	}
-	old, err := readOptional(*file)
-	if err != nil {
-		return 1, err
-	}
-	var data, preview []byte
-	switch tool {
-	case "docker":
-		if len(c.Mirrors.Docker) == 0 {
-			return 2, errors.New("请填写 mirrors.docker")
-		}
-		for _, u := range c.Mirrors.Docker {
-			if !validURL(u) {
-				return 2, errors.New("无效 Docker mirror URL")
-			}
-		}
-		values := map[string]any{}
-		if len(old) > 0 {
-			if err = json.Unmarshal(old, &values); err != nil {
-				return 2, err
-			}
-		}
-		if values == nil {
-			return 2, errors.New("daemon.json 必须为 JSON 对象，不能是 null")
-		}
-		values["registry-mirrors"] = c.Mirrors.Docker
-		if len(c.Mirrors.DockerInsecure) > 0 {
-			seen := map[string]bool{}
-			merged := []string{}
-			if previous, ok := values["insecure-registries"]; ok {
-				items, ok := previous.([]any)
-				if !ok {
-					return 2, errors.New("现有 insecure-registries 必须为字符串数组")
+			for _, u := range c.Mirrors.Docker {
+				if !validURL(u) {
+					return 2, errors.New("无效 Docker mirror URL")
 				}
-				for _, item := range items {
-					value, ok := item.(string)
+			}
+			values := map[string]any{}
+			if len(old) > 0 {
+				if err = json.Unmarshal(old, &values); err != nil {
+					return 2, err
+				}
+			}
+			if values == nil {
+				return 2, errors.New("daemon.json 必须为 JSON 对象，不能是 null")
+			}
+			values["registry-mirrors"] = c.Mirrors.Docker
+			if len(c.Mirrors.DockerInsecure) > 0 {
+				seen := map[string]bool{}
+				merged := []string{}
+				if previous, ok := values["insecure-registries"]; ok {
+					items, ok := previous.([]any)
 					if !ok {
-						return 2, errors.New("现有 insecure-registries 包含非字符串")
+						return 2, errors.New("现有 insecure-registries 必须为字符串数组")
+					}
+					for _, item := range items {
+						value, ok := item.(string)
+						if !ok {
+							return 2, errors.New("现有 insecure-registries 包含非字符串")
+						}
+						if !seen[value] {
+							seen[value] = true
+							merged = append(merged, value)
+						}
+					}
+				}
+				for _, value := range c.Mirrors.DockerInsecure {
+					if strings.ContainsAny(value, "/\\\r\n\t ") || value == "" {
+						return 2, errors.New("docker_insecure_registries 必须为 host[:port]")
 					}
 					if !seen[value] {
 						seen[value] = true
 						merged = append(merged, value)
 					}
 				}
+				values["insecure-registries"] = merged
 			}
-			for _, value := range c.Mirrors.DockerInsecure {
-				if strings.ContainsAny(value, "/\\\r\n\t ") || value == "" {
-					return 2, errors.New("docker_insecure_registries 必须为 host[:port]")
-				}
-				if !seen[value] {
-					seen[value] = true
-					merged = append(merged, value)
-				}
-			}
-			values["insecure-registries"] = merged
-		}
 
-		data, err = json.MarshalIndent(values, "", "  ")
-		previewSettings := map[string]any{"registry-mirrors": c.Mirrors.Docker}
-		if len(c.Mirrors.DockerInsecure) > 0 {
-			previewSettings["insecure-registries"] = c.Mirrors.DockerInsecure
-		}
-		preview, _ = json.MarshalIndent(previewSettings, "", "  ")
-	case "containerd":
-		files, e := renderHosts(c.Mirrors.Containerd)
-		if e != nil {
-			return 2, e
-		}
-		if len(old) == 0 {
-			return 2, errors.New("containerd 主配置不存在，先安装 containerd")
-		}
-		updated, e := configureRegistry(string(old), false)
-		if e != nil {
-			return 2, e
-		}
-		data = []byte(updated)
-		fmt.Fprintf(out, "containerd: %s → config_path=/etc/containerd/certs.d；将写入 %d 份 hosts.toml\n", *file, len(files))
-		if *dryRun {
-			return 0, nil
-		}
-		if filepath.Clean(*file) != "/etc/containerd/config.toml" {
-			return 2, errors.New("宿主机写入仅允许标准 config.toml 路径，以保证 certs.d 对应实际运行时")
-		}
-		// Validate with the installed runtime before touching its live configuration.
-		tmp, e := os.CreateTemp("", "opskit-containerd-*.toml")
-		if e != nil {
-			return 1, e
-		}
-		defer os.Remove(tmp.Name())
-		if _, e = tmp.Write(data); e != nil {
-			tmp.Close()
-			return 1, e
-		}
-		if e = tmp.Close(); e != nil {
-			return 1, e
-		}
-		if _, e = commandOutput(ctx, nil, "containerd", "--config", tmp.Name(), "config", "dump"); e != nil {
-			return 1, e
-		}
-		for registry, content := range files {
-			if e = writeConfigFile(filepath.Join("/etc/containerd/certs.d", registry, "hosts.toml"), content, out); e != nil {
+			data, err = json.MarshalIndent(values, "", "  ")
+			previewSettings := map[string]any{"registry-mirrors": c.Mirrors.Docker}
+			if len(c.Mirrors.DockerInsecure) > 0 {
+				previewSettings["insecure-registries"] = c.Mirrors.DockerInsecure
+			}
+			preview, _ = json.MarshalIndent(previewSettings, "", "  ")
+		case "containerd":
+			files, e := renderHosts(c.Mirrors.Containerd)
+			if e != nil {
+				return 2, e
+			}
+			if len(old) == 0 {
+				return 2, errors.New("containerd 主配置不存在，先安装 containerd")
+			}
+			updated, e := configureRegistry(string(old), false)
+			if e != nil {
+				return 2, e
+			}
+			data = []byte(updated)
+			fmt.Fprintf(out, "containerd: %s → config_path=/etc/containerd/certs.d；将写入 %d 份 hosts.toml\n", *file, len(files))
+			if *dryRun {
+				return 0, nil
+			}
+			if filepath.Clean(*file) != "/etc/containerd/config.toml" {
+				return 2, errors.New("宿主机写入仅允许标准 config.toml 路径，以保证 certs.d 对应实际运行时")
+			}
+			// Validate with the installed runtime before touching its live configuration.
+			tmp, e := os.CreateTemp("", "opskit-containerd-*.toml")
+			if e != nil {
 				return 1, e
 			}
-		}
-	default:
-		if *source == "" {
-			switch tool {
-			case "go":
-				*source = c.Mirrors.Go
-			case "npm":
-				*source = c.Mirrors.NPM
-			case "pip":
-				*source = c.Mirrors.Pip
-			case "maven":
-				*source = c.Mirrors.Maven
+			defer os.Remove(tmp.Name())
+			if _, e = tmp.Write(data); e != nil {
+				tmp.Close()
+				return 1, e
+			}
+			if e = tmp.Close(); e != nil {
+				return 1, e
+			}
+			if _, e = commandOutput(ctx, nil, "containerd", "--config", tmp.Name(), "config", "dump"); e != nil {
+				return 1, e
+			}
+			for registry, content := range files {
+				if e = writeConfigFile(filepath.Join("/etc/containerd/certs.d", registry, "hosts.toml"), content, out); e != nil {
+					return 1, e
+				}
+			}
+		default:
+			if *source == "" {
+				switch tool {
+				case "go":
+					*source = c.Mirrors.Go
+				case "npm":
+					*source = c.Mirrors.NPM
+				case "pip":
+					*source = c.Mirrors.Pip
+				case "maven":
+					*source = c.Mirrors.Maven
+				}
+			}
+			data, err = renderLanguage(tool, old, *source)
+			if err == nil {
+				preview, err = renderLanguage(tool, nil, *source)
 			}
 		}
-		data, err = renderLanguage(tool, old, *source)
-		if err == nil {
-			preview, err = renderLanguage(tool, nil, *source)
+		if err != nil {
+			return 2, err
 		}
-	}
-	if err != nil {
-		return 2, err
-	}
-	fmt.Fprintf(out, "mirror %s: %s\n", tool, *file)
-	if *dryRun {
-		_, err = out.Write(preview)
-		fmt.Fprintln(out, "\n预览完成；去掉 --dry-run 写入并备份。")
-		return 0, err
-	}
-	if err = writeConfigFile(*file, data, out); err != nil {
-		return 1, err
-	}
-	if tool == "docker" && runtime.GOOS == "linux" && filepath.Clean(*file) == "/etc/docker/daemon.json" {
-		fmt.Fprintln(out, "配置已写入；正在重启 docker 服务。")
-		if err = commandRun(ctx, nil, out, diag, "systemctl", "restart", "docker"); err != nil {
-			return 1, fmt.Errorf("配置已写入，但重启 docker 失败: %w", err)
+		fmt.Fprintf(out, "mirror %s: %s\n", tool, *file)
+		if *dryRun {
+			_, err = out.Write(preview)
+			fmt.Fprintln(out, "\n预览完成；去掉 --dry-run 写入并备份。")
+			return 0, err
 		}
-		if err = commandRun(ctx, nil, out, diag, "systemctl", "is-active", "--quiet", "docker"); err != nil {
-			return 1, fmt.Errorf("docker 服务未通过运行状态检查: %w", err)
+		if err = writeConfigFile(*file, data, out); err != nil {
+			return 1, err
 		}
-		fmt.Fprintln(out, "docker 服务已重启并通过运行状态检查。")
-	} else if tool == "docker" || tool == "containerd" {
-		fmt.Fprintf(out, "配置已写入；请在维护窗口重启 %s 服务。\n", tool)
-	}
-	return 0, nil
+		if tool == "docker" && runtime.GOOS == "linux" && filepath.Clean(*file) == "/etc/docker/daemon.json" {
+			fmt.Fprintln(out, "配置已写入；正在重启 docker 服务。")
+			if err = commandRun(ctx, nil, out, diag, "systemctl", "restart", "docker"); err != nil {
+				return 1, fmt.Errorf("配置已写入，但重启 docker 失败: %w", err)
+			}
+			if err = commandRun(ctx, nil, out, diag, "systemctl", "is-active", "--quiet", "docker"); err != nil {
+				return 1, fmt.Errorf("docker 服务未通过运行状态检查: %w", err)
+			}
+			fmt.Fprintln(out, "docker 服务已重启并通过运行状态检查。")
+		} else if tool == "docker" || tool == "containerd" {
+			fmt.Fprintf(out, "配置已写入；请在维护窗口重启 %s 服务。\n", tool)
+		}
+		return 0, nil
+	})
+	return cmd, nil
 }
+
 func mirrorKindNodes(ctx context.Context, name, binary string, registries map[string]registryMirror, apply bool, out, diag io.Writer) error {
 	if !clusterNamePattern.MatchString(name) {
 		return errors.New("非法 kind 集群名")

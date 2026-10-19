@@ -49,6 +49,7 @@ func TestKubeSpherePasswordConfiguration(t *testing.T) {
 	if err := yaml.Unmarshal(templates.ConfigTemplate, &defaults); err != nil {
 		t.Fatal(err)
 	}
+	defaults.projectComponents()
 	if defaults.KubeSphere.Password != "Sxxpqp.top1" {
 		t.Fatal("incorrect default password")
 	}

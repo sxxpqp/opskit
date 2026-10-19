@@ -3,11 +3,11 @@ package app
 import (
 	"bytes"
 	"context"
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/sxxpqp/opskit"
 )
 
@@ -25,7 +25,7 @@ func TestConfigStrictValidation(t *testing.T) {
 			if err := os.WriteFile(p, []byte(tc.body), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if err := loadConfig(p, true, flag.NewFlagSet("test", flag.ContinueOnError)); err == nil {
+			if err := loadConfig(p, true, pflag.NewFlagSet("test", pflag.ContinueOnError)); err == nil {
 				t.Fatal("invalid config accepted")
 			}
 		})
@@ -38,7 +38,7 @@ func TestConfigPrecedenceAndRelativePaths(t *testing.T) {
 	if err := os.WriteFile(p, []byte(body), 0600); err != nil {
 		t.Fatal(err)
 	}
-	f := flag.NewFlagSet("test", flag.ContinueOnError)
+	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	bucket := f.String("bucket", "", "bucket")
 	style := f.Bool("path-style", true, "style")
 	dir := f.String("directory", "", "dir")
@@ -110,7 +110,7 @@ func TestProviderSelection(t *testing.T) {
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 				t.Fatal(err)
 			}
-			f := flag.NewFlagSet("test", flag.ContinueOnError)
+			f := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			var s storage
 			s.flags(f)
 			if err := loadConfig(path, true, f, &s); err != nil {
@@ -147,7 +147,7 @@ func TestProviderErrors(t *testing.T) {
 	} {
 		path := filepath.Join(t.TempDir(), "config.yaml")
 		os.WriteFile(path, []byte("schema_version: 1\n"+body), 0600)
-		if err := loadConfig(path, true, flag.NewFlagSet("test", flag.ContinueOnError)); err == nil {
+		if err := loadConfig(path, true, pflag.NewFlagSet("test", pflag.ContinueOnError)); err == nil {
 			t.Fatal("invalid provider configuration accepted")
 		}
 	}

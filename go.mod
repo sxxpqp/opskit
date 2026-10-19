@@ -9,6 +9,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.14
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
 	github.com/aws/smithy-go v1.28.5
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
+	golang.org/x/crypto v0.58.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -26,4 +29,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 )

@@ -2,7 +2,7 @@
 
 main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创建；正式版 v0.1.5 仍使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
 
-版本集中在 `versions.kind` / `versions.kubernetes` / `versions.kubectl` / `versions.kubesphere`；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和初始密码放在 `kubesphere` 下。完整带注释模板见 `config.example.yaml`。
+版本按安装类型隔离：Go SDK 使用 `go.version`，kind 使用 `kind.version` / `kind.kubernetes.version`，K8s 使用 `k8s.kubernetes.version` 和各组件的 version；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和初始密码放在 `kind.kubesphere` / `k8s.kubesphere` 下。完整带注释模板见 `config.example.yaml`。
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
@@ -10,6 +10,8 @@ main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创�
 
 kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和固定默认值；etcd/S3 保留已有参数及 AWS 默认凭据链语义。非空 YAML 账号信息仍按原规则优先于 AWS 环境凭据。请勿把全局的配置优先级理解成秘密管理机制。
 
+
+顶层 `opskit --help` 和各命令组帮助由 Cobra 从实际命令树生成，分行显示命令与中文说明。帮助文字中的 `|` 表示任选一个子命令，实际执行使用空格，例如 `opskit etcd check`。`k8s create` 的集群名由 YAML `k8s.name` 指定，例如 `k8s: {name: sxxpqp}`（还需填写完整节点等配置），不接受 `k8s create sxxpqp`。缺少配置时执行 `opskit config init` 并编辑模板，创建前使用 `opskit k8s create --config config/config.yaml --dry-run` 检查。
 
 完整字段说明在 [config.example.yaml](../config.example.yaml)。以下示例均使用当前实现支持的字段。
 
@@ -154,13 +156,15 @@ s3:
 - Maven：`aliyun-mirrors.md` 中的公开聚合源。
 - kind KS 安装器：原 `kubernetes/kubesphere/kind-3.4.1` 使用的公开 3.4.1 镜像源；自建集群不读取这个 kind 专用模板项。
 
-`kind.kubeconfig`、`kind.binary`、KS storage_class 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。
+`kind.kubeconfig`、`kind.binary`、KS storageClass 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。
 
 ## 运行时版本与安装源（main，未发布）
 
+Docker 的 script/binary 安装均自动配置 inotify：备份后更新 `/etc/sysctl.d/99-inotify.conf`，保留其他配置，将 `fs.inotify.max_user_instances` 设置为至少 8192、`fs.inotify.max_user_watches` 至少 524288。已有运行值或该文件中更高的持久值不会降低。使用 `sysctl -p /etc/sysctl.d/99-inotify.conf` 应用并回读确认；失败返回错误，不继续启动安装。下载与包校验失败不会写此配置，`--dry-run` 也不修改内核参数。已有 Docker 的拒绝覆盖规则保持不变；此前安装的主机需手动应用，宿主机限制应在宿主机设置。
+
 Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接受 `--apply`；需要预览时添加 `--dry-run`。
 
-`versions.docker`、`cri_dockerd`、`containerd`、`runc`、`cni_plugins` 均为完整 vX.Y.Z；安装命令的 `--version` 优先于对应配置。containerd 另支持 `--runc-version` 和 `--cni-version`。Docker 27.3.1、cri-dockerd 0.3.22、containerd 2.1.3、CNI 1.5.1 来自 linux 项目；runc 固定为 1.2.6，不沿用原脚本的 1.1.10，不做 glibc 失败时静默降级。此版本组合尚未做真机兼容验收。
+`k8s.docker.version`、`cri_dockerd`、`containerd`、`runc`、`cni_plugins` 均为完整 vX.Y.Z；安装命令的 `--version` 优先于对应配置。containerd 另支持 `--runc-version` 和 `--cni-version`。Docker 27.3.1、cri-dockerd 0.3.22、containerd 2.1.3、CNI 1.5.1 来自 linux 项目；runc 固定为 1.2.6，不沿用原脚本的 1.1.10，不做 glibc 失败时静默降级。此版本组合尚未做真机兼容验收。
 
 `install.docker.method` 为 script 或 binary，`install.docker.mirror` 为官方脚本的软件包源（默认清华 URL，也支持 Aliyun / AzureChinaCloud），和 `mirrors.docker` 的镜像拉取源分别设置。脚本源 `install.docker.script` 默认通过 Nexus 代理获取固定提交的官方脚本；二进制源 `install.docker.binary_base` 按 x86_64/aarch64 拼接 Docker 静态包。`install.containerd.download_base`、`install.runc.download_base`、`install.cni_plugins.download_base`、`install.cri_dockerd.download_base` 分别用于对应组件，默认使用项目 Nexus GitHub release 代理；可改成 https://github.com。
 
@@ -170,23 +174,23 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
 
-`kind create` 默认执行创建，版本仍由 `versions.kubernetes` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群默认执行，集群名按 `--name` > `OPSKIT_KIND_NAME` > `kind.name` > 默认值解析，无需重复确认名称，`--dry-run` 仅预览。
+`kind create` 默认执行创建，版本仍由 `kind.kubernetes.version` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群默认执行，集群名按 `--name` > `OPSKIT_KIND_NAME` > `kind.name` > 默认值解析，无需重复确认名称，`--dry-run` 仅预览。
 
 ## kubectl 安装（main，未发布）
 
 `opskit kubectl`、`opskit kubectl -h`、`opskit kubectl --help` 显示说明；`opskit kubectl install -h/--help` 显示全部参数。帮助不依赖配置或外部工具。
 
 ```yaml
-versions:
-  kubernetes: v1.24.7
-  kubectl: ""  # 留空跟随 kubernetes，也可明确固定独立版本
+k8s:
+  kubernetes:
+    version: v1.24.7  # kubeadm/kubelet/kubectl 同版
 install:
   kubectl:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
   download_dir: ""  # 默认用户目录 .opskit/downloads
 ```
 
-优先级为 CLI `--version` > versions.kubectl > versions.kubernetes；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认 Nexus 代理；空环境变量不覆盖 YAML。默认使用 Nexus `kubernetes-binaries` 代理。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
+优先级为 CLI `--version` > k8s.kubernetes.version；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认 Nexus 代理；空环境变量不覆盖 YAML。默认使用 Nexus `kubernetes-binaries` 代理。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
 
 默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
@@ -204,6 +208,9 @@ install:
 
 | 下载内容 | YAML 配置项 |
 |---|---|
+| Calico 固定版本清单 | `install.calico.download_base`（摘要为 `install.calico.sha256`） |
+| Go SDK 压缩包 | `install.go.download_base` |
+| Go 发布 SHA-256 元数据 | `install.go.checksum_url` |
 | kind 二进制和校验文件 | `install.kind.download_base` |
 | kubectl 二进制和校验文件 | `install.kubectl.download_base` |
 | Docker 官方安装脚本 | `install.docker.script` |
@@ -229,21 +236,21 @@ install:
 
 运行 `opskit docker install --version v27.3.1`，或用 `--mirror https://mirrors.tuna.tsinghua.edu.cn/docker-ce` 覆盖软件包源。URL 通过子进程环境 `DOWNLOAD_URL` 传递，此时不传脚本的 `--mirror`，避免其覆盖该地址；Aliyun / AzureChinaCloud 仍通过官方 `--mirror` 传递。
 
-清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `install.docker.script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `versions.docker` / `--version` 指定。
+清华地址是 Docker CE 软件包仓库，不是脚本下载地址，也不是 Docker Hub 镜像源。清华文档的脚本仍来自 GitHub；本项目模板使用既有 Nexus raw 代理映射，固定官方脚本提交，实际可达性需目标环境验证。不能访问该代理时，将 `install.docker.script` 改为你可访问的官方脚本托管地址。Docker 目标版本仍由 `k8s.docker.version` / `--version` 指定。
 
 ## kind 下载源分组
 
 kind 安装文件的下载地址使用组件独立配置：
 
 ```yaml
-versions:
-  kind: v0.17.0
+kind:
+  version: v0.17.0
 install:
   kind:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 ```
 
-CLI `--download-base` > `KIND_DOWNLOAD_BASE` > `install.kind.download_base` > 模板默认值。版本仍由 `--version` 或 `versions.kind` 指定，不自动使用 latest。旧 `install.kind_download_base` 已移除，需迁移到上述嵌套结构。
+CLI `--download-base` > `KIND_DOWNLOAD_BASE` > `install.kind.download_base` > 模板默认值。版本仍由 `--version` 或 `kind.version` 指定，不自动使用 latest。旧 `install.kind_download_base` 已移除，需迁移到上述嵌套结构。
 
 ## install 统一组件分组
 
@@ -283,7 +290,7 @@ install:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries
 ```
 
-例如 v1.24.7 的 Linux amd64 会请求 `<base>/v1.24.7/bin/linux/amd64/kubectl` 和 `kubectl.sha256`。下载、SHA-256 校验及执行 `kubectl version` 的安装检查保持不变。版本仍用 `--version v1.24.7` 或 `versions.kubectl` 固定，不取 latest。
+例如 v1.24.7 的 Linux amd64 会请求 `<base>/v1.24.7/bin/linux/amd64/kubectl` 和 `kubectl.sha256`。下载、SHA-256 校验及执行 `kubectl version` 的安装检查保持不变。版本仍用 `--version v1.24.7` 或 `k8s.kubernetes.version` 固定，不取 latest。
 
 ```sh
 opskit kubectl install --version v1.24.7 --dry-run
@@ -303,7 +310,7 @@ KS 提交 ClusterConfiguration 后每 5 秒读取资源 JSON，等待 `status.co
 
 KS 安装提交配置后先执行 `rollout status deployment/ks-installer`，等待期限使用安装总超时的剩余时间，就绪后输出最近 100 行安装器日志，再继续轮询 core 状态及检查核心 Deployment。不使用阻塞的 `logs -f`；需要持续查看时可在另一个终端执行 `kubectl -n kubesphere-system logs deployment/ks-installer -f`。
 
-KS 初始账号为 `admin`；`kubesphere.password` 默认 `Sxxpqp.top1`，`--password` 可覆盖。直接以明文注入安装配置，不创建本地密码文件。旧 `password_file` 和 `--password-file` 已移除，需迁移为 `password`。仅影响全新安装，不会修改已安装集群的账号密码。密码须包含大写字母、小写字母和数字，长度为 8～64 字节，预检时校验；真实 KS 登录尚未验证。
+KS 初始账号为 `admin`；`k8s.kubesphere.password` 默认 `Sxxpqp.top1`，`--password` 可覆盖。直接以明文注入安装配置，不创建本地密码文件。旧 `password_file` 和 `--password-file` 已移除，需迁移为 `password`。仅影响全新安装，不会修改已安装集群的账号密码。密码须包含大写字母、小写字母和数字，长度为 8～64 字节，预检时校验；真实 KS 登录尚未验证。
 
 KS 安装总超时默认 45 分钟，`--timeout 60m` 可延长。core enabled 后先将三个核心 Deployment 的 `progressDeadlineSeconds` 设为该总超时的秒数，再检查 rollout，避免服务端进度期限先于客户端等待结束。整个流程仍受同一个总期限约束。
 
@@ -314,3 +321,169 @@ containerd registry 配置识别支持 `plugins."io.containerd.grpc.v1.cri"` / `
 kind 节点的默认 containerd 配置可能仅声明 `.registry.mirrors` 子表，而省略 `.registry` 父表。`mirror containerd --kind NAME` 支持补齐该父表、设置 certs.d 并迁移旧 mirror；保留 sandbox_image、运行时和快照设置，旧认证/TLS 配置仍要求人工迁移。宿主机旧 mirror 配置仍不自动迁移。
 
 kind mirror 重启节点 containerd 后，每秒检查 CRI，最多等待 60 秒（受 mirror 总超时约束）；就绪后才验证镜像拉取并处理下一个节点。等待失败输出该节点 containerd 的 systemd 状态、最近 50 行日志及备份目录，便于区分启动延迟和配置错误。
+
+
+## K8s SSH 集群部署
+
+新入口 `opskit k8s create --config config/config.yaml`，默认执行，`--dry-run` 只读取和校验配置与本地网络清单，不读取认证环境变量、不连接 SSH、不下载或修改节点。不依赖 KK；只参考其 hosts/roleGroups 配置习惯。完整模板见仓库 `config.example.yaml`。
+
+### 配置与版本迁移
+
+旧全局 `versions`、顶层 `kubeadm` 和顶层 `kubesphere` 已删除，不保留兼容别名。kind 使用 `kind.version`、`kind.kubernetes.version`、`kind.kubesphere`；K8s 及独立运行时安装使用 `k8s` 下的对应组件配置。kubeadm/kubelet/kubectl 只有一个版本入口 `k8s.kubernetes.version`，不接受 `k8s.kubectl.version` 等独立版本字段。命令 `--version` 只覆盖该次操作；CLI 参数仍优先。
+
+```yaml
+schema_version: 1
+k8s:
+  name: sxxpqp
+  hosts:
+    - {name: master1, address: 192.168.10.10, internalAddress: 192.168.10.10, port: 22, user: root, password: "请填写SSH密码"}
+    # - {name: worker1, address: 192.168.10.11, internalAddress: 192.168.10.11, port: 22, user: root, password: "请填写SSH密码"}
+    # 支持 privateKeyPath、privateKeyPassphraseEnv；密码也可改为 passwordEnv。
+    # 普通用户默认免密 sudo，需要密码时用 sudoPassword / sudoPasswordEnv。
+  roleGroups:
+    etcd: [master1]
+    master: [master1]
+    # worker: [worker1]
+  controlPlaneEndpoint: {address: 192.168.10.10, port: 6443}
+  kubernetes: {version: v1.24.7, containerManager: containerd, clusterName: cluster.local}
+  containerd: {version: v1.7.24}
+  runc: {version: v1.2.6}
+  criTools: {version: v1.24.2}
+  cniPlugins: {version: v1.5.1}
+  docker: {version: v27.3.1}
+  criDockerd: {version: v0.3.22}
+  network:
+    kubePodsCIDR: 10.244.0.0/16
+    kubeServiceCIDR: 10.96.0.0/12
+    manifest: ""  # 自动安装固定版本 Calico；本地文件可覆盖
+    calico: {version: v3.26.5}
+  registry:
+    imageRepository: registry.k8s.io
+  kubesphere: {enabled: false, version: v3.4.1, password: Sxxpqp.top1, storageClass: ""}
+  deploy:
+    concurrency: 3
+    timeout: 45m
+    knownHostsFile: "" # 默认管理机 ~/.ssh/known_hosts
+    outputDir: "" # 默认 ~/.opskit/clusters/<name>
+    nodeBinaries: {} # 非 Linux 管理机/异构节点指定 Linux opskit 文件路径
+```
+
+样例保留当前旧 KS 测试环境的固定版本，并非新生产环境推荐。首版使用 kubeadm v1beta3，支持 Kubernetes 1.24～1.30；不猜测更高版本配置。Kubernetes 1.24/1.25 拒绝 containerd 2.x；1.26+ 的 containerd 1.6 至少需要 1.6.15，其他搭配仍需真机验证。criTools 与 Kubernetes 必须同 minor。选择 docker 时使用 Docker 二进制包及 cri-dockerd，不安装独立 containerd/runc；k8s.containerd/runc 仅用于 containerd 路线。
+
+### 节点与认证
+
+address 用于 SSH，internalAddress 用于 API/kubelet 集群通信。省略 internalAddress 时使用 address，因此 address 必须是可用于集群通信的 IPv4；多网卡时必须显式填写本机正确内网地址。首版仅支持一个 master，同节点 kubeadm etcd；roleGroups.etcd 必须等于 master，不支持独立 etcd 或 HA。每个 hosts 节点须出现在 master 或 worker 中；worker 注释时不会连接该节点。只有一个 master 且无 worker 时，会移除控制平面的调度 taint。
+
+密码和私钥互斥，password 与 passwordEnv 互斥。没有密码和私钥时使用管理机 SSH Agent。普通用户自动 sudo；未填 sudoPassword/sudoPasswordEnv 则使用 sudo -n，填写则通过标准输入传入，不放进命令参数。requiretty 等强制交互 sudo 策略需由管理员提前调整。不会自动信任新 SSH 主机密钥，也不使用 InsecureIgnoreHostKey；先通过受信渠道核对指纹并登记 known_hosts，密钥变化直接报错。相对文件路径基于 YAML 所在目录，不展开 ~。
+
+管理机需可访问 SSH 和配置的下载源。节点需运行 Linux amd64/arm64 + systemd，并预装 tar、modprobe、sysctl、swapoff、conntrack、socat、iptables、ip、tc、mount、nsenter、ethtool。全节点连接、root/sudo 和依赖预检全部通过前不安装或修改系统。OS 依赖通过发行版包管理器由管理员预先安装，不自动选择 apt/yum 软件包版本。
+
+### 下载、二进制与镜像
+
+下载源继续统一放在 `install.<component>.download_base` / `install.docker.binary_base`，默认只定义于模板。管理机按节点架构下载一次，校验官方 SHA-256（kubeadm/kubelet/kubectl/crictl/containerd/runc/CNI plugins），然后分发。Docker 和 cri-dockerd 包使用 HTTPS 传输及节点实际版本检查，管理机另计算摘要验证分发内容，不把该摘要称为独立上游签名或摘要认证。节点离线缓存中的文件再次计算摘要，缺项不回源下载。各本地安装器继续验证实际二进制版本，不静默接受目标版本不一致。
+
+Linux 同架构管理机直接分发当前 opskit 可执行文件。非 Linux 管理机或异构架构需配置 `nodeBinaries: {amd64: /path/opskit_linux_amd64, arm64: /path/opskit_linux_arm64}`；文件必须从相同代码构建，不得拿缺少内部节点协议的旧 Release 替代。目标主机不需要 Go。现有仓库发布包仍区分操作系统/架构；本功能尚未完成发布，不宣称当前公开附件已支持。
+
+`k8s.registry.imageRepository` 仅控制 kubeadm 系统镜像仓库。运行时镜像源统一读取顶层 `mirrors`：Docker 使用 `mirrors.docker` / `mirrors.docker_insecure_registries`；containerd 使用完整的 `mirrors.containerd`，保留各仓库 endpoint、server、skip_verify、override_path，不再由 DockerHub 列表覆盖。重复的 `k8s.registry.registryMirrors` 已删除，旧配置须移除此字段，读取时会报未知字段，不保留别名。Docker 的 registry-mirrors 仅加速 DockerHub；使用 Docker 时请将 imageRepository 按需设置为可访问的系统镜像仓库，insecure-registries 本身不会重写其他仓库地址。`network.manifest` 留空自动下载固定版本 Calico，校验 SHA-256 并按 Pod CIDR 渲染；填入本地 YAML 则优先使用，不下载、不改写，由部署者确认镜像、版本和 Pod CIDR 配套。CNI plugins 二进制不等于网络插件 Deployment/DaemonSet。网络和存储清单可以按环境准备，KS 默认关闭，不会自动安装存储驱动。
+
+### 执行、重跑与结果
+
+并行准备节点：备份 fstab 并禁用其中 swap，加载 overlay/br_netfilter，持久化 IPv4/bridge 转发参数，安装所选运行时和 Kubernetes 工具，配置镜像源和 systemd。systemd swap unit、zram 等额外 swap 来源需管理员自行禁用，init/join 再检查实际 swap。
+
+控制平面初始化后应用网络清单，所有节点加入后自动路径等待 Calico DaemonSet 和控制器就绪；生成短期 token（30 分钟）及 CA 公钥摘要，自动传给 worker 完成 kubeadm join，随后撤销本次 token。join 凭据只存在于受保护的传输文件和临时配置中，正常结束/失败尽力清除；日志过滤 join token。管理机断电等无法执行清理时，token 仍受 TTL 限制。不会跳过发现过程中的 CA 校验。
+
+管理机保存 0600 kubeconfig 和阶段日志，默认位置 `~/.opskit/clusters/<name>`，不覆盖用户 ~/.kube/config。每个节点在 `/var/lib/opskit/clusters/<name>/state.json` 记录阶段、目标版本指纹及集群 CA；重跑核对实际工具版本和 CA，跳过已完成安装，已加入目标集群的 worker 不重复加入。版本/网络目标发生变化、属于其他集群、存在未管理的配置或半安装工具时明确报错，不盲目升级/覆盖/reset。若进程被强制终止留下 deploy.lock，需先确认没有部署运行再人工处理。
+
+最终按配置中的节点名称逐一确认 Ready；缺失节点不视为成功。KubeSphere 仅 enabled=true 时安装，沿用前置条件和已有实例保护，不能将创建集群当作升级 KS 的入口。用户选择开启 KS 时仍需提供可用的默认或指定 StorageClass。
+
+本地维护命令 `opskit kubeadm install/prepare/init/join` 保留，版本和网络默认从 k8s 获取；init 的 advertise-address、join 的 endpoint/token/CA hash 使用 CLI 显式传入。install 不覆盖已存在工具；prepare/init/join 不接受已有节点数据。所有命令支持 --dry-run，拒绝旧 --apply。
+
+已验证：本地 SSH 认证与 host key 拒绝、sudo stdin、下载/离线校验、模拟多节点编排、配置隔离、worker 自动加入顺序与所有预期节点的就绪判定。尚未验证真实多服务器的服务启动、网络连通性、重跑恢复和 KS 端到端安装；HA、升级、删除和 SSH 密码交互输入尚未实现。
+
+重跑控制平面初始化时先核对服务端实际 Kubernetes 版本，再应用网络清单，版本不匹配直接停止。运行时等待要求 CRI 的 RuntimeReady=true，不能只以 info 命令成功为准。单节点模式仅移除 master/control-plane 的 NoSchedule taint，保留其他 taint，并使用 resourceVersion 防止覆盖并发更新；API/权限错误会返回，不再忽略。
+
+管理机向每个节点阶段传递总超时的剩余时间，节点执行器使用同一剩余期限，不会为每个阶段重新开始完整的 45 分钟等待；SSH 中断时仍由节点自身的期限约束子命令。
+
+## Go SDK 安装与代理
+
+```yaml
+schema_version: 1
+go:
+  version: 1.26.2
+install:
+  go:
+    download_base: https://go.dev/dl
+    checksum_url: https://go.dev/dl/?mode=json&include=all
+mirrors:
+  go: https://goproxy.cn,direct
+```
+
+```sh
+opskit go install --dry-run
+opskit go install
+opskit go install --version 1.27.2 --proxy https://goproxy.cn,direct
+opskit mirror go  # 后续仅修改代理
+```
+
+版本优先级为 `--version` > `go.version` > 模板固定版本 1.26.2；接受完整 `1.X.Y`、`go1.X.Y` 或 `v1.X.Y`，不接受 latest/rc/beta。Go SDK 版本与 kind、K8s 无关。仅支持当前机器的 Linux/macOS amd64、arm64，不进行跨平台安装；Windows 使用此命令会报不支持。
+
+下载地址为 `<download_base>/go<version>.<os>-<arch>.tar.gz`。下载根地址优先级为 `--go-download-base` > `GO_DOWNLOAD_BASE` > `install.go.download_base` > 模板默认值；此环境变量只影响 Go SDK。发布元数据由 `--checksum-url` > `install.go.checksum_url` > 模板默认值提供，格式与 Go 官方下载 JSON 相同，必须包含目标版本、精确文件名和有效 SHA-256。镜像仅提供压缩包时可以保留官方元数据地址；离线/内网部署需同时提供可访问的元数据源。校验或版本不匹配会失败，不静默换源或换版本。
+
+`--download-dir` 或 `install.download_dir` 控制保留下载位置，默认 `~/.opskit/downloads`。完整 SDK 从暂存目录解压并校验后移动到 `~/.local/share/opskit/go/go<version>`，`--install-dir` 可覆盖；不会向已有目录叠加文件，同版本重装请使用新目录。`--link-dir` 覆盖 go/gofmt 入口目录，默认复用 PATH 中可写目录；其他来源的入口不会覆盖，PATH 遮挡会报错。新版本安装可切换默认版本目录下的 opskit 托管入口；自定义目录的旧入口需要自行处理。没有修改调用进程的 PATH，配置待生效时按输出更新当前 shell 或重开终端。
+
+安装后读取新 SDK 的 `go env GOENV`，备份后只更新该文件的 `GOPROXY`，保留其余设置。代理优先级为 `--proxy` > `mirrors.go` > 模板默认代理。配置作用于执行命令的用户，sudo/root 执行不会替其他用户配置。`GOENV=off` 或文件写入失败会返回错误，SDK 可能已经安装，应根据错误处理代理及入口。`GOPROXY` 环境变量仍会覆盖文件配置；检测到冲突会提示。继承的 `GOROOT` / `GOTOOLCHAIN` 不参与安装版本验证，已有 GOROOT 应由用户移除或调整；不修改 GOSUMDB。`--dry-run` 不下载、不调用 Go、不写 SDK、代理或 PATH。
+
+本地测试使用模拟 SDK 和 HTTP 服务覆盖完整流程、校验失败、危险归档、配置备份及参数优先级；不代表已经完成真实 Go SDK 的部署验收。
+
+## Cobra 命令与 Shell 补全
+
+全部命令由 Cobra v1.10.2 / pflag 解析，命令层级和配置键保持不变。使用 `opskit --help`、`opskit kind --help`、`opskit help kind`、`opskit kind help` 或 `opskit kind create --help` 逐层查看帮助。帮助页从已注册的命令、参数生成；查看帮助和生成补全脚本不读取用户配置、不连接远端。内部 `k8s node` 不出现在公开命令列表中。
+
+CLI 参数仍优先于组件环境变量，其次 YAML 和模板默认值。`--config FILE` 仍属于具体命令，例如 `opskit k8s create --config config/config.yaml`。使用双横线长参数；单横线仅用于已注册的短参数，如 `-h`。布尔值使用 `--dry-run` 或 `--dry-run=false`，不要将 false 作为单独位置参数。支持交错参数，例如 `opskit s3 upload snapshot.db --bucket BUCKET --key KEY`。旧 `--apply` 及已移除的下载参数不会恢复；未知命令和参数返回退出码 2，业务任务保留原有错误码。Cobra 的 `--help` 会优先显示帮助，不执行任务。
+
+```sh
+# Bash：在当前 shell 加载；也可保存到 bash-completion 目录
+source <(opskit completion bash)
+# Zsh：先确保已执行 autoload -Uz compinit && compinit，再加载
+source <(opskit completion zsh)
+# Fish：当前 shell 加载
+opskit completion fish | source
+```
+
+PowerShell 可执行 `opskit completion powershell | Out-String | Invoke-Expression` 加载当前会话补全。持久化时将脚本保存到该 Shell 的补全目录或从用户启动文件加载。补全由相同命令树生成，包含对应子命令和可用参数。
+
+## Calico 自动安装
+
+`k8s create` 的 `network.manifest` 留空时，自动使用 `k8s.network.calico.version`，缺省从嵌入模板读取固定版本 v3.26.5。当前自动路径仅接受 v3.26.5 和 Kubernetes 1.24～1.28；其他组合应先验证，再使用本地清单覆盖，不静默替换版本。版本配套参考 [KubeKey 组件矩阵](https://github.com/kubesphere/kubekey/blob/main/docs/en/installation/components.md#calico)，这不代表 opskit 已完成生产部署验收。
+
+```yaml
+install:
+  calico:
+    download_base: https://raw.githubusercontent.com
+    sha256: 2468a8c939658b959860b0e78c3d2f420c53bb08af7511f3d335e051f9db8b22
+k8s:
+  network:
+    kubePodsCIDR: 10.244.0.0/16
+    kubeServiceCIDR: 10.96.0.0/12
+    manifest: ""
+    calico:
+      version: v3.26.5
+```
+
+```sh
+opskit k8s create --dry-run
+opskit k8s create --calico-version v3.26.5
+# 可通过配置、组件环境变量或参数使用保持相同路径的内网代理：
+# CALICO_DOWNLOAD_BASE=https://your-raw-github-proxy.example
+# opskit k8s create --calico-download-base https://your-raw-github-proxy.example
+```
+
+清单地址为 `<download_base>/projectcalico/calico/<version>/manifests/calico.yaml`。根地址优先级：`--calico-download-base` > `CALICO_DOWNLOAD_BASE` > `install.calico.download_base` > 模板默认值；该环境变量只影响 Calico。原始下载保留到统一 `install.download_dir`（默认 `~/.opskit/downloads`）下。官方固定文件的 SHA-256 已实际下载计算；镜像必须提供相同内容。摘要不匹配或 YAML/镜像版本校验失败时，在修改节点前退出。渲染后的清单仅在部署临时目录中保存并随 bundle 分发。
+
+自动路径仅修改官方清单中 calico-node 的 `CALICO_IPV4POOL_CIDR` 与 `IP_AUTODETECTION_METHOD=kubernetes-internal-ip`，保留其他对象及官方镜像名。Pod CIDR 必须是规范 IPv4 网络地址且前缀不大于 /26，以容纳默认分配块；与 Service/节点网段的现有冲突检查仍保留。镜像由节点容器运行时通过既有 mirror 拉取，不把 YAML 下载代理当作镜像代理。
+
+沿用该版本官方 BGP + IP-in-IP 默认模式：节点间须允许 TCP 179（BGP）及 IP 协议 4（IP-in-IP），内核需支持对应网络功能；不自动修改防火墙、NetworkManager 或主机安全策略。参考[官方系统要求](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements)及[IP 自动探测说明](https://docs.tigera.io/calico/latest/networking/ipam/ip-autodetection)。如需 VXLAN、自定义 MTU 或其他环境设置，请提供经过验证的本地 `manifest`。此覆盖路径不改写内容、不执行 Calico 专用就绪检查，但仍等待所有预期节点 Ready。
+
+新节点已有 `.conf` / `.conflist` / `.json` CNI 配置时拒绝自动替换。重跑会核对目标 Calico 版本，不自动更换网络或 IP 池；已存在 IP 池不会因改环境变量而迁移。所有就绪等待共用部署总超时。内部节点协议已更新为 v2，异构架构的 `nodeBinaries` 必须重新从同一份代码构建。`--dry-run` 不下载、不连接 SSH；本地 `kubeadm init` 维护入口仍只接受已准备的本地清单，不单独触发自动下载。
+
+已验证官方完整清单 31 个对象的渲染语义、摘要、模拟下载/分发、版本和 CIDR 拒绝路径及超时/错误传播；尚未在真实集群验证 Calico 网络连通性和策略执行。

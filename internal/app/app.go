@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +19,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type Manifest struct {
@@ -38,7 +39,7 @@ type storage struct {
 	pathStyle                                    bool
 }
 
-func (s *storage) flags(f *flag.FlagSet) {
+func (s *storage) flags(f *pflag.FlagSet) {
 	f.StringVar(&s.bucket, "bucket", "", "S3 bucket; enables upload")
 	f.StringVar(&s.key, "key", "", "S3 object key (required for standalone upload)")
 	f.StringVar(&s.endpoint, "s3-endpoint", "", "S3-compatible endpoint URL")
@@ -46,54 +47,9 @@ func (s *storage) flags(f *flag.FlagSet) {
 	f.BoolVar(&s.pathStyle, "path-style", false, "use path-style addressing")
 }
 
-func Run(ctx context.Context, args []string, out, diag io.Writer, version string) (int, error) {
-	if len(args) == 0 || helpArgument(args[0]) {
-		fmt.Fprintln(out, "opskit version | config init | kubectl install --version VERSION [--dry-run] | docker/cri-dockerd/containerd install --version VERSION [--dry-run] | kind install/create/status/logs/delete/use/unuse [flags] | mirror docker/containerd/go/npm/pip/maven [flags] | kubesphere install --version VERSION [flags] | etcd backup/check [flags] | s3 upload [flags] FILE | s3 check [flags]\nDefault config: ./config/config.yaml (legacy ./opskit.yaml fallback); override with COMMAND --config FILE.\nUse COMMAND --help for flags. Credentials: AWS SDK default chain; etcd: ETCDCTL_* environment.")
-		return 0, nil
-	}
-	if args[0] == "version" {
-		fmt.Fprintln(out, version)
-		return 0, nil
-	}
-	if usage, ok := commandGroupHelp[args[0]]; ok && (len(args) == 1 || (len(args) == 2 && helpArgument(args[1]))) {
-		fmt.Fprintln(out, usage)
-		return 0, nil
-	}
-	if len(args) < 2 {
-		return 2, errors.New("expected GROUP COMMAND; run opskit --help")
-	}
-	command := strings.Join(args[:2], " ")
-	if command == "kubectl install" {
-		return runKubectlInstall(ctx, args[2:], out, diag)
-	}
-	if args[1] == "install" && (args[0] == "docker" || args[0] == "cri-dockerd" || args[0] == "containerd") {
-		return runRuntimeInstall(ctx, args[0], args[2:], out, diag)
-	}
-	if args[0] == "kind" && args[1] != "install" {
-		return runKind(ctx, args[1:], out, diag)
-	}
-	if args[0] == "mirror" {
-		return runMirror(ctx, args[1:], out, diag)
-	}
-	if command == "kubesphere install" {
-		return runKubeSphere(ctx, args[2:], out, diag)
-	}
-
-	if command == "kind install" {
-		if err := runKindInstall(ctx, args, out, diag); err != nil {
-			return 1, err
-		}
-		return 0, nil
-	}
-
-	if command == "config init" {
-		return initConfig(args[2:], out, diag)
-	}
-	if command != "etcd backup" && command != "s3 upload" && command != "etcd check" && command != "s3 check" {
-		return 2, fmt.Errorf("unknown command %q", command)
-	}
-	f := flag.NewFlagSet(command, flag.ContinueOnError)
-	f.SetOutput(diag)
+func newDataCommand(ctx context.Context, command string, out, diag io.Writer) (*cobra.Command, error) {
+	cmd := &cobra.Command{Use: strings.Fields(command)[1]}
+	f := cmd.Flags()
 	configPath := f.String("config", defaultConfigPath, "configuration file (default: current directory)")
 	var s storage
 	s.flags(f)
@@ -115,145 +71,143 @@ func Run(ctx context.Context, args []string, out, diag io.Writer, version string
 		cert = f.String("cert", "", "etcd client certificate")
 		key = f.String("key-file", "", "etcd client key")
 	}
-	if err := f.Parse(args[2:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0, nil
+	bindCommand(cmd, func() (int, error) {
+		requiredConfig := false
+		f.Visit(func(v *pflag.Flag) {
+			if v.Name == "config" {
+				requiredConfig = true
+			}
+		})
+		if err := loadConfig(*configPath, requiredConfig, f, &s); err != nil {
+			return 2, err
 		}
-		return 2, err
-	}
-	requiredConfig := false
-	f.Visit(func(v *flag.Flag) {
-		if v.Name == "config" {
-			requiredConfig = true
+		if *timeout <= 0 {
+			return 2, errors.New("timeout must be positive")
 		}
-	})
-	if err := loadConfig(*configPath, requiredConfig, f, &s); err != nil {
-		return 2, err
-	}
-	if *timeout <= 0 {
-		return 2, errors.New("timeout must be positive")
-	}
-	if command != "etcd check" && (s.key != "" || s.endpoint != "") && s.bucket == "" {
-		return 2, errors.New("S3 options require --bucket")
-	}
-	if command != "etcd check" && s.bucket != "" {
-		if (s.provider == "minio" || s.provider == "custom") && s.endpoint == "" {
-			return 2, fmt.Errorf("s3.%s.endpoint is required when bucket is set", s.provider)
+		if command != "etcd check" && (s.key != "" || s.endpoint != "") && s.bucket == "" {
+			return 2, errors.New("S3 options require --bucket")
 		}
-		if (s.accessKey == "") != (s.secretKey == "") || (s.sessionToken != "" && s.accessKey == "") {
-			return 2, errors.New("S3 access_key and secret_key must be provided together; session_token requires both")
+		if command != "etcd check" && s.bucket != "" {
+			if (s.provider == "minio" || s.provider == "custom") && s.endpoint == "" {
+				return 2, fmt.Errorf("s3.%s.endpoint is required when bucket is set", s.provider)
+			}
+			if (s.accessKey == "") != (s.secretKey == "") || (s.sessionToken != "" && s.accessKey == "") {
+				return 2, errors.New("S3 access_key and secret_key must be provided together; session_token requires both")
+			}
 		}
-	}
-	ctx, cancel := context.WithTimeout(ctx, *timeout)
-	defer cancel()
-	if command == "s3 check" {
-		if f.NArg() != 0 || s.bucket == "" {
-			return 2, errors.New("s3 check requires a bucket and no positional arguments")
+		ctx, cancel := context.WithTimeout(ctx, *timeout)
+		defer cancel()
+		if command == "s3 check" {
+			if f.NArg() != 0 || s.bucket == "" {
+				return 2, errors.New("s3 check requires a bucket and no positional arguments")
+			}
+			return s.check(ctx, out)
 		}
-		return s.check(ctx, out)
-	}
-	if command == "s3 upload" {
-		if f.NArg() != 1 || s.bucket == "" || s.key == "" {
-			return 2, errors.New("usage: opskit s3 upload --bucket BUCKET --key KEY [flags] FILE")
+		if command == "s3 upload" {
+			if f.NArg() != 1 || s.bucket == "" || s.key == "" {
+				return 2, errors.New("usage: opskit s3 upload --bucket BUCKET --key KEY [flags] FILE")
+			}
+			m, err := inspect(f.Arg(0))
+			if err != nil {
+				return 1, err
+			}
+			if err = s.upload(ctx, f.Arg(0), m.SHA256); err != nil {
+				return 1, err
+			}
+			m.Upload = "verified-metadata"
+			m.Key = s.key
+			return 0, json.NewEncoder(out).Encode(m)
 		}
-		m, err := inspect(f.Arg(0))
+		if f.NArg() != 0 {
+			return 2, errors.New("unexpected positional arguments")
+		}
+		if (*cert == "") != (*key == "") {
+			return 2, errors.New("--cert and --key-file must be supplied together")
+		}
+		if _, err := exec.LookPath(*binary); err != nil {
+			return 3, fmt.Errorf("etcdctl dependency: %w", err)
+		}
+		if command == "etcd check" {
+			if *probeTimeout <= 0 {
+				return 2, errors.New("probe-timeout must be positive")
+			}
+			return checkEtcd(ctx, *binary, *endpoint, *ca, *cert, *key, *probeTimeout, out)
+		}
+		if err := os.MkdirAll(*dir, 0700); err != nil {
+			return 1, err
+		}
+		task, err := os.MkdirTemp(*dir, time.Now().UTC().Format("20060102T150405Z")+"-")
 		if err != nil {
 			return 1, err
 		}
-		if err = s.upload(ctx, f.Arg(0), m.SHA256); err != nil {
+		dest := filepath.Join(task, "snapshot.db")
+		partial := dest + ".partial"
+		a := []string{}
+		for _, v := range [][2]string{{"--endpoints", *endpoint}, {"--cacert", *ca}, {"--cert", *cert}, {"--key", *key}} {
+			if v[1] != "" {
+				a = append(a, v[0], v[1])
+			}
+		}
+		a = append(a, "snapshot", "save", partial)
+		cmd := exec.CommandContext(ctx, *binary, a...)
+		cmd.Stdout = diag
+		// etcdctl diagnostics can include credential-bearing endpoint URLs or user info.
+		// Do not forward raw stderr into logs or terminal output.
+		cmd.Stderr = io.Discard
+		if err = cmd.Run(); err != nil {
+			return taskError(ctx, fmt.Errorf("snapshot failed (partial retained at %s); check etcd connectivity, TLS credentials and permissions", partial))
+		}
+		if err = os.Chmod(partial, 0600); err != nil {
 			return 1, err
 		}
-		m.Upload = "verified-metadata"
-		m.Key = s.key
-		return 0, json.NewEncoder(out).Encode(m)
-	}
-	if f.NArg() != 0 {
-		return 2, errors.New("unexpected positional arguments")
-	}
-	if (*cert == "") != (*key == "") {
-		return 2, errors.New("--cert and --key-file must be supplied together")
-	}
-	if _, err := exec.LookPath(*binary); err != nil {
-		return 3, fmt.Errorf("etcdctl dependency: %w", err)
-	}
-	if command == "etcd check" {
-		if *probeTimeout <= 0 {
-			return 2, errors.New("probe-timeout must be positive")
+		m, err := inspect(partial)
+		if err != nil {
+			return 1, err
 		}
-		return checkEtcd(ctx, *binary, *endpoint, *ca, *cert, *key, *probeTimeout, out)
-	}
-	if err := os.MkdirAll(*dir, 0700); err != nil {
-		return 1, err
-	}
-	task, err := os.MkdirTemp(*dir, time.Now().UTC().Format("20060102T150405Z")+"-")
-	if err != nil {
-		return 1, err
-	}
-	dest := filepath.Join(task, "snapshot.db")
-	partial := dest + ".partial"
-	a := []string{}
-	for _, v := range [][2]string{{"--endpoints", *endpoint}, {"--cacert", *ca}, {"--cert", *cert}, {"--key", *key}} {
-		if v[1] != "" {
-			a = append(a, v[0], v[1])
+		if m.Size == 0 {
+			return 1, errors.New("empty snapshot")
 		}
-	}
-	a = append(a, "snapshot", "save", partial)
-	cmd := exec.CommandContext(ctx, *binary, a...)
-	cmd.Stdout = diag
-	// etcdctl diagnostics can include credential-bearing endpoint URLs or user info.
-	// Do not forward raw stderr into logs or terminal output.
-	cmd.Stderr = io.Discard
-	if err = cmd.Run(); err != nil {
-		return taskError(ctx, fmt.Errorf("snapshot failed (partial retained at %s); check etcd connectivity, TLS credentials and permissions", partial))
-	}
-	if err = os.Chmod(partial, 0600); err != nil {
-		return 1, err
-	}
-	m, err := inspect(partial)
-	if err != nil {
-		return 1, err
-	}
-	if m.Size == 0 {
-		return 1, errors.New("empty snapshot")
-	}
-	if err = os.Rename(partial, dest); err != nil {
-		return 1, err
-	}
-	m.File = "snapshot.db"
-	m.Upload = "not-requested"
-	manifest := filepath.Join(task, "manifest.json")
-	if s.bucket != "" {
-		m.Upload = "pending"
-		if s.key == "" {
-			s.key = "etcd/" + filepath.Base(task) + "/snapshot.db"
+		if err = os.Rename(partial, dest); err != nil {
+			return 1, err
 		}
-		m.Key = s.key
-	}
-	if err = writeManifest(manifest, m); err != nil {
-		return 1, err
-	}
-	if s.bucket != "" {
-		if err = s.upload(ctx, dest, m.SHA256); err != nil {
-			m.Upload = "failed"
-			saveErr := writeManifest(manifest, m)
-			return 5, fmt.Errorf("local backup retained at %s; upload failed: %w; manifest update: %v", dest, err, saveErr)
+		m.File = "snapshot.db"
+		m.Upload = "not-requested"
+		manifest := filepath.Join(task, "manifest.json")
+		if s.bucket != "" {
+			m.Upload = "pending"
+			if s.key == "" {
+				s.key = "etcd/" + filepath.Base(task) + "/snapshot.db"
+			}
+			m.Key = s.key
 		}
-		m.Upload = "verified-metadata"
 		if err = writeManifest(manifest, m); err != nil {
-			return 5, err
+			return 1, err
 		}
-		s.key += ".manifest.json"
-		mm, e := inspect(manifest)
-		if e != nil {
-			return 5, e
+		if s.bucket != "" {
+			if err = s.upload(ctx, dest, m.SHA256); err != nil {
+				m.Upload = "failed"
+				saveErr := writeManifest(manifest, m)
+				return 5, fmt.Errorf("local backup retained at %s; upload failed: %w; manifest update: %v", dest, err, saveErr)
+			}
+			m.Upload = "verified-metadata"
+			if err = writeManifest(manifest, m); err != nil {
+				return 5, err
+			}
+			s.key += ".manifest.json"
+			mm, e := inspect(manifest)
+			if e != nil {
+				return 5, e
+			}
+			if e = s.upload(ctx, manifest, mm.SHA256); e != nil {
+				return 5, fmt.Errorf("remote manifest failed; local backup retained: %w", e)
+			}
 		}
-		if e = s.upload(ctx, manifest, mm.SHA256); e != nil {
-			return 5, fmt.Errorf("remote manifest failed; local backup retained: %w", e)
-		}
-	}
-	fmt.Fprintln(diag, "Local snapshot:", dest)
-	return 0, json.NewEncoder(out).Encode(m)
+		fmt.Fprintln(diag, "Local snapshot:", dest)
+		return 0, json.NewEncoder(out).Encode(m)
+	})
+	return cmd, nil
 }
+
 func taskError(ctx context.Context, err error) (int, error) {
 	if ctx.Err() != nil {
 		return 4, ctx.Err()

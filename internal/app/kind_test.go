@@ -40,7 +40,7 @@ func TestVersionRequired(t *testing.T) {
 		{"kind", "install"}, {"kind", "install", "--version", "latest"},
 		{"kind", "install", "--version", "../../bad"}, {"kind", "install", "--version", "v0.17.0", "extra"},
 	} {
-		if runKindInstall(context.Background(), args, io.Discard, io.Discard) == nil {
+		if _, err := Run(context.Background(), args, io.Discard, io.Discard, "test"); err == nil {
 			t.Fatalf("accepted invalid args: %v", args)
 		}
 	}

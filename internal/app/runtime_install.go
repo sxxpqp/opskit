@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/url"
@@ -21,6 +20,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 type componentDownloadSettings struct {
@@ -28,6 +29,17 @@ type componentDownloadSettings struct {
 }
 
 type runtimeInstallSettings struct {
+	Calico struct {
+		DownloadBase string `yaml:"download_base"`
+		SHA256       string `yaml:"sha256"`
+	} `yaml:"calico"`
+	Go struct {
+		DownloadBase string `yaml:"download_base"`
+		ChecksumURL  string `yaml:"checksum_url"`
+	} `yaml:"go"`
+	Kubeadm     componentDownloadSettings `yaml:"kubeadm"`
+	Kubelet     componentDownloadSettings `yaml:"kubelet"`
+	CRITools    componentDownloadSettings `yaml:"cri_tools"`
 	Kind        componentDownloadSettings `yaml:"kind"`
 	Kubectl     componentDownloadSettings `yaml:"kubectl"`
 	Containerd  componentDownloadSettings `yaml:"containerd"`
@@ -49,13 +61,13 @@ type runtimePackage struct {
 	files                           map[string][]byte
 }
 
-func runRuntimeInstall(parent context.Context, tool string, args []string, out, diag io.Writer) (int, error) {
+func newRuntimeInstallCommand(parent context.Context, tool string, out, diag io.Writer) (*cobra.Command, error) {
 	defaults, err := defaultInstallSettings()
 	if err != nil {
-		return 1, err
+		return nil, err
 	}
-	f := flag.NewFlagSet(tool+" install", flag.ContinueOnError)
-	f.SetOutput(diag)
+	cmd := &cobra.Command{Use: "install"}
+	f := cmd.Flags()
 	downloadDir := f.String("download-dir", "", "统一下载目录，默认 ~/.opskit/downloads")
 	config := f.String("config", defaultConfigPath, "统一配置文件")
 	version := f.String("version", "", "目标版本 vX.Y.Z；也可由 versions 配置")
@@ -73,368 +85,381 @@ func runRuntimeInstall(parent context.Context, tool string, args []string, out, 
 		runc = f.String("runc-version", "v1.2.6", "配套 runc 版本")
 		cni = f.String("cni-version", "v1.5.1", "CNI plugins 版本")
 	}
-	if err := f.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0, nil
+	bindCommand(cmd, func() (int, error) {
+		if f.NArg() != 0 {
+			return 2, errors.New("不接受位置参数")
 		}
-		return 2, err
-	}
-	if f.NArg() != 0 {
-		return 2, errors.New("不接受位置参数")
-	}
-	c, err := commandConfig(f, *config)
-	if err != nil {
-		return 1, err
-	}
-	setConfigFlag(f, "download-dir", c.Install.DownloadDir)
-	if *downloadDir == "" {
-		*downloadDir, err = defaultDownloadDir()
+		c, err := commandConfig(f, *config)
 		if err != nil {
 			return 1, err
 		}
-	}
-	switch tool {
-	case "docker":
-		setConfigFlag(f, "version", c.Versions.Docker)
-		setConfigFlag(f, "method", c.Install.Docker.Method)
-		setConfigFlag(f, "mirror", c.Install.Docker.Mirror)
-	case "cri-dockerd":
-		setConfigFlag(f, "version", c.Versions.CRIDockerd)
-	case "containerd":
-		setConfigFlag(f, "version", c.Versions.Containerd)
-		setConfigFlag(f, "runc-version", c.Versions.Runc)
-		setConfigFlag(f, "cni-version", c.Versions.CNIPlugins)
-	}
-	if !versionPattern.MatchString("v" + strings.TrimPrefix(*version, "v")) {
-		return 2, errors.New("必须指定完整 --version vX.Y.Z 或配置 versions 对应项")
-	}
-	*version = "v" + strings.TrimPrefix(*version, "v")
-	if *arch != "amd64" && *arch != "arm64" {
-		return 2, errors.New("只支持 Linux amd64/arm64")
-	}
-	if *timeout <= 0 {
-		return 2, errors.New("timeout 必须大于零")
-	}
-	baseFor := func(value, fallback string) string {
-		if value == "" {
-			value = fallback
+		setConfigFlag(f, "download-dir", c.Install.DownloadDir)
+		if *downloadDir == "" {
+			*downloadDir, err = defaultDownloadDir()
+			if err != nil {
+				return 1, err
+			}
 		}
-		return strings.TrimRight(value, "/")
-	}
-	ver := strings.TrimPrefix(*version, "v")
-	packages := []runtimePackage{}
-	script := tool == "docker" && *method == "script"
-	switch tool {
-	case "docker":
-		if *method != "script" && *method != "binary" {
-			return 2, errors.New("method 必须为 script 或 binary")
+		switch tool {
+		case "docker":
+			setConfigFlag(f, "version", c.Versions.Docker)
+			setConfigFlag(f, "method", c.Install.Docker.Method)
+			setConfigFlag(f, "mirror", c.Install.Docker.Mirror)
+		case "cri-dockerd":
+			setConfigFlag(f, "version", c.Versions.CRIDockerd)
+		case "containerd":
+			setConfigFlag(f, "version", c.Versions.Containerd)
+			setConfigFlag(f, "runc-version", c.Versions.Runc)
+			setConfigFlag(f, "cni-version", c.Versions.CNIPlugins)
 		}
-		if script {
-			if err := validateDockerMirror(*mirror); err != nil {
-				return 2, err
+		if !versionPattern.MatchString("v" + strings.TrimPrefix(*version, "v")) {
+			return 2, errors.New("必须指定完整 --version vX.Y.Z 或配置 versions 对应项")
+		}
+		*version = "v" + strings.TrimPrefix(*version, "v")
+		if *arch != "amd64" && *arch != "arm64" {
+			return 2, errors.New("只支持 Linux amd64/arm64")
+		}
+		if *timeout <= 0 {
+			return 2, errors.New("timeout 必须大于零")
+		}
+		baseFor := func(value, fallback string) string {
+			if value == "" {
+				value = fallback
+			}
+			return strings.TrimRight(value, "/")
+		}
+		ver := strings.TrimPrefix(*version, "v")
+		packages := []runtimePackage{}
+		script := tool == "docker" && *method == "script"
+		switch tool {
+		case "docker":
+			if *method != "script" && *method != "binary" {
+				return 2, errors.New("method 必须为 script 或 binary")
+			}
+			if script {
+				if err := validateDockerMirror(*mirror); err != nil {
+					return 2, err
+				}
+				if *source == "" {
+					*source = c.Install.Docker.Script
+				}
+				if *source == "" {
+					*source = defaults.Docker.Script
+				}
+			} else {
+				a := "x86_64"
+				if *arch == "arm64" {
+					a = "aarch64"
+				}
+				b := c.Install.Docker.BinaryBase
+				if b == "" {
+					b = defaults.Docker.BinaryBase
+				}
+				if *source == "" {
+					*source = fmt.Sprintf("%s/%s/docker-%s.tgz", strings.TrimRight(b, "/"), a, ver)
+				}
+			}
+		case "cri-dockerd":
+			base := baseFor(c.Install.CRIDockerd.DownloadBase, defaults.CRIDockerd.DownloadBase)
+			if *source == "" {
+				*source = fmt.Sprintf("%s/Mirantis/cri-dockerd/releases/download/%s/cri-dockerd-%s.%s.tgz", base, *version, ver, *arch)
+			}
+		case "containerd":
+			base := baseFor(c.Install.Containerd.DownloadBase, defaults.Containerd.DownloadBase)
+			runcBase := baseFor(c.Install.Runc.DownloadBase, defaults.Runc.DownloadBase)
+			cniBase := baseFor(c.Install.CNIPlugins.DownloadBase, defaults.CNIPlugins.DownloadBase)
+			if !strings.HasPrefix(*version, "v1.") && !strings.HasPrefix(*version, "v2.") {
+				return 2, errors.New("containerd 仅支持 1.x/2.x")
+			}
+			for _, v := range []string{*runc, *cni} {
+				if !versionPattern.MatchString("v" + strings.TrimPrefix(v, "v")) {
+					return 2, errors.New("runc/CNI 必须指定完整 vX.Y.Z 版本")
+				}
 			}
 			if *source == "" {
-				*source = c.Install.Docker.Script
+				*source = fmt.Sprintf("%s/containerd/containerd/releases/download/%s/containerd-%s-linux-%s.tar.gz", base, *version, ver, *arch)
 			}
-			if *source == "" {
-				*source = defaults.Docker.Script
+			rv := "v" + strings.TrimPrefix(*runc, "v")
+			cv := "v" + strings.TrimPrefix(*cni, "v")
+			packages = append(packages, runtimePackage{name: "runc", version: rv, source: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.%s", runcBase, rv, *arch), raw: true}, runtimePackage{name: "cni", version: cv, source: fmt.Sprintf("%s/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", cniBase, cv, *arch, cv)})
+		}
+		packages = append([]runtimePackage{{name: tool, version: *version, source: *source, checksum: *checksum}}, packages...)
+		for _, p := range packages {
+			u, e := url.Parse(p.source)
+			if e != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
+				return 2, errors.New("下载源必须是无用户凭据的 HTTP(S) URL")
 			}
-		} else {
-			a := "x86_64"
-			if *arch == "arm64" {
-				a = "aarch64"
-			}
-			b := c.Install.Docker.BinaryBase
-			if b == "" {
-				b = defaults.Docker.BinaryBase
-			}
-			if *source == "" {
-				*source = fmt.Sprintf("%s/%s/docker-%s.tgz", strings.TrimRight(b, "/"), a, ver)
-			}
-		}
-	case "cri-dockerd":
-		base := baseFor(c.Install.CRIDockerd.DownloadBase, defaults.CRIDockerd.DownloadBase)
-		if *source == "" {
-			*source = fmt.Sprintf("%s/Mirantis/cri-dockerd/releases/download/%s/cri-dockerd-%s.%s.tgz", base, *version, ver, *arch)
-		}
-	case "containerd":
-		base := baseFor(c.Install.Containerd.DownloadBase, defaults.Containerd.DownloadBase)
-		runcBase := baseFor(c.Install.Runc.DownloadBase, defaults.Runc.DownloadBase)
-		cniBase := baseFor(c.Install.CNIPlugins.DownloadBase, defaults.CNIPlugins.DownloadBase)
-		if !strings.HasPrefix(*version, "v1.") && !strings.HasPrefix(*version, "v2.") {
-			return 2, errors.New("containerd 仅支持 1.x/2.x")
-		}
-		for _, v := range []string{*runc, *cni} {
-			if !versionPattern.MatchString("v" + strings.TrimPrefix(v, "v")) {
-				return 2, errors.New("runc/CNI 必须指定完整 vX.Y.Z 版本")
-			}
-		}
-		if *source == "" {
-			*source = fmt.Sprintf("%s/containerd/containerd/releases/download/%s/containerd-%s-linux-%s.tar.gz", base, *version, ver, *arch)
-		}
-		rv := "v" + strings.TrimPrefix(*runc, "v")
-		cv := "v" + strings.TrimPrefix(*cni, "v")
-		packages = append(packages, runtimePackage{name: "runc", version: rv, source: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.%s", runcBase, rv, *arch), raw: true}, runtimePackage{name: "cni", version: cv, source: fmt.Sprintf("%s/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", cniBase, cv, *arch, cv)})
-	}
-	packages = append([]runtimePackage{{name: tool, version: *version, source: *source, checksum: *checksum}}, packages...)
-	for _, p := range packages {
-		u, e := url.Parse(p.source)
-		if e != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
-			return 2, errors.New("下载源必须是无用户凭据的 HTTP(S) URL")
-		}
-	}
-	if *checksum != "" {
-		b, e := hex.DecodeString(*checksum)
-		if e != nil || len(b) != 32 {
-			return 2, errors.New("sha256 必须为 64 位十六进制")
-		}
-	}
-	fmt.Fprintln(out, "下载目录:", *downloadDir)
-	fmt.Fprintf(out, "安装计划: %s %s，Linux/%s\n", tool, *version, *arch)
-	if script {
-		if strings.HasPrefix(*mirror, "http") {
-			fmt.Fprintf(out, "方式: 官方脚本 DOWNLOAD_URL=%s --version %s\n", *mirror, ver)
-		} else {
-			fmt.Fprintf(out, "方式: 官方脚本 --mirror %s --version %s\n", *mirror, ver)
-		}
-	}
-	for _, p := range packages {
-		fmt.Fprintf(out, "下载: %s %s %s\n", p.name, p.version, p.source)
-	}
-	if script {
-		fmt.Fprintln(out, "目标: 由官方脚本安装发行版软件包并管理 docker.service；拒绝已有运行时。")
-	} else if tool == "containerd" {
-		fmt.Fprintln(out, "目标: /usr/local/bin、/usr/local/sbin、/opt/cni/bin、/etc/containerd/config.toml、/etc/systemd/system；不覆盖已有文件。")
-	} else {
-		fmt.Fprintln(out, "目标: /usr/local/bin、/etc/systemd/system；不覆盖已有文件。")
-	}
-	fmt.Fprintln(out, "镜像源另执行 mirror 命令。")
-	if *dryRun {
-		fmt.Fprintln(out, "仅预览；去掉 --dry-run 执行安装。")
-		return 0, nil
-	}
-	if runtime.GOOS != "linux" || runtime.GOARCH != *arch {
-		return 1, errors.New("必须在目标架构的 Linux 主机执行；macOS/Windows 请使用 Linux VM/WSL2")
-	}
-	if os.Geteuid() != 0 {
-		return 1, errors.New("安装需要 root 权限")
-	}
-	if _, err := os.Stat("/run/systemd/system"); err != nil {
-		return 1, errors.New("安装需要正在运行的 systemd")
-	}
-	ctx, cancel := context.WithTimeout(parent, *timeout)
-	defer cancel()
-	if _, err := exec.LookPath("systemctl"); err != nil {
-		return 1, err
-	}
-	// Fresh installs only: no overwrites of distribution or existing runtime installations.
-	names := []string{tool}
-	if tool == "docker" {
-		names = []string{"docker", "dockerd", "containerd", "runc"}
-	}
-	if tool == "containerd" {
-		names = []string{"containerd", "runc"}
-	}
-	for _, n := range names {
-		if p, e := exec.LookPath(n); e == nil {
-			return 1, fmt.Errorf("已存在 %s: %s；请保留现有安装，先人工处理版本迁移", n, p)
-		}
-	}
-	unitName := tool
-	if tool == "cri-dockerd" {
-		unitName = "cri-docker"
-		if err := commandRun(ctx, nil, out, diag, "docker", "info"); err != nil {
-			return 1, fmt.Errorf("先安装并启动 Docker: %w", err)
-		}
-	}
-	units := runtimeUnits(tool)
-	for name := range units {
-		if e := ensureRuntimeAbsent("/etc/systemd/system/" + name); e != nil {
-			return 1, e
-		}
-		if b, e := commandOutput(ctx, nil, "systemctl", "--no-pager", "show", "-p", "LoadState", "--value", name); e != nil || strings.TrimSpace(string(b)) != "not-found" {
-			return 1, fmt.Errorf("已有或无法检查 systemd unit %s，请先人工处理", name)
-		}
-	}
-	if tool == "containerd" {
-		if e := ensureRuntimeAbsent("/etc/containerd/config.toml"); e != nil {
-			return 1, e
-		}
-	}
-	if script {
-		tmp, e := os.CreateTemp("", "opskit-docker-*.sh")
-		if e != nil {
-			return 1, e
-		}
-		defer os.Remove(tmp.Name())
-		e = downloadRetained(ctx, *source, tmp, *downloadDir, tool, *version)
-		closeErr := tmp.Close()
-		if e != nil {
-			return 1, e
-		}
-		if closeErr != nil {
-			return 1, closeErr
 		}
 		if *checksum != "" {
-			b, e := os.ReadFile(tmp.Name())
+			b, e := hex.DecodeString(*checksum)
+			if e != nil || len(b) != 32 {
+				return 2, errors.New("sha256 必须为 64 位十六进制")
+			}
+		}
+		fmt.Fprintln(out, "下载目录:", *downloadDir)
+		fmt.Fprintf(out, "安装计划: %s %s，Linux/%s\n", tool, *version, *arch)
+		if script {
+			if strings.HasPrefix(*mirror, "http") {
+				fmt.Fprintf(out, "方式: 官方脚本 DOWNLOAD_URL=%s --version %s\n", *mirror, ver)
+			} else {
+				fmt.Fprintf(out, "方式: 官方脚本 --mirror %s --version %s\n", *mirror, ver)
+			}
+		}
+		for _, p := range packages {
+			fmt.Fprintf(out, "下载: %s %s %s\n", p.name, p.version, p.source)
+		}
+		if script {
+			fmt.Fprintln(out, "目标: 由官方脚本安装发行版软件包并管理 docker.service；拒绝已有运行时。")
+		} else if tool == "containerd" {
+			fmt.Fprintln(out, "目标: /usr/local/bin、/usr/local/sbin、/opt/cni/bin、/etc/containerd/config.toml、/etc/systemd/system；不覆盖已有文件。")
+		} else {
+			fmt.Fprintln(out, "目标: /usr/local/bin、/etc/systemd/system；不覆盖已有文件。")
+		}
+		if tool == "docker" {
+			fmt.Fprintln(out, "inotify: 写入 /etc/sysctl.d/99-inotify.conf 并应用；max_user_instances 至少 8192，max_user_watches 至少 524288。")
+		}
+		fmt.Fprintln(out, "镜像源另执行 mirror 命令。")
+		if *dryRun {
+			fmt.Fprintln(out, "仅预览；去掉 --dry-run 执行安装。")
+			return 0, nil
+		}
+		if runtime.GOOS != "linux" || runtime.GOARCH != *arch {
+			return 1, errors.New("必须在目标架构的 Linux 主机执行；macOS/Windows 请使用 Linux VM/WSL2")
+		}
+		if os.Geteuid() != 0 {
+			return 1, errors.New("安装需要 root 权限")
+		}
+		if _, err := os.Stat("/run/systemd/system"); err != nil {
+			return 1, errors.New("安装需要正在运行的 systemd")
+		}
+		ctx, cancel := context.WithTimeout(parent, *timeout)
+		defer cancel()
+		if _, err := exec.LookPath("systemctl"); err != nil {
+			return 1, err
+		}
+		if tool == "docker" {
+			if _, err := exec.LookPath("sysctl"); err != nil {
+				return 1, fmt.Errorf("Docker 安装需要 sysctl: %w", err)
+			}
+		}
+		// Fresh installs only: no overwrites of distribution or existing runtime installations.
+		names := []string{tool}
+		if tool == "docker" {
+			names = []string{"docker", "dockerd", "containerd", "runc"}
+		}
+		if tool == "containerd" {
+			names = []string{"containerd", "runc"}
+		}
+		for _, n := range names {
+			if p, e := exec.LookPath(n); e == nil {
+				return 1, fmt.Errorf("已存在 %s: %s；请保留现有安装，先人工处理版本迁移", n, p)
+			}
+		}
+		unitName := tool
+		if tool == "cri-dockerd" {
+			unitName = "cri-docker"
+			if err := commandRun(ctx, nil, out, diag, "docker", "info"); err != nil {
+				return 1, fmt.Errorf("先安装并启动 Docker: %w", err)
+			}
+		}
+		units := runtimeUnits(tool)
+		for name := range units {
+			if e := ensureRuntimeAbsent("/etc/systemd/system/" + name); e != nil {
+				return 1, e
+			}
+			if b, e := commandOutput(ctx, nil, "systemctl", "--no-pager", "show", "-p", "LoadState", "--value", name); e != nil || strings.TrimSpace(string(b)) != "not-found" {
+				return 1, fmt.Errorf("已有或无法检查 systemd unit %s，请先人工处理", name)
+			}
+		}
+		if tool == "containerd" {
+			if e := ensureRuntimeAbsent("/etc/containerd/config.toml"); e != nil {
+				return 1, e
+			}
+		}
+		if script {
+			tmp, e := os.CreateTemp("", "opskit-docker-*.sh")
 			if e != nil {
 				return 1, e
 			}
-			if e = checkRuntimeHash(b, *checksum); e != nil {
+			defer os.Remove(tmp.Name())
+			e = downloadRetained(ctx, *source, tmp, *downloadDir, tool, *version)
+			closeErr := tmp.Close()
+			if e != nil {
 				return 1, e
 			}
-		}
-		cmd := dockerScriptCommand(ctx, tmp.Name(), ver, *mirror)
-		cmd.Stdout, cmd.Stderr = out, diag
-		if e = cmd.Run(); e != nil {
-			return 1, e
-		}
-	} else {
-		// Download, extract and validate every package before touching installation paths.
-		tmp, e := os.MkdirTemp("", "opskit-runtime-*")
-		if e != nil {
-			return 1, e
-		}
-		defer os.RemoveAll(tmp)
-		files := map[string][]byte{}
-		for i := range packages {
-			p := &packages[i]
-			var b runtimeDownloadBuffer
-			if e = downloadRetained(ctx, p.source, &b, *downloadDir, p.name, p.version); e != nil {
-				return 1, e
+			if closeErr != nil {
+				return 1, closeErr
 			}
-			data := b.Bytes()
-			if p.checksum != "" {
-				if e = checkRuntimeHash(data, p.checksum); e != nil {
-					return 1, e
-				}
-			}
-			if p.raw {
-				p.files = map[string][]byte{"runc": data}
-			} else {
-				p.files, e = runtimeArchive(data)
+			if *checksum != "" {
+				b, e := os.ReadFile(tmp.Name())
 				if e != nil {
 					return 1, e
 				}
-			}
-			binary := p.name
-			if binary == "docker" {
-				binary = "dockerd"
-			}
-			if binary == "cni" {
-				binary = "bridge"
-			}
-			content, ok := p.files[binary]
-			if !ok {
-				return 1, fmt.Errorf("%s 包缺少 %s", p.name, binary)
-			}
-			staged := filepath.Join(tmp, binary)
-			if e = os.WriteFile(staged, content, 0700); e != nil {
-				return 1, e
-			}
-			if p.name != "cni" {
-				if e = verifyRuntimeVersion(ctx, staged, p.version); e != nil {
+				if e = checkRuntimeHash(b, *checksum); e != nil {
 					return 1, e
 				}
 			}
-			for n, content := range p.files {
-				dest := "/usr/local/bin/" + n
-				if p.name == "cni" {
-					dest = "/opt/cni/bin/" + n
-				}
-				if p.name == "runc" {
-					dest = "/usr/local/sbin/runc"
-				}
-				if _, exists := files[dest]; exists {
-					return 1, fmt.Errorf("安装包文件重复: %s", dest)
-				}
-				files[dest] = content
+			if err = configureDockerInotify(ctx, "/etc/sysctl.d/99-inotify.conf", out, diag); err != nil {
+				return 1, err
 			}
-		}
-		required := []string{}
-		if tool == "docker" {
-			required = []string{"docker", "dockerd", "containerd", "containerd-shim-runc-v2", "runc", "docker-proxy", "docker-init"}
-		}
-		if tool == "containerd" {
-			required = []string{"containerd", "containerd-shim-runc-v2", "ctr"}
-		}
-		for _, n := range required {
-			if _, ok := files["/usr/local/bin/"+n]; !ok {
-				return 1, fmt.Errorf("安装包缺少必需文件 %s", n)
+			cmd := dockerScriptCommand(ctx, tmp.Name(), ver, *mirror)
+			cmd.Stdout, cmd.Stderr = out, diag
+			if e = cmd.Run(); e != nil {
+				return 1, e
 			}
-		}
-		configText := ""
-		if tool == "containerd" {
-			staged := filepath.Join(tmp, "containerd")
-			b, e := commandOutput(ctx, nil, staged, "config", "default")
+		} else {
+			// Download, extract and validate every package before touching installation paths.
+			tmp, e := os.MkdirTemp("", "opskit-runtime-*")
 			if e != nil {
 				return 1, e
 			}
-			configText, e = runtimeContainerdConfig(string(b))
-			if e != nil {
-				return 1, e
+			defer os.RemoveAll(tmp)
+			files := map[string][]byte{}
+			for i := range packages {
+				p := &packages[i]
+				var b runtimeDownloadBuffer
+				if e = downloadRetained(ctx, p.source, &b, *downloadDir, p.name, p.version); e != nil {
+					return 1, e
+				}
+				data := b.Bytes()
+				if p.checksum != "" {
+					if e = checkRuntimeHash(data, p.checksum); e != nil {
+						return 1, e
+					}
+				}
+				if p.raw {
+					p.files = map[string][]byte{"runc": data}
+				} else {
+					p.files, e = runtimeArchive(data)
+					if e != nil {
+						return 1, e
+					}
+				}
+				binary := p.name
+				if binary == "docker" {
+					binary = "dockerd"
+				}
+				if binary == "cni" {
+					binary = "bridge"
+				}
+				content, ok := p.files[binary]
+				if !ok {
+					return 1, fmt.Errorf("%s 包缺少 %s", p.name, binary)
+				}
+				staged := filepath.Join(tmp, binary)
+				if e = os.WriteFile(staged, content, 0700); e != nil {
+					return 1, e
+				}
+				if p.name != "cni" {
+					if e = verifyRuntimeVersion(ctx, staged, p.version); e != nil {
+						return 1, e
+					}
+				}
+				for n, content := range p.files {
+					dest := "/usr/local/bin/" + n
+					if p.name == "cni" {
+						dest = "/opt/cni/bin/" + n
+					}
+					if p.name == "runc" {
+						dest = "/usr/local/sbin/runc"
+					}
+					if _, exists := files[dest]; exists {
+						return 1, fmt.Errorf("安装包文件重复: %s", dest)
+					}
+					files[dest] = content
+				}
 			}
-			checkFile := filepath.Join(tmp, "config.toml")
-			if e = os.WriteFile(checkFile, []byte(configText), 0600); e != nil {
-				return 1, e
+			required := []string{}
+			if tool == "docker" {
+				required = []string{"docker", "dockerd", "containerd", "containerd-shim-runc-v2", "runc", "docker-proxy", "docker-init"}
 			}
-			if _, e = commandOutput(ctx, nil, staged, "--config", checkFile, "config", "dump"); e != nil {
-				return 1, e
+			if tool == "containerd" {
+				required = []string{"containerd", "containerd-shim-runc-v2", "ctr"}
+			}
+			for _, n := range required {
+				if _, ok := files["/usr/local/bin/"+n]; !ok {
+					return 1, fmt.Errorf("安装包缺少必需文件 %s", n)
+				}
+			}
+			configText := ""
+			if tool == "containerd" {
+				staged := filepath.Join(tmp, "containerd")
+				b, e := commandOutput(ctx, nil, staged, "config", "default")
+				if e != nil {
+					return 1, e
+				}
+				configText, e = runtimeContainerdConfig(string(b))
+				if e != nil {
+					return 1, e
+				}
+				checkFile := filepath.Join(tmp, "config.toml")
+				if e = os.WriteFile(checkFile, []byte(configText), 0600); e != nil {
+					return 1, e
+				}
+				if _, e = commandOutput(ctx, nil, staged, "--config", checkFile, "config", "dump"); e != nil {
+					return 1, e
+				}
+			}
+			paths := make([]string, 0, len(files))
+			for p := range files {
+				paths = append(paths, p)
+			}
+			sort.Strings(paths)
+			for _, p := range paths {
+				if e = ensureRuntimeAbsent(p); e != nil {
+					return 1, e
+				}
+			}
+			if tool == "docker" {
+				if err = configureDockerInotify(ctx, "/etc/sysctl.d/99-inotify.conf", out, diag); err != nil {
+					return 1, err
+				}
+			}
+			for _, p := range paths {
+				if e = writeRuntimeNew(p, files[p], 0755); e != nil {
+					return 1, e
+				}
+			}
+			if tool == "containerd" {
+				if e = writeRuntimeNew("/etc/containerd/config.toml", []byte(configText), 0600); e != nil {
+					return 1, e
+				}
+			}
+			for name, unit := range units {
+				if e = writeRuntimeNew("/etc/systemd/system/"+name, []byte(unit), 0644); e != nil {
+					return 1, e
+				}
 			}
 		}
-		paths := make([]string, 0, len(files))
-		for p := range files {
-			paths = append(paths, p)
+		if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "daemon-reload"); err != nil {
+			return 1, err
 		}
-		sort.Strings(paths)
-		for _, p := range paths {
-			if e = ensureRuntimeAbsent(p); e != nil {
-				return 1, e
-			}
+		if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "enable", "--now", unitName+".service"); err != nil {
+			return 1, err
 		}
-		for _, p := range paths {
-			if e = writeRuntimeNew(p, files[p], 0755); e != nil {
-				return 1, e
-			}
+		if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "is-active", unitName+".service"); err != nil {
+			return 1, err
+		}
+		binary := tool
+		if binary == "docker" {
+			binary = "dockerd"
+		}
+		if !script {
+			binary = "/usr/local/bin/" + binary
+		}
+		if err = verifyRuntimeVersion(ctx, binary, *version); err != nil {
+			return 1, err
+		}
+		fmt.Fprintf(out, "安装完成: %s %s；服务 %s 已启动\n", tool, *version, unitName)
+		if tool == "cri-dockerd" {
+			fmt.Fprintln(out, "kubeadm 使用 --cri-socket unix:///run/cri-dockerd.sock")
 		}
 		if tool == "containerd" {
-			if e = writeRuntimeNew("/etc/containerd/config.toml", []byte(configText), 0600); e != nil {
-				return 1, e
-			}
+			fmt.Fprintln(out, "Kubernetes 节点还需配置 overlay/br_netfilter、IP forwarding、CNI 网络与镜像源；安装器不修改主机网络参数。")
 		}
-		for name, unit := range units {
-			if e = writeRuntimeNew("/etc/systemd/system/"+name, []byte(unit), 0644); e != nil {
-				return 1, e
-			}
-		}
-	}
-	if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "daemon-reload"); err != nil {
-		return 1, err
-	}
-	if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "enable", "--now", unitName+".service"); err != nil {
-		return 1, err
-	}
-	if err = commandRun(ctx, nil, out, diag, "systemctl", "--no-pager", "is-active", unitName+".service"); err != nil {
-		return 1, err
-	}
-	binary := tool
-	if binary == "docker" {
-		binary = "dockerd"
-	}
-	if !script {
-		binary = "/usr/local/bin/" + binary
-	}
-	if err = verifyRuntimeVersion(ctx, binary, *version); err != nil {
-		return 1, err
-	}
-	fmt.Fprintf(out, "安装完成: %s %s；服务 %s 已启动\n", tool, *version, unitName)
-	if tool == "cri-dockerd" {
-		fmt.Fprintln(out, "kubeadm 使用 --cri-socket unix:///run/cri-dockerd.sock")
-	}
-	if tool == "containerd" {
-		fmt.Fprintln(out, "Kubernetes 节点还需配置 overlay/br_netfilter、IP forwarding、CNI 网络与镜像源；安装器不修改主机网络参数。")
-	}
-	return 0, nil
+		return 0, nil
+	})
+	return cmd, nil
 }
 
 func ensureRuntimeAbsent(p string) error {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -17,29 +16,31 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 )
 
-func explicitFlag(f *flag.FlagSet, name string) bool {
+func explicitFlag(f *pflag.FlagSet, name string) bool {
 	found := false
-	f.Visit(func(v *flag.Flag) {
+	f.Visit(func(v *pflag.Flag) {
 		if v.Name == name {
 			found = true
 		}
 	})
 	return found
 }
-func setConfigFlag(f *flag.FlagSet, name, value string) {
+func setConfigFlag(f *pflag.FlagSet, name, value string) {
 	if value != "" && !explicitFlag(f, name) && f.Lookup(name) != nil {
 		_ = f.Set(name, value)
 	}
 }
-func setEnvFlag(f *flag.FlagSet, name, env string) {
+func setEnvFlag(f *pflag.FlagSet, name, env string) {
 	if value := os.Getenv(env); value != "" && !explicitFlag(f, name) && f.Lookup(name) != nil {
 		_ = f.Set(name, value)
 	}
 }
-func commandConfig(f *flag.FlagSet, path string) (fileConfig, error) {
+func commandConfig(f *pflag.FlagSet, path string) (fileConfig, error) {
 	c, err := readFileConfig(path, explicitFlag(f, "config"))
 	if err != nil {
 		return c, err
@@ -61,6 +62,8 @@ func commandConfig(f *flag.FlagSet, path string) (fileConfig, error) {
 	}
 	c.Install.DownloadDir = resolve(c.Install.DownloadDir)
 	c.Kind.Kubeconfig = resolve(c.Kind.Kubeconfig)
+	resolveClusterPaths(&c.K8s, base)
+	c.projectComponents()
 	if strings.ContainsAny(c.Kind.Binary, "/\\") {
 		c.Kind.Binary = resolve(c.Kind.Binary)
 	}
@@ -103,7 +106,7 @@ type clusterOptions struct {
 	workers, port, httpPort, httpsPort    int
 }
 
-func clusterFlags(f *flag.FlagSet) *clusterOptions {
+func clusterFlags(f *pflag.FlagSet) *clusterOptions {
 	home, _ := os.UserHomeDir()
 	o := &clusterOptions{}
 	f.StringVar(&o.name, "name", "kubesphere-341", "kind 集群名")
@@ -116,7 +119,7 @@ func clusterFlags(f *flag.FlagSet) *clusterOptions {
 	f.IntVar(&o.httpsPort, "https-port", 443, "Ingress HTTPS 宿主机端口，映射控制平面节点 443，监听 0.0.0.0")
 	return o
 }
-func applyClusterConfig(f *flag.FlagSet, o *clusterOptions, c fileConfig) error {
+func applyClusterConfig(f *pflag.FlagSet, o *clusterOptions, c fileConfig) error {
 	setEnvFlag(f, "name", "OPSKIT_KIND_NAME")
 	setEnvFlag(f, "kubeconfig", "KUBECONFIG")
 	setEnvFlag(f, "kind-bin", "OPSKIT_KIND_BIN")
@@ -124,7 +127,7 @@ func applyClusterConfig(f *flag.FlagSet, o *clusterOptions, c fileConfig) error 
 	setConfigFlag(f, "name", c.Kind.Name)
 	setConfigFlag(f, "kubeconfig", c.Kind.Kubeconfig)
 	setConfigFlag(f, "kind-bin", c.Kind.Binary)
-	setConfigFlag(f, "version", c.Versions.Kubernetes)
+	setConfigFlag(f, "version", c.Kind.Kubernetes.Version)
 	if c.Kind.Workers != nil {
 		setConfigFlag(f, "workers", strconv.Itoa(*c.Kind.Workers))
 	}
@@ -191,18 +194,9 @@ func renderKind(o clusterOptions) ([]byte, error) {
 	}
 	return yaml.Marshal(map[string]any{"kind": "Cluster", "apiVersion": "kind.x-k8s.io/v1alpha4", "nodes": nodes})
 }
-func runKind(parent context.Context, args []string, out, diag io.Writer) (int, error) {
-	if len(args) == 0 {
-		return 2, errors.New("kind create|status|logs|delete|use|unuse")
-	}
-	action := args[0]
-	switch action {
-	case "create", "status", "logs", "delete", "use", "unuse":
-	default:
-		return 2, fmt.Errorf("未知 kind 命令: %s", action)
-	}
-	f := flag.NewFlagSet("kind "+action, flag.ContinueOnError)
-	f.SetOutput(diag)
+func newKindCommand(parent context.Context, action string, out, diag io.Writer) (*cobra.Command, error) {
+	cmd := &cobra.Command{Use: action}
+	f := cmd.Flags()
 	path := f.String("config", defaultConfigPath, "统一配置文件")
 	o := clusterFlags(f)
 	var dryRun bool
@@ -214,99 +208,97 @@ func runKind(parent context.Context, args []string, out, diag io.Writer) (int, e
 	}
 	logDir := f.String("directory", "", "导出诊断日志的目录")
 	timeout := f.Duration("timeout", 10*time.Minute, "任务超时")
-	if err := f.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0, nil
+	bindCommand(cmd, func() (int, error) {
+		if f.NArg() != 0 || *timeout <= 0 {
+			return 2, errors.New("多余参数或 timeout 无效")
 		}
-		return 2, err
-	}
-	if f.NArg() != 0 || *timeout <= 0 {
-		return 2, errors.New("多余参数或 timeout 无效")
-	}
-	c, err := commandConfig(f, *path)
-	if err != nil {
-		return 2, err
-	}
-	if err = applyClusterConfig(f, o, c); err != nil {
-		return 2, err
-	}
-	ctx, cancel := context.WithTimeout(parent, *timeout)
-	defer cancel()
-	switch action {
-	case "create":
-		config, err := renderKind(*o)
+		c, err := commandConfig(f, *path)
 		if err != nil {
-			return 1, err
+			return 2, err
 		}
-		fmt.Fprintf(out, "kind create: %s; Kubernetes %s; workers=%d; kubeconfig=%s\n", o.name, o.nodeVersion, o.workers, o.kubeconfig)
-		fmt.Fprintf(out, "Ingress 端口: 0.0.0.0:%d → control-plane:80，0.0.0.0:%d → control-plane:443；需单独部署 Ingress Controller。\n", o.httpPort, o.httpsPort)
-		fmt.Fprintf(out, "KS 控制台端口: 0.0.0.0:%d → control-plane:30880\n", o.port)
-		if dryRun {
-			if _, err = out.Write(config); err != nil {
-				return 1, err
-			}
-			fmt.Fprintln(out, "仅预览：未创建集群；去掉 --dry-run 执行创建。")
-			return 0, nil
+		if err = applyClusterConfig(f, o, c); err != nil {
+			return 2, err
 		}
-		if _, err = exec.LookPath("kubectl"); err != nil {
-			return 3, fmt.Errorf("kubectl dependency: %w", err)
-		}
-		if _, err = commandOutput(ctx, nil, "docker", "info"); err != nil {
-			return 3, err
-		}
-		if c.Versions.Kind != "" {
-			if err = verifyKind(ctx, o.binary, c.Versions.Kind); err != nil {
-				return 3, err
-			}
-		}
-		current, err := commandOutput(ctx, nil, o.binary, "get", "clusters")
-		if err != nil {
-			return 3, err
-		}
-		for _, name := range strings.Fields(string(current)) {
-			if name == o.name {
-				return 1, fmt.Errorf("集群 %s 已存在，保留现有拓扑；请使用 kind status", name)
-			}
-		}
-		if err = os.MkdirAll(filepath.Dir(o.kubeconfig), 0700); err != nil {
-			return 1, err
-		}
-		if err = commandRun(ctx, config, out, diag, o.binary, "create", "cluster", "--name", o.name, "--config", "-", "--kubeconfig", o.kubeconfig, "--retain", "--wait", "180s"); err != nil {
-			return 1, err
-		}
-		return 0, commandRun(ctx, nil, out, diag, "kubectl", o.kubeArgs("wait", "--for=condition=Ready", "nodes", "--all", "--timeout=180s")...)
-	case "status":
-		for _, a := range [][]string{{"get", "nodes", "-o", "wide"}, {"get", "pods", "-A"}, {"get", "sc"}, {"get", "pvc", "-A"}} {
-			if err = commandRun(ctx, nil, out, diag, "kubectl", o.kubeArgs(a...)...); err != nil {
-				return 1, err
-			}
-		}
-	case "logs":
-		if *logDir == "" {
-			*logDir, err = os.MkdirTemp("", "opskit-kind-logs-")
+		ctx, cancel := context.WithTimeout(parent, *timeout)
+		defer cancel()
+		switch action {
+		case "create":
+			config, err := renderKind(*o)
 			if err != nil {
 				return 1, err
 			}
+			fmt.Fprintf(out, "kind create: %s; Kubernetes %s; workers=%d; kubeconfig=%s\n", o.name, o.nodeVersion, o.workers, o.kubeconfig)
+			fmt.Fprintf(out, "Ingress 端口: 0.0.0.0:%d → control-plane:80，0.0.0.0:%d → control-plane:443；需单独部署 Ingress Controller。\n", o.httpPort, o.httpsPort)
+			fmt.Fprintf(out, "KS 控制台端口: 0.0.0.0:%d → control-plane:30880\n", o.port)
+			if dryRun {
+				if _, err = out.Write(config); err != nil {
+					return 1, err
+				}
+				fmt.Fprintln(out, "仅预览：未创建集群；去掉 --dry-run 执行创建。")
+				return 0, nil
+			}
+			if _, err = exec.LookPath("kubectl"); err != nil {
+				return 3, fmt.Errorf("kubectl dependency: %w", err)
+			}
+			if _, err = commandOutput(ctx, nil, "docker", "info"); err != nil {
+				return 3, err
+			}
+			if c.Versions.Kind != "" {
+				if err = verifyKind(ctx, o.binary, c.Versions.Kind); err != nil {
+					return 3, err
+				}
+			}
+			current, err := commandOutput(ctx, nil, o.binary, "get", "clusters")
+			if err != nil {
+				return 3, err
+			}
+			for _, name := range strings.Fields(string(current)) {
+				if name == o.name {
+					return 1, fmt.Errorf("集群 %s 已存在，保留现有拓扑；请使用 kind status", name)
+				}
+			}
+			if err = os.MkdirAll(filepath.Dir(o.kubeconfig), 0700); err != nil {
+				return 1, err
+			}
+			if err = commandRun(ctx, config, out, diag, o.binary, "create", "cluster", "--name", o.name, "--config", "-", "--kubeconfig", o.kubeconfig, "--retain", "--wait", "180s"); err != nil {
+				return 1, err
+			}
+			return 0, commandRun(ctx, nil, out, diag, "kubectl", o.kubeArgs("wait", "--for=condition=Ready", "nodes", "--all", "--timeout=180s")...)
+		case "status":
+			for _, a := range [][]string{{"get", "nodes", "-o", "wide"}, {"get", "pods", "-A"}, {"get", "sc"}, {"get", "pvc", "-A"}} {
+				if err = commandRun(ctx, nil, out, diag, "kubectl", o.kubeArgs(a...)...); err != nil {
+					return 1, err
+				}
+			}
+		case "logs":
+			if *logDir == "" {
+				*logDir, err = os.MkdirTemp("", "opskit-kind-logs-")
+				if err != nil {
+					return 1, err
+				}
+			}
+			err = commandRun(ctx, nil, out, diag, o.binary, "export", "logs", *logDir, "--name", o.name)
+			if err == nil {
+				fmt.Fprintln(out, "日志目录:", *logDir)
+			}
+		case "delete":
+			if dryRun {
+				fmt.Fprintf(out, "预览: 删除 kind 集群 %s；去掉 --dry-run 执行删除\n", o.name)
+				return 0, nil
+			}
+			fmt.Fprintf(out, "删除 kind 集群: %s\n", o.name)
+			err = commandRun(ctx, nil, out, diag, o.binary, "delete", "cluster", "--name", o.name, "--kubeconfig", o.kubeconfig)
+		case "use", "unuse":
+			err = switchKindContext(ctx, *o, action, out)
 		}
-		err = commandRun(ctx, nil, out, diag, o.binary, "export", "logs", *logDir, "--name", o.name)
-		if err == nil {
-			fmt.Fprintln(out, "日志目录:", *logDir)
+		if err != nil {
+			return 1, err
 		}
-	case "delete":
-		if dryRun {
-			fmt.Fprintf(out, "预览: 删除 kind 集群 %s；去掉 --dry-run 执行删除\n", o.name)
-			return 0, nil
-		}
-		fmt.Fprintf(out, "删除 kind 集群: %s\n", o.name)
-		err = commandRun(ctx, nil, out, diag, o.binary, "delete", "cluster", "--name", o.name, "--kubeconfig", o.kubeconfig)
-	case "use", "unuse":
-		err = switchKindContext(ctx, *o, action, out)
-	}
-	if err != nil {
-		return 1, err
-	}
-	return 0, nil
+		return 0, nil
+	})
+	return cmd, nil
 }
+
 func switchKindContext(ctx context.Context, o clusterOptions, action string, out io.Writer) error {
 	// Work in a separate merged file, so merge failure cannot truncate the user's kubeconfig.
 	home, err := os.UserHomeDir()

@@ -16,7 +16,7 @@ import (
 
 func TestRuntimeInstallPlans(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "config.yaml")
-	if e := os.WriteFile(cfg, []byte("schema_version: 1\nversions:\n  docker: v27.3.1\n  cri_dockerd: v0.3.22\n  containerd: v2.1.3\n  runc: v1.2.6\n  cni_plugins: v1.5.1\ninstall:\n  containerd:\n    download_base: https://packages.example\n  runc:\n    download_base: https://packages.example\n  cni_plugins:\n    download_base: https://packages.example\n  cri_dockerd:\n    download_base: https://packages.example\n"), 0600); e != nil {
+	if e := os.WriteFile(cfg, []byte("install:\n    cni_plugins:\n        download_base: https://packages.example\n    containerd:\n        download_base: https://packages.example\n    cri_dockerd:\n        download_base: https://packages.example\n    runc:\n        download_base: https://packages.example\nk8s:\n    cniPlugins:\n        version: v1.5.1\n    containerd:\n        version: v2.1.3\n    criDockerd:\n        version: v0.3.22\n    docker:\n        version: v27.3.1\n    runc:\n        version: v1.2.6\nschema_version: 1\n"), 0600); e != nil {
 		t.Fatal(e)
 	}
 	cases := []struct {
@@ -24,8 +24,8 @@ func TestRuntimeInstallPlans(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"docker", []string{"--mirror", "Aliyun"}, []string{"官方脚本 --mirror Aliyun --version 27.3.1", "仅预览"}},
-		{"docker", []string{"--method", "binary", "--arch", "arm64", "--version", "28.0.1"}, []string{"docker v28.0.1", "aarch64/docker-28.0.1.tgz"}},
+		{"docker", []string{"--mirror", "Aliyun"}, []string{"官方脚本 --mirror Aliyun --version 27.3.1", "仅预览", "/etc/sysctl.d/99-inotify.conf", "8192", "524288"}},
+		{"docker", []string{"--method", "binary", "--arch", "arm64", "--version", "28.0.1"}, []string{"docker v28.0.1", "aarch64/docker-28.0.1.tgz", "/etc/sysctl.d/99-inotify.conf"}},
 		{"cri-dockerd", []string{"--arch", "amd64"}, []string{"cri-dockerd-0.3.22.amd64.tgz", "https://packages.example/Mirantis"}},
 		{"containerd", []string{"--arch", "arm64", "--runc-version", "v1.2.5"}, []string{"containerd-2.1.3-linux-arm64.tar.gz", "runc v1.2.5", "cni-plugins-linux-arm64-v1.5.1.tgz"}},
 	}
@@ -186,7 +186,7 @@ func TestRuntimeDownloadDefaultsIgnoreKindEnvironment(t *testing.T) {
 	}
 	for _, tool := range []string{"containerd", "cri-dockerd"} {
 		var out bytes.Buffer
-		code, err := runRuntimeInstall(context.Background(), tool, []string{"--config", cfg, "--version", "v1.7.27", "--dry-run"}, &out, &out)
+		code, err := Run(context.Background(), append([]string{tool, "install"}, []string{"--config", cfg, "--version", "v1.7.27", "--dry-run"}...), &out, &out, "test")
 		if code != 0 || err != nil || !strings.Contains(out.String(), defaults.Containerd.DownloadBase+"/") || strings.Contains(out.String(), "kind-only.example") {
 			t.Fatalf("%s: %d %v %s", tool, code, err, out.String())
 		}
@@ -225,26 +225,7 @@ func TestDockerScriptCustomMirror(t *testing.T) {
 
 func TestInstallComponentDownloadIsolation(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "config.yaml")
-	body := `schema_version: 1
-versions:
-  containerd: v2.1.3
-  runc: v1.2.6
-  cni_plugins: v1.5.1
-  cri_dockerd: v0.3.22
-  docker: v27.3.1
-install:
-  containerd:
-    download_base: https://containerd.example
-  runc:
-    download_base: https://runc.example
-  cni_plugins:
-    download_base: https://cni.example
-  cri_dockerd:
-    download_base: https://cri.example
-  docker:
-    method: binary
-    binary_base: https://docker.example
-`
+	body := "install:\n    cni_plugins:\n        download_base: https://cni.example\n    containerd:\n        download_base: https://containerd.example\n    cri_dockerd:\n        download_base: https://cri.example\n    docker:\n        binary_base: https://docker.example\n        method: binary\n    runc:\n        download_base: https://runc.example\nk8s:\n    cniPlugins:\n        version: v1.5.1\n    containerd:\n        version: v2.1.3\n    criDockerd:\n        version: v0.3.22\n    docker:\n        version: v27.3.1\n    runc:\n        version: v1.2.6\nschema_version: 1\n"
 	if err := os.WriteFile(cfg, []byte(body), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +238,7 @@ install:
 		{"docker", []string{"https://docker.example/x86_64/docker-27.3.1.tgz"}},
 	} {
 		var out bytes.Buffer
-		code, err := runRuntimeInstall(context.Background(), tc.tool, []string{"--config", cfg, "--arch", "amd64", "--dry-run"}, &out, &out)
+		code, err := Run(context.Background(), append([]string{tc.tool, "install"}, []string{"--config", cfg, "--arch", "amd64", "--dry-run"}...), &out, &out, "test")
 		if code != 0 || err != nil {
 			t.Fatalf("%s: %d %v %s", tc.tool, code, err, out.String())
 		}

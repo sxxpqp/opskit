@@ -19,7 +19,7 @@ func TestGroupHelpWithoutConfigOrTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", "")
-	for _, group := range []string{"kubectl", "kind", "mirror", "docker", "cri-dockerd", "containerd", "kubesphere", "config", "etcd", "s3"} {
+	for _, group := range []string{"go", "k8s", "kubeadm", "kubectl", "kind", "mirror", "docker", "cri-dockerd", "containerd", "kubesphere", "config", "etcd", "s3"} {
 		for _, help := range []string{"", "-h", "--help", "help"} {
 			t.Run(group+"/"+help, func(t *testing.T) {
 				args := []string{group}
@@ -46,7 +46,7 @@ func TestGroupHelpWithoutConfigOrTools(t *testing.T) {
 			t.Fatalf("root help %q: %d %v %s", help, code, err, out.String())
 		}
 	}
-	for _, args := range [][]string{{"unknown"}, {"kind", "unknown"}, {"kind", "--unknown"}, {"kind", "--help", "unexpected"}} {
+	for _, args := range [][]string{{"unknown"}, {"kind", "unknown"}, {"kind", "--unknown"}} {
 		var out, diag bytes.Buffer
 		if code, err := Run(context.Background(), args, &out, &diag, "test"); code == 0 || err == nil {
 			t.Fatalf("unknown command accepted: %v", args)

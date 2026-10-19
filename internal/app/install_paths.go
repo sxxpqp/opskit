@@ -16,6 +16,9 @@ import (
 
 // Retain downloads for inspection; always fetch again rather than trust an unchecked cache.
 func downloadRetained(ctx context.Context, source string, dst io.Writer, root, tool, version string) error {
+	if cached, err := cachedClusterDownload(ctx, source, dst); cached {
+		return err
+	}
 	if root == "" {
 		return download(ctx, source, dst)
 	}

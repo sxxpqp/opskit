@@ -55,7 +55,7 @@ func TestKubectlHelpAndPlan(t *testing.T) {
 		t.Fatal("implicit version was selected without configuration")
 	}
 	config := "config.yaml"
-	if err := os.WriteFile(config, []byte("schema_version: 1\nversions:\n  kubernetes: v1.24.7\ninstall:\n  kubectl:\n    download_base: https://packages.example/k8s\n  download_dir: downloads\n"), 0600); err != nil {
+	if err := os.WriteFile(config, []byte("install:\n    download_dir: downloads\n    kubectl:\n        download_base: https://packages.example/k8s\nk8s:\n    kubernetes:\n        version: v1.24.7\nkind:\n    kubernetes:\n        version: v1.24.7\nschema_version: 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, version := range []string{"", "v1.25.0"} {
@@ -71,12 +71,12 @@ func TestKubectlHelpAndPlan(t *testing.T) {
 			t.Fatalf("%d %v %s", code, err, out.String())
 		}
 	}
-	if err := os.WriteFile(config, []byte("schema_version: 1\nversions:\n  kubectl: v1.23.9\n  kubernetes: v1.24.7\n"), 0600); err != nil {
+	if err := os.WriteFile(config, []byte("k8s:\n    kubernetes:\n        version: v1.24.7\nkind:\n    kubernetes:\n        version: v1.24.7\nschema_version: 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
 	code, err := Run(context.Background(), []string{"kubectl", "install", "--config", config, "--dry-run"}, &out, &out, "dev")
-	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl install: v1.23.9") {
+	if code != 0 || err != nil || !strings.Contains(out.String(), "kubectl install: v1.24.7") {
 		t.Fatalf("%d %v %s", code, err, out.String())
 	}
 	for _, extra := range [][]string{{"--version", "latest"}, {"--version", "v1.24.7", "--kubectl-download-base", "https://user:secret@example.com"}, {"--version", "v1.24.7", "--apply"}, {"--version", "v1.24.7", "unexpected"}} {
@@ -137,7 +137,7 @@ func TestKubectlInstallVerifiedAndFailurePreservesOriginal(t *testing.T) {
 	}))
 	defer server.Close()
 	config := filepath.Join(root, "config.yaml")
-	if err = os.WriteFile(config, []byte("schema_version: 1\nversions:\n  kubernetes: v1.24.7\n"), 0600); err != nil {
+	if err = os.WriteFile(config, []byte("k8s:\n    kubernetes:\n        version: v1.24.7\nkind:\n    kubernetes:\n        version: v1.24.7\nschema_version: 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	targetDir := filepath.Join(root, "installed")

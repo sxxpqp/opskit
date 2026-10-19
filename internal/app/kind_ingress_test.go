@@ -1,15 +1,15 @@
 package app
 
 import (
-	"flag"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 )
 
 func TestKindIngressPortMappings(t *testing.T) {
 	for _, custom := range []bool{false, true} {
-		f := flag.NewFlagSet("kind", flag.ContinueOnError)
+		f := pflag.NewFlagSet("kind", pflag.ContinueOnError)
 		o := clusterFlags(f)
 		var cfg fileConfig
 		if custom {
@@ -71,7 +71,7 @@ func TestKindIngressPortMappings(t *testing.T) {
 }
 func TestKindIngressRejectsInvalidPorts(t *testing.T) {
 	for _, args := range [][]string{{"--http-port", "0"}, {"--https-port", "65536"}, {"--http-port", "443"}, {"--http-port", "30880"}, {"--https-port", "30880"}} {
-		f := flag.NewFlagSet("kind", flag.ContinueOnError)
+		f := pflag.NewFlagSet("kind", pflag.ContinueOnError)
 		o := clusterFlags(f)
 		if err := f.Parse(args); err != nil {
 			t.Fatal(err)

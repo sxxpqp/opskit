@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/sxxpqp/opskit"
 	"gopkg.in/yaml.v3"
 )
@@ -19,32 +20,39 @@ const defaultConfigPath = "config/config.yaml"
 
 type fileConfig struct {
 	Install  runtimeInstallSettings `yaml:"install"`
+	Go       versionSetting         `yaml:"go"`
 	Versions struct {
 		Docker     string `yaml:"docker"`
 		CRIDockerd string `yaml:"cri_dockerd"`
 		Containerd string `yaml:"containerd"`
 		Runc       string `yaml:"runc"`
 		CNIPlugins string `yaml:"cni_plugins"`
+		CRITools   string `yaml:"cri_tools"`
 		Kind       string `yaml:"kind"`
 		Kubernetes string `yaml:"kubernetes"`
 		Kubectl    string `yaml:"kubectl"`
 		KubeSphere string `yaml:"kubesphere"`
-	} `yaml:"versions"`
+	} `yaml:"-"`
 	Kind struct {
-		Name        string `yaml:"name"`
-		Workers     *int   `yaml:"workers"`
-		Kubeconfig  string `yaml:"kubeconfig"`
-		Binary      string `yaml:"binary"`
-		ConsolePort int    `yaml:"console_port"`
-		HTTPPort    int    `yaml:"http_port"`
-		HTTPSPort   int    `yaml:"https_port"`
+		Version     string         `yaml:"version"`
+		Kubernetes  versionSetting `yaml:"kubernetes"`
+		KubeSphere  sphereSettings `yaml:"kubesphere"`
+		Name        string         `yaml:"name"`
+		Workers     *int           `yaml:"workers"`
+		Kubeconfig  string         `yaml:"kubeconfig"`
+		Binary      string         `yaml:"binary"`
+		ConsolePort int            `yaml:"console_port"`
+		HTTPPort    int            `yaml:"http_port"`
+		HTTPSPort   int            `yaml:"https_port"`
 	} `yaml:"kind"`
-	Mirrors    mirrorSettings `yaml:"mirrors"`
+	K8s        clusterSettings `yaml:"k8s"`
+	Kubeadm    kubeadmSettings `yaml:"-"`
+	Mirrors    mirrorSettings  `yaml:"mirrors"`
 	KubeSphere struct {
 		StorageClass    string `yaml:"storage_class"`
 		InstallerSource string `yaml:"installer_source"`
 		Password        string `yaml:"password"`
-	} `yaml:"kubesphere"`
+	} `yaml:"-"`
 
 	SchemaVersion int    `yaml:"schema_version"`
 	Timeout       string `yaml:"timeout"`
@@ -143,10 +151,11 @@ func readFileConfig(path string, required bool) (fileConfig, error) {
 		return c, errors.New("config schema_version must be 1")
 	}
 
+	c.projectComponents()
 	return c, nil
 }
 
-func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage) error {
+func loadConfig(path string, required bool, f *pflag.FlagSet, stores ...*storage) error {
 	c, err := readFileConfig(path, required)
 	if err != nil {
 		return err
@@ -194,7 +203,7 @@ func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage)
 		values["path-style"] = &v
 	}
 	explicit := map[string]bool{}
-	f.Visit(func(v *flag.Flag) { explicit[v.Name] = true })
+	f.Visit(func(v *pflag.Flag) { explicit[v.Name] = true })
 	for name, value := range values {
 		if value != nil && !explicit[name] && f.Lookup(name) != nil {
 			if err = f.Set(name, *value); err != nil {
@@ -211,43 +220,39 @@ func loadConfig(path string, required bool, f *flag.FlagSet, stores ...*storage)
 	return nil
 }
 
-func initConfig(args []string, out, diag io.Writer) (int, error) {
-	f := flag.NewFlagSet("config init", flag.ContinueOnError)
-	f.SetOutput(diag)
+func newConfigInitCommand(out, diag io.Writer) (*cobra.Command, error) {
+	cmd := &cobra.Command{Use: "init"}
+	f := cmd.Flags()
 	path := f.String("config", defaultConfigPath, "template destination (never overwrites existing files)")
-	if err := f.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0, nil
+	bindCommand(cmd, func() (int, error) {
+		if f.NArg() != 0 {
+			return 2, errors.New("unexpected positional arguments")
 		}
-		return 2, err
-	}
-	if f.NArg() != 0 {
-		return 2, errors.New("unexpected positional arguments")
-	}
-	if *path == defaultConfigPath && !explicitFlag(f, "config") {
-		if _, err := os.Stat("opskit.yaml"); err == nil {
-			return 1, errors.New("已存在旧 opskit.yaml；请迁移旧文件并核对相对路径，或显式 --config 指定模板目标，不自动创建第二套配置")
+		if *path == defaultConfigPath && !explicitFlag(f, "config") {
+			if _, err := os.Stat("opskit.yaml"); err == nil {
+				return 1, errors.New("已存在旧 opskit.yaml；请迁移旧文件并核对相对路径，或显式 --config 指定模板目标，不自动创建第二套配置")
+			}
 		}
-	}
-	if err := os.MkdirAll(filepath.Dir(*path), 0700); err != nil {
-		return 1, err
-	}
-	file, err := os.OpenFile(*path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return 1, err
-	}
-	if _, err = file.Write(opskit.ConfigTemplate); err != nil {
-		file.Close()
-		return 1, err
-	}
-	if err = file.Close(); err != nil {
-		return 1, err
-	}
-	fmt.Fprintln(out, "Created", *path)
-	return 0, nil
+		if err := os.MkdirAll(filepath.Dir(*path), 0700); err != nil {
+			return 1, err
+		}
+		file, err := os.OpenFile(*path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return 1, err
+		}
+		if _, err = file.Write(opskit.ConfigTemplate); err != nil {
+			file.Close()
+			return 1, err
+		}
+		if err = file.Close(); err != nil {
+			return 1, err
+		}
+		fmt.Fprintln(out, "Created", *path)
+		return 0, nil
+	})
+	return cmd, nil
 }
 
-// Default download sources live only in the embedded configuration template.
 func defaultInstallSettings() (runtimeInstallSettings, error) {
 	var c fileConfig
 	err := yaml.Unmarshal(opskit.ConfigTemplate, &c)
