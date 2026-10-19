@@ -1,6 +1,10 @@
 # Opt-in true installation experiment. Always combine with compose.yaml.
 # Only run on a disposable, dedicated Linux Docker daemon.
 services:
+  master:
+    # Read-only host kernel metadata. Still only safe on disposable runners.
+    volumes:
+      - /lib/modules:/lib/modules:ro
   tester:
     entrypoint: ["/bin/bash", "/usr/local/bin/opskit-e2e-install"]
     environment:
