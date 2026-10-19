@@ -1,0 +1,13 @@
+# Opt-in true installation experiment. Always combine with compose.yaml.
+# Only run on a disposable, dedicated Linux Docker daemon.
+services:
+  tester:
+    entrypoint: ["/bin/bash", "/usr/local/bin/opskit-e2e-install"]
+    environment:
+      OPSKIT_FULL_INSTALL_E2E: "1"
+
+networks:
+  e2e:
+    # Real artifact downloads and container image pulls require outbound access.
+    # Existing fast SSH/systemd tests keep their internal-only network.
+    internal: false
