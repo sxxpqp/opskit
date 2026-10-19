@@ -1,0 +1,80 @@
+name: opskit-k8s-e2e
+
+x-node: &node
+  image: opskit-k8s-e2e-node:local
+  build:
+    context: ../../..
+    dockerfile: tests/e2e/docker/node.Dockerfile
+  privileged: true
+  stop_signal: SIGRTMIN+3
+  tmpfs:
+    - /run
+    - /run/lock
+  volumes:
+    - ssh-secrets:/run/e2e:ro
+  networks:
+    - e2e
+  healthcheck:
+    test: ["CMD-SHELL", "systemctl is-active --quiet ssh && test -d /run/systemd/system"]
+    interval: 5s
+    timeout: 4s
+    retries: 24
+    start_period: 15s
+
+services:
+  bootstrap:
+    image: opskit-k8s-e2e-node:local
+    build:
+      context: ../../..
+      dockerfile: tests/e2e/docker/node.Dockerfile
+    entrypoint: ["/bin/bash", "-euc"]
+    command: |
+      umask 077
+      if [[ ! -s /run/e2e/id_ed25519 ]]; then
+        ssh-keygen -q -t ed25519 -N '' -f /run/e2e/id_ed25519
+      fi
+      if [[ ! -s /run/e2e/password ]]; then
+        head -c 24 /dev/urandom | base64 | tr -d '\n' > /run/e2e/password
+      fi
+      chmod 0600 /run/e2e/id_ed25519 /run/e2e/password
+    volumes:
+      - ssh-secrets:/run/e2e
+    networks:
+      - e2e
+
+  master:
+    <<: *node
+    hostname: master
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *node
+    hostname: worker
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  tester:
+    build:
+      context: ../../..
+      dockerfile: tests/e2e/docker/tester.Dockerfile
+    image: opskit-k8s-e2e-tester:local
+    depends_on:
+      master:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    volumes:
+      - ssh-secrets:/run/e2e:ro
+      - ${OPSKIT_E2E_REPORT_DIR:-./artifacts}:/artifacts
+    networks:
+      - e2e
+
+volumes:
+  ssh-secrets:
+
+networks:
+  e2e:
+    internal: true
