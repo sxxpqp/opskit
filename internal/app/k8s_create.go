@@ -118,6 +118,11 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 			fmt.Fprintf(out, "节点 %s: SSH %s@%s:%d；集群地址 %s\n", host.Name, host.User, host.Address, host.Port, host.InternalAddress)
 		}
 		fmt.Fprintf(out, "Kubernetes %s（kubeadm/kubelet/kubectl 同版），运行时 %s；并发 %d，总超时 %s；KubeSphere=%t\n", c.K8s.Kubernetes.Version, c.K8s.Kubernetes.ContainerManager, c.K8s.Deploy.Concurrency, duration, c.K8s.KubeSphere.Enabled)
+		if c.K8s.Kubernetes.ContainerManager == "containerd" {
+			fmt.Fprintf(out, "组件版本: containerd=%s, runc=%s, crictl=%s, CNI plugins=%s\n", c.K8s.Containerd.Version, c.K8s.Runc.Version, c.K8s.CRITools.Version, c.K8s.CNIPlugins.Version)
+		} else {
+			fmt.Fprintf(out, "组件版本: Docker=%s, cri-dockerd=%s, crictl=%s, CNI plugins=%s\n", c.K8s.Docker.Version, c.K8s.CRIDockerd.Version, c.K8s.CRITools.Version, c.K8s.CNIPlugins.Version)
+		}
 		if *dry {
 			fmt.Fprintln(out, "预览完成；未连接节点或读取认证秘密。")
 			return 0, nil
