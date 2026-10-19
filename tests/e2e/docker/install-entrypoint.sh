@@ -30,9 +30,17 @@ OPSKIT_DOCKER_E2E_PASSWORD="$(cat /run/e2e/password)"
 echo "Running REAL OpsKit k8s create --dry-run..."
 /usr/local/bin/opskit k8s create --config "$cfg" --dry-run > "$report/dry-run.log" 2>&1
 
-echo "Running REAL OpsKit k8s create (downloads, runtime, kubeadm init, Calico)..."
+# A bounded experiment should reveal a failed CNI early enough to preserve
+# useful diagnostic logs; do not turn an API/Calico failure into a pass.
+install_timeout="${OPSKIT_INSTALL_E2E_TIMEOUT:-15m}"
+if [[ ! "$install_timeout" =~ ^[1-9][0-9]*m$ ]]; then
+  echo "OPSKIT_INSTALL_E2E_TIMEOUT must be a positive integer number of minutes" >&2
+  exit 2
+fi
+echo "Running REAL OpsKit k8s create (downloads, runtime, kubeadm init, Calico; timeout=$install_timeout)..."
 set +e
-/usr/local/bin/opskit k8s create --config "$cfg" --timeout 32m   > "$report/install.log" 2>&1
+/usr/local/bin/opskit k8s create --config "$cfg" --timeout "$install_timeout" \
+  > "$report/install.log" 2>&1
 status=$?
 set -e
 
