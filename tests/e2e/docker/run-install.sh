@@ -34,7 +34,7 @@ cleanup() {
   # Collect non-secret diagnostics before containers are removed.
   "${compose[@]}" ps > "$report_dir/full-install/compose-ps.log" 2>&1 || true
   "${compose[@]}" logs --no-color > "$report_dir/full-install/compose.log" 2>&1 || true
-  "${compose[@]}" exec -T master sh -c 'systemctl --no-pager --plain status kubelet containerd || true; journalctl -u kubelet -u containerd --no-pager -n 150 || true; cat /proc/swaps || true'     > "$report_dir/full-install/node-diagnostics.log" 2>&1 || true
+  "${compose[@]}" exec -T master sh -c 'echo "--- nested containerd storage ---"; findmnt -T /var/lib/containerd -o TARGET,SOURCE,FSTYPE,OPTIONS || true; echo "--- kubelet/containerd systemd ---"; systemctl --no-pager --plain status kubelet containerd || true; echo "--- CRI summary ---"; crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a || true; echo "--- recent logs ---"; journalctl -u kubelet -u containerd --no-pager -n 150 || true; echo "--- swap ---"; cat /proc/swaps || true'     > "$report_dir/full-install/node-diagnostics.log" 2>&1 || true
   "${compose[@]}" down --volumes --remove-orphans || true
   exit "$status"
 }
@@ -42,4 +42,11 @@ trap cleanup EXIT
 
 echo "Launching disposable privileged systemd node (real kubeadm installation)..."
 "${compose[@]}" up --build -d --wait master
+# Fail quickly if nested containerd would store image snapshots on overlay2.
+storage_type="$("${compose[@]}" exec -T master findmnt -T /var/lib/containerd -n -o FSTYPE)"
+echo "Nested containerd storage filesystem: ${storage_type}"
+if [[ "$storage_type" == overlay || "$storage_type" == overlayfs ]]; then
+  echo "Nested containerd storage remains on Docker's overlay rootfs, refusing invalid install experiment." >&2
+  exit 1
+fi
 "${compose[@]}" run --build --rm --no-deps tester
