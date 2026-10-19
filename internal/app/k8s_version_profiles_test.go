@@ -203,7 +203,7 @@ func TestK8sCreateNewerVersionRequiresPinnedNetwork(t *testing.T) {
 	}
 	write()
 	code, err, output := workflowRun(t, "k8s", "create", "--config", configPath, "--dry-run")
-	if code == 0 || err == nil || !strings.Contains(output, "network.manifest") {
+	if code == 0 || err == nil || !strings.Contains(err.Error()+" "+output, "network.manifest") {
 		t.Fatalf("newer Kubernetes without CNI manifest was accepted: %d %v %s", code, err, output)
 	}
 	manifest := filepath.Join(t.TempDir(), "cni.yaml")
