@@ -1,0 +1,50 @@
+name: Experimental real OpsKit kubeadm installation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/k8s-real-install-e2e.yml"
+      - "tests/e2e/docker/**"
+      - "internal/app/**"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-install:
+    # Use only ephemeral hosted runners. Never run a privileged container on a
+    # self-hosted runner, or run untrusted fork code with elevated Docker access.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: OpsKit real kubeadm init on disposable Docker node
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      OPSKIT_ALLOW_PRIVILEGED_INSTALL_E2E: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm disposable GitHub-hosted Linux runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$GITHUB_ACTIONS" = true
+          docker info --format '{{.OperatingSystem}}'
+      - name: Validate full installation Compose configuration
+        run: docker compose -f tests/e2e/docker/compose.yaml -f tests/e2e/docker/full-install.compose.yaml config --quiet
+      - name: Install actual Kubernetes through OpsKit
+        shell: bash
+        run: bash tests/e2e/docker/run-install.sh
+      - name: Upload install and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opskit-real-kubeadm-install-logs
+          path: |
+            tests/e2e/docker/artifacts/full-install/*.log
+            tests/e2e/docker/artifacts/full-install/result.txt
+          if-no-files-found: warn
+          retention-days: 5
