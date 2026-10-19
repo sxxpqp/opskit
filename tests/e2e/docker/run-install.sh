@@ -34,7 +34,10 @@ cleanup() {
   # Collect non-secret diagnostics before containers are removed.
   "${compose[@]}" ps > "$report_dir/full-install/compose-ps.log" 2>&1 || true
   "${compose[@]}" logs --no-color > "$report_dir/full-install/compose.log" 2>&1 || true
-  "${compose[@]}" exec -T master sh -c 'echo "--- nested containerd storage ---"; findmnt -T /var/lib/containerd -o TARGET,SOURCE,FSTYPE,OPTIONS || true; echo "--- kubelet/containerd systemd ---"; systemctl --no-pager --plain status kubelet containerd || true; echo "--- CRI summary ---"; crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a || true; echo "--- recent logs ---"; journalctl -u kubelet -u containerd --no-pager -n 150 || true; echo "--- swap ---"; cat /proc/swaps || true'     > "$report_dir/full-install/node-diagnostics.log" 2>&1 || true
+  # Run in-container diagnostic script over stdin. No Docker daemon socket or
+  # kubeconfig is uploaded; only sanitized operational logs leave the container.
+  "${compose[@]}" exec -T master bash -s < tests/e2e/docker/collect-install-diagnostics.sh \
+    > "$report_dir/full-install/node-diagnostics.log" 2>&1 || true
   "${compose[@]}" down --volumes --remove-orphans || true
   exit "$status"
 }
