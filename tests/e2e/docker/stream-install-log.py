@@ -9,6 +9,9 @@ secret-handling boundary for production credentials.
 import os
 import re
 import sys
+import subprocess
+import threading
+from pathlib import Path
 
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 JOIN_TOKEN = re.compile(r"(?<![A-Za-z0-9])[a-z0-9]{6}\.[a-z0-9]{16}(?![A-Za-z0-9])", re.I)
@@ -60,19 +63,84 @@ def redact(line: str) -> str:
     return line
 
 
-def main() -> None:
+def stream_redacted(stream, emit) -> None:
+    """Each input stream has its own PEM-block suppression state."""
     in_pem = False
-    for line in sys.stdin:
+    for line in stream:
         if BEGIN_PEM.search(line):
-            print("[PEM key/certificate redacted]", flush=True)
+            emit("[PEM key/certificate redacted]")
             in_pem = not bool(END_PEM.search(line))
             continue
         if in_pem:
             if END_PEM.search(line):
                 in_pem = False
             continue
-        print(redact(line), flush=True)
+        emit(redact(line))
+
+
+def run_command(log_path: str, command: list[str]) -> int:
+    """Capture subprocess stdout and stderr separately; never publish raw bytes.
+
+    The two readers run concurrently to avoid deadlocks when one pipe fills.
+    A shared lock ensures each sanitized line is atomically written to both
+    GitHub Actions stdout and the persistent diagnostic artifact.
+    """
+    if not command:
+        raise ValueError("Missing installer command")
+    failures = []
+    with Path(log_path).open("w", encoding="utf-8", buffering=1) as log:
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+        lock = threading.Lock()
+
+        def read(channel, pipe) -> None:
+            try:
+                def emit(line: str) -> None:
+                    # Keep the original source of errors visible in CI.
+                    message = f"[{channel}] {line}"
+                    with lock:
+                        print(message, flush=True)
+                        log.write(message + "\n")
+                        log.flush()
+                with pipe:
+                    stream_redacted(pipe, emit)
+            except Exception:
+                failures.append(channel)
+
+        streams = [
+            threading.Thread(target=read, args=("STDOUT", proc.stdout)),
+            threading.Thread(target=read, args=("STDERR", proc.stderr)),
+        ]
+        for worker in streams:
+            worker.start()
+        status = proc.wait()
+        for worker in streams:
+            worker.join()
+
+    if failures:
+        print("[diagnostics] Output capture failed; refusing to report success.", flush=True)
+        return 1
+    # Preserve the original installer exit code; a negative signal exit maps
+    # to the usual shell convention (128 + signal number).
+    return status if status >= 0 else 128 - status
+
+
+def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1] == "--run":
+        if len(sys.argv) < 4:
+            print("Usage: stream-install-log.py --run LOGFILE COMMAND [ARGS...]", file=sys.stderr)
+            return 2
+        return run_command(sys.argv[2], sys.argv[3:])
+    stream_redacted(sys.stdin, lambda line: print(line, flush=True))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
