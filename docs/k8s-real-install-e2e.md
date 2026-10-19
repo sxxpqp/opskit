@@ -52,7 +52,12 @@ kernel's `/lib/modules` metadata inside Ubuntu 22.04. The follow-up test
 mounts the disposable runner's module metadata read-only and treats already
 loaded kernel modules as available, while still failing if a missing module
 cannot be loaded. Its first run also exposed root-only report file permissions;
-the report uploader now receives read access only to diagnostic files.
+the report uploader now receives read access only to diagnostic files. In the second real
+run, kubeadm preparation reached and applied bridge/IP-forwarding sysctls,
+but `swapoff -a` returned 32 in the systemd container. The host preparation
+now reads `/proc/swaps` first: it skips a needless swapoff only when there
+are no active swap devices, and still fails if active swap cannot be disabled.
+This behavior is covered by an isolated unit test.
 
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
