@@ -28,15 +28,16 @@ services:
       context: ../../..
       dockerfile: tests/e2e/docker/node.Dockerfile
     entrypoint: ["/bin/bash", "-euc"]
-    command: |
-      umask 077
-      if [[ ! -s /run/e2e/id_ed25519 ]]; then
-        ssh-keygen -q -t ed25519 -N '' -f /run/e2e/id_ed25519
-      fi
-      if [[ ! -s /run/e2e/password ]]; then
-        head -c 24 /dev/urandom | base64 | tr -d '\n' > /run/e2e/password
-      fi
-      chmod 0600 /run/e2e/id_ed25519 /run/e2e/password
+    command:
+      - |
+        umask 077
+        if [[ ! -s /run/e2e/id_ed25519 ]]; then
+          ssh-keygen -q -t ed25519 -N '' -f /run/e2e/id_ed25519
+        fi
+        if [[ ! -s /run/e2e/password ]]; then
+          head -c 24 /dev/urandom | base64 | tr -d '\n' > /run/e2e/password
+        fi
+        chmod 0600 /run/e2e/id_ed25519 /run/e2e/password
     volumes:
       - ssh-secrets:/run/e2e
     networks:
