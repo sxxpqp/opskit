@@ -46,6 +46,14 @@ The script:
 8. Records logs, gathers node journal diagnostics and destroys this run's
    containers, private volume and network even when installation fails.
 
+Initial GitHub Actions run reached real artifact downloads and **kubeadm
+prepare**, then failed because `modprobe overlay` could not find the host
+kernel's `/lib/modules` metadata inside Ubuntu 22.04. The follow-up test
+mounts the disposable runner's module metadata read-only and treats already
+loaded kernel modules as available, while still failing if a missing module
+cannot be loaded. Its first run also exposed root-only report file permissions;
+the report uploader now receives read access only to diagnostic files.
+
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
 before classifying failures. Docker uses the host kernel and may not support
