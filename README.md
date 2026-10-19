@@ -71,7 +71,7 @@ opskit completion powershell > opskit.ps1
 | kind 管理（main，未发布） | 版本安装与跨系统 PATH 配置、集群创建/状态/日志、context 切换及按配置删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；默认备份后写入，--dry-run 预览 |
 | K8s SSH（main，未发布） | KK 风格配置、密码/密钥/sudo、下载复用、自动加入及固定版本 Calico；单 master、未真机验收 |
-| Docker K8s 集成测试（PR 待合并） | Ubuntu systemd/SSH 容器验证真实 SSH、sudo、文件上传、节点预检；Kind 双节点验证 API、Node Ready 和 CoreDNS；**不等于从零安装 kubeadm 成功** |
+| Docker K8s 集成测试（开发中） | Ubuntu systemd/SSH 容器验证真实 SSH、sudo、文件上传、节点预检；Kind 双节点验证 API、Node Ready 和 CoreDNS；**不等于从零安装 kubeadm 成功** |
 | kubeadm（main，未发布） | install/prepare/init/join，containerd 兼容检查、systemd、单控制平面和工作节点；未真机验收 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
