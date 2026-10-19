@@ -12,6 +12,13 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 2
 fi
 
+# Docker cannot reliably change kernel-wide swap state. Only a dedicated host
+# already configured without active swap is eligible for this true install test.
+if [[ "$(wc -l < /proc/swaps)" -ne 1 ]]; then
+  echo "Host swap is active. Disable it on a disposable test host before starting; refusing to alter host swap from Docker." >&2
+  exit 2
+fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$root"
 report_dir="$root/tests/e2e/docker/artifacts"
