@@ -66,6 +66,16 @@ reliably deactivate. The local script instead refuses to run while host swap
 is active; it never calls host `swapoff` automatically. This is not suitable
 for shared Docker hosts.
 
+With host swap disabled, the next run installed real containerd, runc, CNI
+plugins, kubeadm, kubelet and kubectl and reached **kubeadm init**. It failed
+the mandatory `SystemVerification` preflight because the Ubuntu container
+could not read the host's kernel configuration (`modprobe configs` unavailable).
+The dedicated test now mounts host `/boot` and `/usr/src` read-only alongside
+`/lib/modules`, allowing kubeadm to use actual kernel configuration if the
+GitHub-hosted runner provides it. **No preflight errors are ignored.**
+The kernel config may still be absent on a particular hosted image; such a
+failure is recorded rather than passed.
+
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
 before classifying failures. Docker uses the host kernel and may not support
