@@ -22,6 +22,7 @@ COPY --from=build /out/opskit-app.test /usr/local/bin/opskit-app.test
 COPY config.example.yaml /etc/opskit/config.example.yaml
 COPY tests/e2e/docker/generate-install-config.py /usr/local/bin/opskit-e2e-generate-config
 COPY tests/e2e/docker/install-entrypoint.sh /usr/local/bin/opskit-e2e-install
+COPY tests/e2e/docker/stream-install-log.py /usr/local/bin/opskit-e2e-stream-log
 COPY tests/e2e/docker/tester-entrypoint.sh /usr/local/bin/opskit-e2e-tester
 RUN chmod 0755 /usr/local/bin/opskit-e2e-tester /usr/local/bin/opskit-e2e-install /usr/local/bin/opskit-e2e-generate-config
 
