@@ -3,9 +3,6 @@ package app
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -157,14 +154,7 @@ func TestKubeadmConfigVersionAndNodeArgs(t *testing.T) {
 }
 
 func TestKubeadmInstallAutoCRIToolsForNewerVersion(t *testing.T) {
-	config := filepath.Join(t.TempDir(), "config.yaml")
-	raw, err := os.ReadFile("../../../config.example.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(config, raw, 0600); err != nil {
-		t.Fatal(err)
-	}
+	config := kubeadmTestConfig(t)
 	code, err, output := workflowRun(t, "kubeadm", "install", "--config", config, "--version", "v1.35.1", "--dry-run")
 	if code != 0 || err != nil {
 		t.Fatal(code, err, output)
@@ -187,5 +177,4 @@ func TestKubeadmSchemaDefaultAndExtraYAML(t *testing.T) {
 	if c.K8s.Kubernetes.Version != "v1.24.7" || c.K8s.CRITools.Version != "v1.24.2" {
 		t.Fatalf("defaults not resolved: %s / %s", c.K8s.Kubernetes.Version, c.K8s.CRITools.Version)
 	}
-	_ = io.Discard
 }
