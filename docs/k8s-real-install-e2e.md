@@ -59,6 +59,13 @@ now reads `/proc/swaps` first: it skips a needless swapoff only when there
 are no active swap devices, and still fails if active swap cannot be disabled.
 This behavior is covered by an isolated unit test.
 
+On a GitHub-hosted disposable runner, CI explicitly checks and disables
+host-level swap before creating Docker nodes. This is required because
+`/proc/swaps` reports **host kernel swap**, which privileged containers cannot
+reliably deactivate. The local script instead refuses to run while host swap
+is active; it never calls host `swapoff` automatically. This is not suitable
+for shared Docker hosts.
+
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
 before classifying failures. Docker uses the host kernel and may not support
