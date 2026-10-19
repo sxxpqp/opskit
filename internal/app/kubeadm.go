@@ -39,14 +39,13 @@ type kubeadmSettings struct {
 
 func newKubeadmCommand(parent context.Context, action string, out, diag io.Writer) (*cobra.Command, error) {
 	var defaults fileConfig
-	if err := yaml.Unmarshal(templates.ConfigTemplate, &defaults); err != nil {
+	if err := yamlClusterDefaults(&defaults); err != nil {
 		return nil, err
 	}
-	defaults.projectComponents()
 	cmd := &cobra.Command{Use: action}
 	f := cmd.Flags()
 	config := f.String("config", defaultConfigPath, "统一配置文件")
-	version := f.String("version", "", "Kubernetes 完整版本 vX.Y.Z；默认 k8s.kubernetes.version；支持 1.24～1.30")
+	version := f.String("version", "", "Kubernetes 完整版本 v1.X.Y；支持已配置的 1.24～1.37")
 	dry := f.Bool("dry-run", false, "仅预览，不下载、不调用外部工具、不修改主机或集群")
 	timeout := f.Duration("timeout", 30*time.Minute, "本次命令总超时")
 	var base, kubeletBase, kubectlBase, criBase, criVersion, downloadDir *string
@@ -88,6 +87,12 @@ func newKubeadmCommand(parent context.Context, action string, out, diag io.Write
 		setConfigFlag(f, "version", c.Versions.Kubernetes)
 		minor, err := kubeadmMinor(*version)
 		if err != nil {
+			return 2, err
+		}
+		// Version flags take precedence; auto-pinned dependencies must follow
+		// the effective target version, not the YAML's original version.
+		c.K8s.Kubernetes.Version = *version
+		if err = resolveClusterComponentVersions(&c); err != nil {
 			return 2, err
 		}
 		ctx, cancel := context.WithTimeout(parent, *timeout)
@@ -246,8 +251,8 @@ func kubeadmMinor(version string) (int, error) {
 	}
 	parts := strings.Split(strings.TrimPrefix(version, "v"), ".")
 	minor, _ := strconv.Atoi(parts[1])
-	if parts[0] != "1" || minor < 24 || minor > 30 {
-		return 0, errors.New("当前 kubeadm 路线仅支持 Kubernetes 1.24～1.30（v1beta3 配置）；不猜测其他版本兼容性")
+	if parts[0] != "1" || minor < 24 || minor > 37 {
+		return 0, errors.New("当前 kubeadm 路线仅支持 Kubernetes 1.24～1.37（v1beta3/v1beta4）；新增 minor 需先添加依赖兼容配置及测试")
 	}
 	return minor, nil
 }
@@ -279,11 +284,29 @@ func kubeadmFreshNode() error {
 	return nil
 }
 
+// kubeadm switched to v1beta4 in Kubernetes 1.31. kubeletExtraArgs also
+// changed from a map to a list of {name, value} pairs in that API.
+func kubeadmConfigAPIVersion(minor int) string {
+	if minor >= 31 {
+		return "kubeadm.k8s.io/v1beta4"
+	}
+	return "kubeadm.k8s.io/v1beta3"
+}
+
+func kubeadmKubeletExtraArgs(minor int, nodeIP string) any {
+	if minor >= 31 {
+		return []map[string]string{{"name": "node-ip", "value": nodeIP}}
+	}
+	return map[string]string{"node-ip": nodeIP}
+}
+
 // Use structured YAML rather than passing secrets in subprocess arguments.
 func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
-	if _, err := kubeadmMinor(version); err != nil {
+	minor, err := kubeadmMinor(version)
+	if err != nil {
 		return nil, err
 	}
+	apiVersion := kubeadmConfigAPIVersion(minor)
 	if o.NodeName != "" && !regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`).MatchString(o.NodeName) {
 		return nil, errors.New("node-name 必须是小写 DNS 名称")
 	}
@@ -298,9 +321,9 @@ func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
 		if ip == nil || ip.To4() == nil || ip.IsUnspecified() || ip.IsLoopback() {
 			return nil, errors.New("node-ip 必须为本机可达 IPv4")
 		}
-		registration["kubeletExtraArgs"] = map[string]string{"node-ip": o.NodeIP}
+		registration["kubeletExtraArgs"] = kubeadmKubeletExtraArgs(minor, o.NodeIP)
 	} else if action == "init" {
-		registration["kubeletExtraArgs"] = map[string]string{"node-ip": o.AdvertiseAddress}
+		registration["kubeletExtraArgs"] = kubeadmKubeletExtraArgs(minor, o.AdvertiseAddress)
 	}
 	if o.NodeName != "" {
 		registration["name"] = o.NodeName
@@ -315,7 +338,7 @@ func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
 		if !regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`).MatchString(o.CAHash) {
 			return nil, errors.New("必须提供 discovery-token-ca-cert-hash sha256:<64位摘要>；不跳过 CA 校验")
 		}
-		return yaml.Marshal(map[string]any{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "JoinConfiguration", "nodeRegistration": registration, "discovery": map[string]any{"bootstrapToken": map[string]any{"apiServerEndpoint": o.JoinEndpoint, "token": o.Token, "caCertHashes": []string{o.CAHash}}}})
+		return yaml.Marshal(map[string]any{"apiVersion": apiVersion, "kind": "JoinConfiguration", "nodeRegistration": registration, "discovery": map[string]any{"bootstrapToken": map[string]any{"apiServerEndpoint": o.JoinEndpoint, "token": o.Token, "caCertHashes": []string{o.CAHash}}}})
 	}
 	if action != "init" {
 		return nil, errors.New("仅支持 init 或 join 配置")
@@ -344,8 +367,8 @@ func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
 		return nil, errors.New("image-repository 必须为非空镜像仓库路径，不带 URL 协议")
 	}
 	documents := []map[string]any{
-		{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "InitConfiguration", "nodeRegistration": registration, "localAPIEndpoint": map[string]any{"advertiseAddress": o.AdvertiseAddress, "bindPort": 6443}},
-		{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "ClusterConfiguration", "kubernetesVersion": version, "imageRepository": o.ImageRepository, "networking": map[string]any{"podSubnet": o.PodSubnet, "serviceSubnet": o.ServiceSubnet}},
+		{"apiVersion": apiVersion, "kind": "InitConfiguration", "nodeRegistration": registration, "localAPIEndpoint": map[string]any{"advertiseAddress": o.AdvertiseAddress, "bindPort": 6443}},
+		{"apiVersion": apiVersion, "kind": "ClusterConfiguration", "kubernetesVersion": version, "imageRepository": o.ImageRepository, "networking": map[string]any{"podSubnet": o.PodSubnet, "serviceSubnet": o.ServiceSubnet}},
 		{"apiVersion": "kubelet.config.k8s.io/v1beta1", "kind": "KubeletConfiguration", "cgroupDriver": "systemd"},
 	}
 	if o.ClusterName != "" {
