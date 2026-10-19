@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-install -d -m 0700 /artifacts
+mkdir -p /artifacts
 if [[ ! -s /run/e2e/password || ! -s /run/e2e/id_ed25519 ]]; then
   echo "E2E credentials not available to tester" >&2
   exit 1
