@@ -265,7 +265,7 @@ func newK8sNodeCommand(parent context.Context, out, diag io.Writer) (*cobra.Comm
 				break
 			}
 			token := hex.EncodeToString(random[:3]) + "." + hex.EncodeToString(random[3:])
-			raw, err = yaml.Marshal(map[string]any{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "InitConfiguration", "bootstrapTokens": []any{map[string]any{"token": token, "ttl": "30m0s"}}})
+			raw, err = yaml.Marshal(map[string]any{"apiVersion": kubeadmConfigAPIVersion(kubeadmVersionMinor(c.K8s.Kubernetes.Version)), "kind": "InitConfiguration", "bootstrapTokens": []any{map[string]any{"token": token, "ttl": "30m0s"}}})
 			if err != nil {
 				break
 			}
