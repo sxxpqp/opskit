@@ -7,6 +7,10 @@ services:
       - /lib/modules:/lib/modules:ro
       - /boot:/boot:ro
       - /usr/src:/usr/src:ro
+      # Keep containerd's overlay snapshots off Docker's own overlay2 rootfs.
+      # A dedicated Docker volume is backed by the disposable runner's host FS,
+      # avoiding overlay-on-overlay mounts inside the privileged test node.
+      - nested-containerd-data:/var/lib/containerd
   tester:
     entrypoint: ["/bin/bash", "/usr/local/bin/opskit-e2e-install"]
     environment:
@@ -17,3 +21,6 @@ networks:
     # Real artifact downloads and container image pulls require outbound access.
     # Existing fast SSH/systemd tests keep their internal-only network.
     internal: false
+
+volumes:
+  nested-containerd-data:
