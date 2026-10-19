@@ -78,6 +78,9 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 		if err = mergeClusterDefaults(&c); err != nil {
 			return 2, err
 		}
+		if err = resolveClusterComponentVersions(&c); err != nil {
+			return 2, err
+		}
 		if err = validateCluster(&c.K8s); err != nil {
 			return 2, err
 		}
