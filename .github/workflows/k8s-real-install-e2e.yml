@@ -55,20 +55,25 @@ jobs:
           test "$(wc -l < /proc/swaps)" -eq 1
       - name: Validate full installation Compose configuration
         run: docker compose -f tests/e2e/docker/compose.yaml -f tests/e2e/docker/full-install.compose.yaml config --quiet
-      - name: Verify live log redaction before printing CI output
-        run: python3 tests/e2e/docker/test_stream_install_log.py
+      - name: Verify live STDOUT/STDERR capture, redaction and failure summarization
+        run: |
+          python3 tests/e2e/docker/test_stream_install_log.py
+          python3 tests/e2e/docker/test_summarize_install_diagnostics.py
       - name: Install actual Kubernetes through OpsKit (live sanitized output)
         shell: bash
         run: bash tests/e2e/docker/run-install.sh
-      - name: Show sanitized node diagnostics after a failure
+      - name: Show root-cause errors from Calico, Pod Events and CRI
         if: failure()
         shell: bash
         run: |
           set -Eeuo pipefail
           file=tests/e2e/docker/artifacts/full-install/node-diagnostics.log
           if [[ -s "$file" ]]; then
-            echo "Last 180 lines of sanitized kubelet/containerd/Calico diagnostics:"
-            python3 tests/e2e/docker/stream-install-log.py < "$file" | tail -n 180
+            echo "::group::Root-cause summary (Calico, Pod events and container runtime)"
+            python3 tests/e2e/docker/summarize-install-diagnostics.py < "$file" \
+              | python3 tests/e2e/docker/stream-install-log.py
+            echo "::endgroup::"
+            echo "The full node-diagnostics.log is available in this run's uploaded artifact."
           else
             echo "No node diagnostics captured (installation may have failed before node startup)."
           fi
