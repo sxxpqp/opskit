@@ -76,16 +76,20 @@ type clusterSettings struct {
 
 // These are private local-command projections, not legacy YAML aliases.
 func (c *fileConfig) projectComponents() {
+	// Derive defaults without filling the raw config: CLI Kubernetes overrides
+	// must select their own matching profile later.
+	resolved := c.K8s
+	_ = applyClusterComponentDefaults(&resolved)
 	c.Versions.Kind = c.Kind.Version
 	c.Versions.Kubernetes = c.K8s.Kubernetes.Version
 	c.Versions.Kubectl = c.K8s.Kubernetes.Version
 	c.Versions.KubeSphere = c.K8s.KubeSphere.Version
-	c.Versions.Containerd = c.K8s.Containerd.Version
-	c.Versions.Docker = c.K8s.Docker.Version
-	c.Versions.Runc = c.K8s.Runc.Version
-	c.Versions.CRIDockerd = c.K8s.CRIDockerd.Version
-	c.Versions.CNIPlugins = c.K8s.CNIPlugins.Version
-	c.Versions.CRITools = c.K8s.CRITools.Version
+	c.Versions.Containerd = resolved.Containerd.Version
+	c.Versions.Docker = resolved.Docker.Version
+	c.Versions.Runc = resolved.Runc.Version
+	c.Versions.CRIDockerd = resolved.CRIDockerd.Version
+	c.Versions.CNIPlugins = resolved.CNIPlugins.Version
+	c.Versions.CRITools = resolved.CRITools.Version
 	c.KubeSphere.StorageClass = c.K8s.KubeSphere.StorageClass
 	c.KubeSphere.Password = c.K8s.KubeSphere.Password
 	c.KubeSphere.InstallerSource = c.K8s.KubeSphere.InstallerSource
@@ -106,6 +110,9 @@ func clusterCRISocket(manager string) string {
 	return "unix:///run/containerd/containerd.sock"
 }
 func validateCluster(c *clusterSettings) error {
+	if err := applyClusterComponentDefaults(c); err != nil {
+		return err
+	}
 	if c.Name == "" {
 		return errors.New("未配置 k8s.name；请先执行 opskit config init 并编辑配置，或用 --config FILE 指定含 k8s 配置的文件")
 	}

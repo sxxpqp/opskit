@@ -48,8 +48,17 @@ func installKubeadmTools(ctx context.Context, version, criVersion string, bases 
 	if err := kubeadmFreshNode(); err != nil {
 		return err
 	}
+	reuseKubectl := false
 	for _, name := range []string{"kubeadm", "kubelet", "kubectl", "crictl"} {
 		if found, err := exec.LookPath(name); err == nil {
+			if name == "kubectl" {
+				if err := verifyKubeadmTool(ctx, found, name, version); err != nil {
+					return err
+				}
+				reuseKubectl = true
+				fmt.Fprintf(out, "复用已有 kubectl: %s（%s）\n", found, version)
+				continue
+			}
 			return fmt.Errorf("已有 %s: %s；此入口不覆盖或升级已有工具", name, found)
 		}
 		if err := ensureRuntimeAbsent("/usr/local/bin/" + name); err != nil {
@@ -76,6 +85,9 @@ func installKubeadmTools(ctx context.Context, version, criVersion string, bases 
 	}
 	// All packages and versions have been checked before writing live binaries.
 	for _, name := range []string{"kubeadm", "kubelet", "kubectl", "crictl"} {
+		if name == "kubectl" && reuseKubectl {
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(tmp, name))
 		if err != nil {
 			return err

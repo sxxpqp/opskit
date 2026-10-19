@@ -22,7 +22,6 @@ type clusterRemote interface {
 type sshClusterRemote struct {
 	client       *ssh.Client
 	host         clusterHost
-	password     string
 	sudoPassword string
 	agentConn    net.Conn
 }
@@ -36,6 +35,9 @@ func dialClusterSSH(ctx context.Context, h clusterHost) (clusterRemote, error) {
 	sudo, err := secretValue(h.SudoPassword, h.SudoPasswordEnv)
 	if err != nil {
 		return nil, err
+	}
+	if h.SudoPassword == "" && h.SudoPasswordEnv == "" {
+		sudo = password
 	}
 	var methods []ssh.AuthMethod
 	var agentConn net.Conn
@@ -99,7 +101,7 @@ func dialClusterSSH(ctx context.Context, h clusterHost) (clusterRemote, error) {
 		return nil, fmt.Errorf("%s: SSH 连接或认证失败: %w", h.Name, err)
 	}
 	_ = conn.SetDeadline(time.Time{})
-	return &sshClusterRemote{client: ssh.NewClient(clientConn, channels, requests), host: h, password: password, sudoPassword: sudo, agentConn: agentConn}, nil
+	return &sshClusterRemote{client: ssh.NewClient(clientConn, channels, requests), host: h, sudoPassword: sudo, agentConn: agentConn}, nil
 }
 func (r *sshClusterRemote) Close() error {
 	if r.agentConn != nil {
@@ -133,17 +135,9 @@ func (r *sshClusterRemote) run(ctx context.Context, command string, input io.Rea
 	case err = <-done:
 	}
 	if err != nil {
-		return out.Bytes(), fmt.Errorf("远端命令失败: %w: %s", err, r.redact(diag.String()))
+		return out.Bytes(), fmt.Errorf("远端命令失败: %w: %s", err, redactClusterLog(diag.String()))
 	}
 	return out.Bytes(), nil
-}
-func (r *sshClusterRemote) redact(text string) string {
-	for _, secret := range []string{r.password, r.sudoPassword} {
-		if secret != "" {
-			text = strings.ReplaceAll(text, secret, "<redacted>")
-		}
-	}
-	return text
 }
 func (r *sshClusterRemote) Exec(ctx context.Context, root bool, command string) ([]byte, error) {
 	var input io.Reader

@@ -75,7 +75,7 @@ func TestKubeadmInvalidInput(t *testing.T) {
 	config := kubeadmTestConfig(t)
 	for _, args := range [][]string{
 		{"install", "--version", "latest"}, {"install", "--version", "v1.31.0"},
-		{"install", "--version", "v1.26.15"}, {"install", "--kubeadm-download-base", "https://user:pass@example.com"},
+		{"install", "--version", "v1.26.15", "--cri-tools-version", "v1.24.2"}, {"install", "--kubeadm-download-base", "https://user:pass@example.com"},
 		{"install", "--download-base", "https://old.example"}, {"init", "--apply"}, {"init"},
 		{"join", "--endpoint", "192.168.10.10:6443", "--token", "abcdef.0123456789abcdef"},
 		{"prepare", "--timeout", "0s"},
@@ -116,6 +116,16 @@ func TestKubeadmStructuredConfiguration(t *testing.T) {
 	}
 	if len(docs) != 3 || docs[0]["kind"] != "InitConfiguration" || docs[1]["controlPlaneEndpoint"] != "api.example.com:6443" || docs[2]["cgroupDriver"] != "systemd" {
 		t.Fatal(string(raw))
+	}
+	dns, ok := docs[1]["dns"].(map[string]any)
+	if !ok || dns["imageRepository"] != "registry.k8s.io/coredns" {
+		t.Fatal("official CoreDNS namespace missing", string(raw))
+	}
+	custom := o
+	custom.ImageRepository = "registry.example.com/custom"
+	customRaw, err := renderKubeadm("init", "v1.24.7", custom)
+	if err != nil || bytes.Contains(customRaw, []byte("registry.k8s.io/coredns")) {
+		t.Fatal("custom repository overridden", err, string(customRaw))
 	}
 	for _, change := range []func(*kubeadmSettings){
 		func(o *kubeadmSettings) { o.AdvertiseAddress = "127.0.0.1" },

@@ -30,8 +30,9 @@ type componentDownloadSettings struct {
 
 type runtimeInstallSettings struct {
 	Calico struct {
-		DownloadBase string `yaml:"download_base"`
-		SHA256       string `yaml:"sha256"`
+		FallbackBases []string `yaml:"fallback_bases"`
+		DownloadBase  string   `yaml:"download_base"`
+		SHA256        string   `yaml:"sha256"`
 	} `yaml:"calico"`
 	Go struct {
 		DownloadBase string `yaml:"download_base"`

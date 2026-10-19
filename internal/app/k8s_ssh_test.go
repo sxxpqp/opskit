@@ -141,6 +141,28 @@ func TestClusterSSHPasswordSudoWithoutHostKeyVerification(t *testing.T) {
 			t.Fatal("known_hosts modified", err)
 		}
 	}
+	for _, useEnv := range []bool{false, true} {
+		fallback := h
+		fallback.SudoPassword = ""
+		if useEnv {
+			t.Setenv("OPSKIT_TEST_SSH_PASSWORD", fallback.Password)
+			fallback.Password = ""
+			fallback.PasswordEnv = "OPSKIT_TEST_SSH_PASSWORD"
+		}
+		client, err := dialClusterSSH(context.Background(), fallback)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = client.Exec(context.Background(), true, "id -u")
+		client.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := <-observed
+		if !strings.Contains(got.command, "sudo -k -S -p ''") || got.input != "ssh-password\n" || strings.Contains(got.command, "ssh-password") {
+			t.Fatal("SSH password was not safely reused for sudo")
+		}
+	}
 	bad := h
 	bad.Password = "wrong-password"
 	if client, err := dialClusterSSH(context.Background(), bad); err == nil {

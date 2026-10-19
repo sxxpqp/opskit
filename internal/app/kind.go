@@ -46,16 +46,33 @@ func download(ctx context.Context, source string, destination io.Writer) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	for attempt := 1; attempt <= 3; attempt++ {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode == http.StatusOK {
+			_, err = io.Copy(destination, resp.Body)
+			resp.Body.Close()
+			return err
+		}
+		status := resp.StatusCode
+		resp.Body.Close()
+		retryable := status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
+		if !retryable || attempt == 3 {
+			return fmt.Errorf("下载 %s: HTTP %d（尝试 %d 次）", source, status, attempt)
+		}
+		// Retry before copying any bytes: never append a second response to a
+		// partial binary or a checksum stream. Respect the caller's total timeout.
+		timer := time.NewTimer(time.Duration(attempt*2) * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("下载 %s: HTTP %d", source, resp.StatusCode)
-	}
-	_, err = io.Copy(destination, resp.Body)
-	return err
+	return nil
 }
 
 func installKind(ctx context.Context, o kindOptions, out io.Writer) error {

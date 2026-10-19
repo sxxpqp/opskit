@@ -102,7 +102,12 @@ func newKubeadmCommand(parent context.Context, action string, out, diag io.Write
 				setEnvFlag(f, item.flag, item.env)
 				setConfigFlag(f, item.flag, item.value)
 			}
-			setConfigFlag(f, "cri-tools-version", c.Versions.CRITools)
+			resolved := c.K8s
+			resolved.Kubernetes.Version = *version
+			if err := applyClusterComponentDefaults(&resolved); err != nil {
+				return 2, err
+			}
+			setConfigFlag(f, "cri-tools-version", resolved.CRITools.Version)
 			setConfigFlag(f, "download-dir", c.Install.DownloadDir)
 			criMinor, e := kubeadmMinor(*criVersion)
 			if e != nil || criMinor != minor {
@@ -347,6 +352,11 @@ func renderKubeadm(action, version string, o kubeadmSettings) ([]byte, error) {
 		{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "InitConfiguration", "nodeRegistration": registration, "localAPIEndpoint": map[string]any{"advertiseAddress": o.AdvertiseAddress, "bindPort": 6443}},
 		{"apiVersion": "kubeadm.k8s.io/v1beta3", "kind": "ClusterConfiguration", "kubernetesVersion": version, "imageRepository": o.ImageRepository, "networking": map[string]any{"podSubnet": o.PodSubnet, "serviceSubnet": o.ServiceSubnet}},
 		{"apiVersion": "kubelet.config.k8s.io/v1beta1", "kind": "KubeletConfiguration", "cgroupDriver": "systemd"},
+	}
+	// Older kubeadm treats registry.k8s.io as a custom repository and loses
+	// the CoreDNS namespace unless it is explicitly specified.
+	if strings.TrimRight(o.ImageRepository, "/") == "registry.k8s.io" {
+		documents[1]["dns"] = map[string]any{"imageRepository": "registry.k8s.io/coredns"}
 	}
 	if o.ClusterName != "" {
 		documents[1]["clusterName"] = o.ClusterName

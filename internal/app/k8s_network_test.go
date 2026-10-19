@@ -197,3 +197,39 @@ func TestClusterCalicoWaitAndExistingConfig(t *testing.T) {
 		t.Fatal("foreign CNI accepted")
 	}
 }
+
+func TestClusterCalicoFallback(t *testing.T) {
+	for _, badHash := range []bool{false, true} {
+		t.Run(fmt.Sprintf("badHash=%t", badHash), func(t *testing.T) {
+			fallbackCalls := 0
+			fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fallbackCalls++
+				_, _ = io.WriteString(w, calicoTestManifest)
+			}))
+			defer fallback.Close()
+			primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if badHash {
+					_, _ = io.WriteString(w, "corrupt")
+					return
+				}
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			}))
+			defer primary.Close()
+			c := clusterTestConfig(t, false)
+			c.K8s.Network.Manifest = ""
+			c.Install.Calico.DownloadBase = primary.URL
+			c.Install.Calico.FallbackBases = []string{fallback.URL}
+			c.Install.DownloadDir = t.TempDir()
+			sum := sha256.Sum256([]byte(calicoTestManifest))
+			c.Install.Calico.SHA256 = hex.EncodeToString(sum[:])
+			err := prepareClusterNetwork(context.Background(), &c, t.TempDir(), io.Discard)
+			if badHash {
+				if err == nil || !strings.Contains(err.Error(), "SHA-256") || fallbackCalls != 0 {
+					t.Fatalf("bad hash bypassed: %v, calls=%d", err, fallbackCalls)
+				}
+			} else if err != nil || fallbackCalls != 1 {
+				t.Fatalf("fallback failed: %v, calls=%d", err, fallbackCalls)
+			}
+		})
+	}
+}

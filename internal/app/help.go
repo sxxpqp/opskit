@@ -33,8 +33,12 @@ var commandGroupHelp = map[string]string{
 首次执行 opskit config init，编辑节点、角色和版本后创建。
 network.manifest 留空自动安装固定版本 Calico；填写本地清单可覆盖。
 --calico-version 覆盖 k8s.network.calico.version；当前支持 v3.26.5 / Kubernetes 1.24～1.28。
-原生 SSH 集群编排，不依赖 KK；使用 k8s.hosts / roleGroups 和组件 version。
+原生 SSH 集群编排，不依赖 KK；组件版本按 k8s.kubernetes.version 自动配套，允许显式覆盖。
 支持单 master（同节点 etcd）、可选 worker、containerd 或 Docker 二进制运行时。
+每台节点需 Linux + systemd、SSH 和 root/sudo 权限；自动用 apt-get/dnf/yum 安装缺失系统依赖。
+Ubuntu/Debian: sudo apt-get update
+  sudo apt-get install -y conntrack socat iptables iproute2 kmod procps util-linux mount tar ethtool systemd
+上述命令使用发行版候选版本；固定版本使用 包名=版本。
 SSH 使用配置凭据直接连接，不读取 known_hosts、不确认或校验主机指纹。
 默认执行，--dry-run 只校验配置和展示计划；KubeSphere 默认关闭。
 示例: opskit k8s create --config config/config.yaml --dry-run`,

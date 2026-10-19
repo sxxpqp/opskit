@@ -354,7 +354,7 @@ opskit go install --version 1.27.2 --proxy https://goproxy.cn,direct
 
 支持 Linux/macOS amd64、arm64。版本读取独立的 `go.version`，CLI 优先；模板固定为 1.26.2，不自动选择 latest。完整 SDK 安装到 `~/.local/share/opskit/go/go<版本>`，校验发布元数据中的 SHA-256 和实际 `go version` 后创建 `go`、`gofmt` 命令入口，按现有安装流程配置 PATH。已有 SDK 目录或其他来源的命令入口不会覆盖；同版本重装需指定新的 `--install-dir`。
 
-安装后将 `mirrors.go` 写入当前用户 `go env GOENV` 指向的文件，保留其他配置并备份；后续改代理可运行 `opskit mirror go`。若以 root 执行则配置 root 用户。`GOENV=off` 会导致代理设置失败，已有 `GOPROXY` 环境变量仍优先，已有 `GOROOT` 需自行调整。下载根地址为 `install.go.download_base`，校验元数据为 `install.go.checksum_url`，配置与参数见[配置指南](docs/configuration.md#go-sdk-安装与代理)。已通过本地模拟下载安装测试，尚未完成真实 SDK 安装验收。
+安装后将 `mirrors.go` 写入当前用户 `go env GOENV` 指向的文件，保留其他配置并备份；后续改代理可运行 `opskit mirror go`。若以 root 执行则配置 root 用户。`GOENV=off` 会导致代理设置失败，已有 `GOPROXY` 环境变量仍优先，已有 `GOROOT` 需自行调整。Go SDK 默认从[阿里云镜像](https://mirrors.aliyun.com/golang/)下载，SHA-256 仍读取官方元数据；已有配置需手动更新下载根地址。下载根地址为 `install.go.download_base`，校验元数据为 `install.go.checksum_url`，配置与参数见[配置指南](docs/configuration.md#go-sdk-安装与代理)。已通过本地模拟下载安装测试，尚未完成真实 SDK 安装验收。
 
 ## 运行时安装（main，未发布）
 
@@ -384,11 +384,22 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 ## K8s SSH 集群部署（main，未发布）
 
+组件版本默认按 `k8s.kubernetes.version` 使用 KK 的运行时配套分组（1.24～1.29 与 1.30 两组）自动选择，模板不再要求 containerd、runc、criTools、cniPlugins、docker、criDockerd 六份版本；高级覆盖仍可用，详见[配套版本表](docs/configuration.md#kubernetes-组件自动配套版本)。
+
 `opskit k8s create` 原生实现 SSH 编排，不安装或调用 KK。配置采用 hosts、roleGroups、controlPlaneEndpoint 风格；kubeadm/kubelet/kubectl 统一跟随 `k8s.kubernetes.version`，kind 使用独立的 `kind.version` / `kind.kubernetes.version`。旧全局 versions、顶层 kubeadm/kubesphere 配置已移除，读取会报未知字段。
+
+每台节点需先准备 Linux + systemd、SSH 和 root/sudo 权限。`k8s create` 在全节点预检和管理端下载通过后，自动使用节点的 apt-get/dnf/yum 安装缺失系统依赖，保留已有组件、不修改软件源。以下为 Ubuntu / Debian 手动准备命令：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y conntrack socat iptables iproute2 kmod procps util-linux mount tar ethtool systemd
+```
+
+完整包名与命令对应关系见[节点前置组件](docs/configuration.md#k8s-ssh-集群部署)。自动安装使用节点软件源候选版本；需要固定系统包版本时请提前安装。Kubernetes 和运行时二进制仍按配置版本分发。
 
 集群名称填写在 YAML 的 `k8s.name`（例如 `sxxpqp`）；执行 `opskit k8s create --config config/config.yaml`，不接受 `k8s create sxxpqp` 位置参数。缺少配置时先执行 `opskit config init`，再编辑节点、版本与网络配置。
 
-模板默认只启用 master1，worker 节点和角色组注释；需要时同时取消注释即可自动加入。默认不安装 KubeSphere。支持 root/普通用户、密码/私钥/Agent，以及免密或密码 sudo；SSH 按 KK 方式使用配置凭据直接连接，不读取或写入 known_hosts，不要求手动 SSH 或输入 yes；不校验服务端主机指纹。旧配置需删除 `k8s.deploy.knownHostsFile`。
+模板默认只启用 master1，worker 节点和角色组注释；需要时同时取消注释即可自动加入。默认不安装 KubeSphere。支持 root/普通用户、密码/私钥/Agent，以及免密或密码 sudo（默认复用 SSH 登录密码，sudoPassword/sudoPasswordEnv 可覆盖；私钥或 Agent 登录且无 sudo 密码时要求免密 sudo）；SSH 按 KK 方式使用配置凭据直接连接，不读取或写入 known_hosts，不要求手动 SSH 或输入 yes；不校验服务端主机指纹。旧配置需删除 `k8s.deploy.knownHostsFile`。
 
 ```sh
 opskit config init
@@ -399,7 +410,7 @@ opskit k8s create --config config/config.yaml
 
 部署前检查所有节点的 SSH、sudo、Linux 架构和系统依赖，然后在管理机按架构下载、校验并分发二进制。并行准备节点，初始化单控制平面、部署网络，再自动生成短期 token 并加入 worker；完成后撤销 token，并等待配置中的全部节点 Ready。单节点会允许控制平面承载工作负载；多节点保留调度隔离。管理 kubeconfig 保存在 `~/.opskit/clusters/<name>/kubeconfig`，不会覆盖用户的 `~/.kube/config`。
 
-Linux 同架构管理机可直接分发当前 opskit。macOS/Windows 或异构节点需在 `k8s.deploy.nodeBinaries` 指定由相同代码构建的 Linux 文件；目标主机不需要 Go。每个节点需预装 conntrack、socat、iptables、ip/tc、ethtool 等系统依赖，缺项在全节点预检阶段报错，不隐式调用 apt/yum。
+Linux 同架构管理机可直接分发当前 opskit。macOS/Windows 或异构节点需在 `k8s.deploy.nodeBinaries` 指定由相同代码构建的 Linux 文件；目标主机不需要 Go。每个节点缺失的 conntrack、socat、iptables、ip/tc、ethtool 等系统依赖由 apt-get/dnf/yum 自动补齐；全部节点只读预检与管理机下载通过后才执行安装。
 
 镜像源统一在顶层 `mirrors` 设置：Docker 读取 `mirrors.docker` / `mirrors.docker_insecure_registries`，containerd 读取 `mirrors.containerd`（含 DockerHub、registry.k8s.io 等各仓库）。`k8s.registry.imageRepository` 仅指定 kubeadm 系统镜像仓库，保留上游名称时由 containerd 的对应代理映射处理。重复的 `k8s.registry.registryMirrors` 已移除，旧配置需删掉该字段。
 
@@ -415,11 +426,17 @@ k8s:
       version: v3.26.5
 ```
 
-管理机按 `install.calico.download_base` 下载一次清单，校验模板记录的官方文件 SHA-256 后分发；设置 Calico IP 池为 Pod CIDR，使用 Kubernetes InternalIP 探测节点地址，并等待 calico-node / calico-kube-controllers 就绪。镜像沿用官方名称，由现有节点 mirror 加速。指定本地 `manifest` 时使用该文件，不下载或改写；首次节点检测到其他 CNI 配置会停止。下载源与生产网络要求见 [Calico 配置指南](docs/configuration.md#calico-自动安装)。
+管理机按 `install.calico.download_base` 下载清单，下载失败时按 `install.calico.fallback_bases` 顺序尝试备用源（每源最多 60 秒，摘要不匹配立即停止），校验模板记录的官方文件 SHA-256 后分发；设置 Calico IP 池为 Pod CIDR，使用 Kubernetes InternalIP 探测节点地址，并等待 calico-node / calico-kube-controllers 就绪。镜像沿用官方名称，由现有节点 mirror 加速。指定本地 `manifest` 时使用该文件，不下载或改写；首次节点检测到其他 CNI 配置会停止。下载源与生产网络要求见 [Calico 配置指南](docs/configuration.md#calico-自动安装)。
+
+使用 `registry.k8s.io` 时显式保留 CoreDNS 的 `coredns/coredns` 路径，避免旧版 kubeadm 请求错误路径后代理返回 404；自定义系统镜像仓库沿用原配置。
+
+单独安装的 kubectl 与目标 Kubernetes 版本完全一致时会复用，不覆盖其文件或链接；版本冲突或 kubeadm/kubelet/crictl 半安装状态仍停止部署。
 
 现有本地 `kubeadm install / prepare / init / join` 继续作为维护入口，不自动 reset、覆盖已有工具或加入外部集群。目前配置渲染限定 Kubernetes 1.24～1.30，示例沿用旧 KS 环境，不是生产版本推荐。已完成本地 SSH、编排模拟和下载校验测试，真实多主机部署尚未验收；没有宣称支持 HA、独立 etcd 或升级。完整配置和迁移方法见 [K8s 部署指南](docs/configuration.md#k8s-ssh-集群部署)。
 
 ## 路线图
+
+- [x] k8s create 自动补齐缺失的系统前置组件（开发中；已做模拟验证，未真机验收）
 
 - [x] k8s create 自动下载并校验 Calico v3.26.5，匹配 Pod CIDR 并等待就绪（main，未发布；未真机验收）
 
@@ -545,3 +562,7 @@ git push origin v0.1.6
 ```
 
 仅在本地创建标签不会触发。每个版本使用新标签，已有版本不重复发布。
+
+SSH 部署日志不再按 SSH/sudo 密码内容做全局替换，避免短密码误伤版本号、IP 和节点名；集群加入 token 仍脱敏。密码仍通过 SSH 认证或 sudo 标准输入传递，不加入远端命令参数；日志如包含程序自身输出的密码文本，将按原文显示。
+
+安装文件下载遇到 HTTP 502/503/504 时自动重试，最多共 3 次，间隔 2 秒、4 秒，受命令总超时约束；404、认证失败、文件传输中断和摘要不匹配不自动重试，避免拼接损坏文件。持续 504 仍需检查 Nexus 回源与反向代理超时；安装器不会绕过 SHA-256 校验或擅自换版本。

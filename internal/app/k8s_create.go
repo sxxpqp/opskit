@@ -47,7 +47,15 @@ type connectedClusterNode struct {
 }
 
 func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Command, error) {
-	cmd := &cobra.Command{Use: "create"}
+	cmd := &cobra.Command{Use: "create", Long: `按配置部署集群并自动加入节点。
+组件默认按 Kubernetes 版本自动配套；k8s.<组件>.version 可显式覆盖。
+每台节点需 Linux + systemd、SSH 和 root/sudo 权限；自动补齐缺失的系统依赖。
+Ubuntu/Debian:
+  sudo apt-get update
+  sudo apt-get install -y conntrack socat iptables iproute2 kmod procps util-linux mount tar ethtool systemd
+上述命令使用发行版候选版本；固定版本使用 包名=版本。
+通过全部节点预检并准备下载后，自动使用 apt-get/dnf/yum 安装缺失的系统软件包。
+使用节点现有软件源，不修改软件源；Kubernetes 与运行时二进制按配置版本分发。`}
 	f := cmd.Flags()
 
 	path := f.String("config", defaultConfigPath, "统一 YAML；k8s 节点和版本配置")
@@ -87,6 +95,7 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 			}
 		}
 
+		fmt.Fprintf(out, "组件版本: containerd=%s，runc=%s，crictl=%s，CNI plugins=%s，Docker=%s，cri-dockerd=%s\n", c.K8s.Containerd.Version, c.K8s.Runc.Version, c.K8s.CRITools.Version, c.K8s.CNIPlugins.Version, c.K8s.Docker.Version, c.K8s.CRIDockerd.Version)
 		duration := 45 * time.Minute
 		if c.K8s.Deploy.Timeout != "" {
 			duration, err = time.ParseDuration(c.K8s.Deploy.Timeout)
@@ -209,7 +218,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		}
 		node := &connectedClusterNode{host: h, remote: remote}
 		nodes = append(nodes, node)
-		probe := `set -eu; test "$(id -u)" = 0; test -d /run/systemd/system; uname -s; uname -m; for x in tar systemctl modprobe sysctl swapoff conntrack socat iptables ip tc mount nsenter ethtool; do command -v "$x" >/dev/null || { echo "missing dependency: $x" >&2; exit 1; }; done`
+		probe := `set -eu; test "$(id -u)" = 0; test -d /run/systemd/system; uname -s; uname -m; command -v systemctl >/dev/null; if ! command -v apt-get >/dev/null && ! command -v dnf >/dev/null && ! command -v yum >/dev/null; then for x in tar modprobe sysctl swapoff conntrack socat iptables ip tc mount nsenter ethtool; do command -v "$x" >/dev/null || { echo "missing dependency and unsupported package manager: $x" >&2; exit 1; }; done; fi`
 		state := filepath.ToSlash(filepath.Join("/var/lib/opskit/clusters", c.K8s.Name, "state.json"))
 		probe += `; if test -e /etc/kubernetes/kubelet.conf -o -e /etc/kubernetes/admin.conf -o -d /etc/kubernetes/manifests; then test -f ` + shellQuote(state) + ` || { echo 'node already belongs to an unmanaged cluster' >&2; exit 1; }; fi`
 		raw, err := remote.Exec(ctx, true, probe)
@@ -228,7 +237,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		default:
 			return fmt.Errorf("%s: 不支持架构 %s", h.Name, fields[1])
 		}
-		fmt.Fprintf(out, "[%s] SSH、主机身份、提权和系统依赖检查通过（%s）\n", h.Name, node.arch)
+		fmt.Fprintf(out, "[%s] SSH、提权和系统环境检查通过（%s）\n", h.Name, node.arch)
 	}
 	work, err := os.MkdirTemp("", "opskit-cluster-*")
 	if err != nil {
@@ -256,6 +265,16 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		caches[node.arch] = root
 		if err = fetchClusterAssets(ctx, clusterAssets(c, node.arch), root, out); err != nil {
 			return err
+		}
+	}
+	for _, node := range nodes {
+		fmt.Fprintf(out, "[%s] 检查并安装缺失的系统前置组件（使用节点软件源候选版本）…\n", node.host.Name)
+		raw, err := node.remote.Exec(ctx, true, clusterDependenciesScript)
+		if len(raw) > 0 {
+			fmt.Fprintf(out, "[%s] %s\n", node.host.Name, raw)
+		}
+		if err != nil {
+			return fmt.Errorf("%s: 安装系统前置组件失败: %w", node.host.Name, err)
 		}
 	}
 	random := make([]byte, 12)
@@ -454,18 +473,14 @@ func clusterPhase(ctx context.Context, n *connectedClusterNode, phase string, ou
 	}
 	raw, err := n.remote.Exec(ctx, true, command)
 	if len(raw) > 0 {
-		fmt.Fprintf(out, "[%s/%s] %s\n", n.host.Name, phase, redactClusterLog(string(raw), n.host))
+		fmt.Fprintf(out, "[%s/%s] %s\n", n.host.Name, phase, redactClusterLog(string(raw)))
 	}
 	return raw, err
 }
-func redactClusterLog(text string, h clusterHost) string {
-	for _, value := range []string{h.Password, h.SudoPassword, os.Getenv(h.PasswordEnv), os.Getenv(h.SudoPasswordEnv)} {
-		if value != "" {
-			text = strings.ReplaceAll(text, value, "<redacted>")
-		}
-	}
+func redactClusterLog(text string) string {
 	return regexp.MustCompile(`\b[a-z0-9]{6}\.[a-z0-9]{16}\b`).ReplaceAllString(text, "<join-token>")
 }
+
 func rewriteClusterKubeconfig(raw []byte, endpoint string) ([]byte, error) {
 	var data map[string]any
 	if err := yaml.Unmarshal(raw, &data); err != nil {

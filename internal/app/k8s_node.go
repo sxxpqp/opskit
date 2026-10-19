@@ -688,17 +688,21 @@ func waitClusterNodesReady(ctx context.Context, expected []string, read func() (
 
 func probeClusterInstalled(ctx context.Context, c fileConfig) error {
 	found := 0
+	hasKubectl := false
 	for _, tool := range []struct{ name, version string }{{"kubeadm", c.K8s.Kubernetes.Version}, {"kubelet", c.K8s.Kubernetes.Version}, {"kubectl", c.K8s.Kubernetes.Version}, {"crictl", c.K8s.CRITools.Version}} {
 		path, err := exec.LookPath(tool.name)
 		if err != nil {
 			continue
 		}
 		found++
+		if tool.name == "kubectl" {
+			hasKubectl = true
+		}
 		if err = verifyKubeadmTool(ctx, path, tool.name, tool.version); err != nil {
 			return err
 		}
 	}
-	if found != 0 && found != 4 {
+	if found != 0 && found != 4 && !(found == 1 && hasKubectl) {
 		return errors.New("节点存在部分 Kubernetes 工具；不覆盖半安装状态，请先检查原安装来源")
 	}
 	if found == 4 {

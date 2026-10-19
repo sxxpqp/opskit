@@ -41,6 +41,11 @@ func clusterCalicoSource(c fileConfig) (string, error) {
 	if err := validateKubeadmBase(c.Install.Calico.DownloadBase); err != nil {
 		return "", fmt.Errorf("install.calico.download_base: %w", err)
 	}
+	for _, base := range c.Install.Calico.FallbackBases {
+		if err := validateKubeadmBase(base); err != nil {
+			return "", fmt.Errorf("install.calico.fallback_bases: %w", err)
+		}
+	}
 	hash, err := hex.DecodeString(c.Install.Calico.SHA256)
 	if err != nil || len(hash) != sha256.Size {
 		return "", errors.New("install.calico.sha256 必须为目标清单的 SHA-256")
@@ -76,13 +81,34 @@ func prepareClusterNetwork(ctx context.Context, c *fileConfig, work string, out 
 			}
 		}
 		var b bytes.Buffer
-		if err = downloadRetained(ctx, source, &b, downloads, "calico", c.K8s.Network.Calico.Version); err != nil {
-			return err
+		sources := []string{source}
+		for _, base := range c.Install.Calico.FallbackBases {
+			sources = append(sources, fmt.Sprintf("%s/projectcalico/calico/%s/manifests/calico.yaml", strings.TrimRight(base, "/"), c.K8s.Network.Calico.Version))
 		}
-		sum := sha256.Sum256(b.Bytes())
-		if !strings.EqualFold(hex.EncodeToString(sum[:]), c.Install.Calico.SHA256) {
-			return errors.New("Calico 清单 SHA-256 不匹配；未修改节点")
+		var failures []error
+		for _, candidate := range sources {
+			b.Reset()
+			attempt, cancel := context.WithTimeout(ctx, 60*time.Second)
+			e := downloadRetained(attempt, candidate, &b, downloads, "calico", c.K8s.Network.Calico.Version)
+			cancel()
+			if e == nil {
+				sum := sha256.Sum256(b.Bytes())
+				if !strings.EqualFold(hex.EncodeToString(sum[:]), c.Install.Calico.SHA256) {
+					return fmt.Errorf("Calico 清单 SHA-256 不匹配: %s；未修改节点", candidate)
+				}
+				fmt.Fprintf(out, "Calico 下载校验通过: %s\n", candidate)
+				break
+			}
+			failures = append(failures, fmt.Errorf("%s: %w", candidate, e))
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			fmt.Fprintf(out, "Calico 源下载失败: %s；尝试下一个配置源（如有）\n", candidate)
 		}
+		if len(failures) == len(sources) {
+			return fmt.Errorf("Calico 所有下载源失败: %w", errors.Join(failures...))
+		}
+
 		raw, err = renderClusterCalico(b.Bytes(), c.K8s.Network.Calico.Version, c.K8s.Network.PodSubnet)
 	}
 	if err != nil {

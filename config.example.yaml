@@ -14,9 +14,11 @@ schema_version: 1
 install:
   calico:
     download_base: https://raw.githubusercontent.com  # --calico-download-base / CALICO_DOWNLOAD_BASE
+    fallback_bases:  # 主源下载失败后按顺序尝试；[] 禁用备用源；摘要不匹配立即停止
+      - https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent
     sha256: 2468a8c939658b959860b0e78c3d2f420c53bb08af7511f3d335e051f9db8b22  # 官方 v3.26.5 calico.yaml 的 SHA-256
   go:
-    download_base: https://go.dev/dl  # GO_DOWNLOAD_BASE / --go-download-base
+    download_base: https://mirrors.aliyun.com/golang/  # GO_DOWNLOAD_BASE / --go-download-base
     checksum_url: https://go.dev/dl/?mode=json&include=all  # --checksum-url；包含目标版本 SHA-256 的 Go 发布元数据
   kubeadm:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBEADM_DOWNLOAD_BASE / --kubeadm-download-base
@@ -51,6 +53,7 @@ go:
   version: 1.26.2
 
 # 原生 SSH 编排；不依赖 KK。示例沿用 KS 历史测试版本，不是新生产环境推荐。
+# 全节点预检和管理机下载通过后，自动使用节点 apt-get/dnf/yum 安装缺失系统依赖；沿用节点软件源候选版本。
 k8s:
   name: sxxpqp  # k8s create 使用此名称，不接受 create <名称> 位置参数
   hosts:
@@ -59,7 +62,7 @@ k8s:
     # - {name: worker2, address: 192.168.10.12, internalAddress: 192.168.10.12, port: 22, user: root, password: "请填写SSH密码"}
     # 私钥登录：删除 password，填写 privateKeyPath: /home/admin/.ssh/id_ed25519。
     # 也支持 passwordEnv、privateKeyPassphraseEnv；均为环境变量名。
-    # 普通用户自动 sudo，默认免密；需要密码时填写 sudoPassword 或 sudoPasswordEnv。
+    # 普通用户自动 sudo，默认复用 SSH 密码；可用 sudoPassword 或 sudoPasswordEnv 覆盖；无密码时需免密 sudo。
   roleGroups:
     etcd: [master1]
     master: [master1]
@@ -71,18 +74,9 @@ k8s:
     version: v1.24.7  # kubeadm/kubelet/kubectl 统一使用此版本，不提供独立版本字段
     containerManager: containerd  # containerd / docker，所选运行时使用二进制包
     clusterName: cluster.local
-  containerd:
-    version: v1.7.24
-  runc:
-    version: v1.2.6
-  criTools:
-    version: v1.24.2
-  cniPlugins:
-    version: v1.5.1
-  docker:
-    version: v27.3.1
-  criDockerd:
-    version: v0.3.22
+  # containerd/runc/criTools/cniPlugins/docker/criDockerd 默认按 Kubernetes 版本自动选择。
+  # 运行时按 KK 配套：K8s 1.24～1.29 使用 containerd 1.7 / Docker 28；1.30 使用 containerd 2.2 / Docker 29。
+  # 高级覆盖示例：containerd: {version: v1.7.24}；仍执行版本兼容检查。
   network:
     kubePodsCIDR: 10.244.0.0/16
     kubeServiceCIDR: 10.96.0.0/12

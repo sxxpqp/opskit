@@ -34,6 +34,7 @@ func clusterTestConfig(t *testing.T, workers bool) fileConfig {
 	if err := yamlClusterDefaults(&c); err != nil {
 		t.Fatal(err)
 	}
+	c.K8s.ControlPlaneEndpoint.Address = "192.168.10.10"
 	c.K8s.Hosts = []clusterHost{{Name: "master1", Address: "192.168.10.10", InternalAddress: "192.168.10.10", User: "root", Password: "ssh-secret"}}
 	if workers {
 		c.K8s.Hosts = append(c.K8s.Hosts, clusterHost{Name: "worker1", Address: "192.168.10.11", InternalAddress: "192.168.10.11", User: "ubuntu", Password: "ssh-secret", SudoPassword: "sudo-secret"})
@@ -147,6 +148,10 @@ func (r *clusterMockRemote) Exec(ctx context.Context, root bool, command string)
 		}
 		return []byte("Linux\nx86_64\n"), nil
 	}
+	if command == clusterDependenciesScript {
+		r.record("dependencies")
+		return []byte("System dependencies ready\n"), nil
+	}
 	if strings.Contains(command, "--protocol") {
 		return []byte(clusterNodeProtocol + "\n"), nil
 	}
@@ -227,6 +232,9 @@ func TestClusterSSHPreflightStopsBeforeWrites(t *testing.T) {
 		t.Fatal("failed preflight accepted")
 	}
 	for _, r := range remotes {
+		if strings.Contains(strings.Join(events, "\n"), ":dependencies") {
+			t.Fatal("installed dependencies before all-node preflight")
+		}
 		if r.uploads != 0 {
 			t.Fatal("wrote before all-node preflight")
 		}
@@ -292,7 +300,7 @@ func TestClusterOrchestrationDownloadsOnceAndJoins(t *testing.T) {
 				}
 			}
 			joined := strings.Join(events, "\n")
-			for _, required := range []string{"master1:init", "worker1:join", "master1:ready", "master1:revoke"} {
+			for _, required := range []string{"master1:dependencies", "worker1:dependencies", "master1:init", "worker1:join", "master1:ready", "master1:revoke"} {
 				if !strings.Contains(joined, required) {
 					t.Fatal("missing stage", required, joined)
 				}
@@ -509,5 +517,13 @@ func TestClusterMirrorDefaultsAndIsolation(t *testing.T) {
 	}
 	if strings.Contains(text, "https://docker.example") {
 		t.Fatal("Docker mirror leaked into containerd hosts")
+	}
+}
+
+func TestClusterLogPreservesVersionsAndAddresses(t *testing.T) {
+	text := "master1 v1.24.7 172.16.0.34 token=abcdef.0123456789abcdef"
+	want := "master1 v1.24.7 172.16.0.34 token=<join-token>"
+	if got := redactClusterLog(text); got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
