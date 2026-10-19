@@ -106,7 +106,10 @@ def run_command(log_path: str, command: list[str]) -> int:
                     # Keep the original source of errors visible in CI.
                     message = f"[{channel}] {line}"
                     with lock:
-                        print(message, flush=True)
+                        # Preserve the actual stdout/stderr file descriptors,
+                        # as well as a tagged copy in the artifact log.
+                        target = sys.stderr if channel == "STDERR" else sys.stdout
+                        print(message, file=target, flush=True)
                         log.write(message + "\n")
                         log.flush()
                 with pipe:
