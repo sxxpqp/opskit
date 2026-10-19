@@ -3,9 +3,12 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	templates "github.com/sxxpqp/opskit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -178,3 +181,40 @@ func TestKubeadmSchemaDefaultAndExtraYAML(t *testing.T) {
 		t.Fatalf("defaults not resolved: %s / %s", c.K8s.Kubernetes.Version, c.K8s.CRITools.Version)
 	}
 }
+
+func TestK8sCreateNewerVersionRequiresPinnedNetwork(t *testing.T) {
+	var c fileConfig
+	if err := yaml.Unmarshal(templates.ConfigTemplate, &c); err != nil {
+		t.Fatal(err)
+	}
+	// Use a new, valid Kubernetes patch version; all dependency versions in
+	// the YAML are set to auto, and so follow this target.
+	c.K8s.Kubernetes.Version = "v1.35.1"
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	write := func() {
+		t.Helper()
+		raw, err := yaml.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(configPath, raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	code, err, output := workflowRun(t, "k8s", "create", "--config", configPath, "--dry-run")
+	if code == 0 || err == nil || !strings.Contains(output, "network.manifest") {
+		t.Fatalf("newer Kubernetes without CNI manifest was accepted: %d %v %s", code, err, output)
+	}
+	manifest := filepath.Join(t.TempDir(), "cni.yaml")
+	if err := os.WriteFile(manifest, []byte("apiVersion: v1\nkind: List\nitems: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c.K8s.Network.Manifest = manifest
+	write()
+	code, err, output = workflowRun(t, "k8s", "create", "--config", configPath, "--dry-run")
+	if code != 0 || err != nil || !strings.Contains(output, "Kubernetes v1.35.1") || !strings.Contains(output, "CNI 本地清单") {
+		t.Fatalf("valid newer Kubernetes with explicit network rejected: %d %v %s", code, err, output)
+	}
+}
+
