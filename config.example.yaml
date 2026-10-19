@@ -100,10 +100,10 @@ k8s:
     password: Sxxpqp.top1
     storageClass: ""
     installerSource: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
+  # SSH 与 KK 一样直接使用配置凭据连接，不校验主机指纹、不读取 known_hosts。
   deploy:
     concurrency: 3
     timeout: 45m
-    knownHostsFile: ""  # 留空读取管理机 ~/.ssh/known_hosts；不跳过主机身份验证
     outputDir: ""  # 默认 ~/.opskit/clusters/<name>，保存 kubeconfig 和阶段日志
     nodeBinaries: {}  # 非 Linux 管理机或异构节点，填 {amd64: /path/opskit_linux_amd64, arm64: /path/opskit_linux_arm64}
 

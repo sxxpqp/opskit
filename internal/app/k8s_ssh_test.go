@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func TestClusterSSHPasswordSudoAndKnownHosts(t *testing.T) {
+func TestClusterSSHPasswordSudoWithoutHostKeyVerification(t *testing.T) {
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -82,15 +82,14 @@ func TestClusterSSHPasswordSudoAndKnownHosts(t *testing.T) {
 			}()
 		}
 	}()
-	path := filepath.Join(t.TempDir(), "known_hosts")
-	line := knownhosts.Line([]string{knownhosts.Normalize(listener.Addr().String())}, signer.PublicKey()) + "\n"
-	if err = os.WriteFile(path, []byte(line), 0600); err != nil {
-		t.Fatal(err)
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path := filepath.Join(home, ".ssh", "known_hosts")
 	host, port, _ := net.SplitHostPort(listener.Addr().String())
 	number, _ := strconv.Atoi(port)
 	h := clusterHost{Name: "node", Address: host, Port: number, User: "ubuntu", Password: "ssh-password", SudoPassword: "sudo-password"}
-	remote, err := dialClusterSSH(context.Background(), h, path)
+	remote, err := dialClusterSSH(context.Background(), h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +112,13 @@ func TestClusterSSHPasswordSudoAndKnownHosts(t *testing.T) {
 	if second.input != "private payload" || !strings.Contains(second.command, "umask 077") {
 		t.Fatal("private upload failed")
 	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("known_hosts unexpectedly created")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
 	_, other, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -121,11 +127,24 @@ func TestClusterSSHPasswordSudoAndKnownHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(path, []byte(knownhosts.Line([]string{knownhosts.Normalize(listener.Addr().String())}, wrong.PublicKey())+"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if client, err := dialClusterSSH(context.Background(), h, path); err == nil {
+	for _, stored := range []string{"malformed known_hosts\n", knownhosts.Line([]string{knownhosts.Normalize(listener.Addr().String())}, wrong.PublicKey()) + "\n"} {
+		if err := os.WriteFile(path, []byte(stored), 0600); err != nil {
+			t.Fatal(err)
+		}
+		client, err := dialClusterSSH(context.Background(), h)
+		if err != nil {
+			t.Fatal("KK-style connection consulted known_hosts", err)
+		}
 		client.Close()
-		t.Fatal("changed host key accepted")
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != stored {
+			t.Fatal("known_hosts modified", err)
+		}
+	}
+	bad := h
+	bad.Password = "wrong-password"
+	if client, err := dialClusterSSH(context.Background(), bad); err == nil {
+		client.Close()
+		t.Fatal("invalid SSH credentials accepted")
 	}
 }

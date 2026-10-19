@@ -7,13 +7,11 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type clusterRemote interface {
@@ -30,7 +28,7 @@ type sshClusterRemote struct {
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-func dialClusterSSH(ctx context.Context, h clusterHost, knownHosts string) (clusterRemote, error) {
+func dialClusterSSH(ctx context.Context, h clusterHost) (clusterRemote, error) {
 	password, err := secretValue(h.Password, h.PasswordEnv)
 	if err != nil {
 		return nil, err
@@ -76,20 +74,6 @@ func dialClusterSSH(ctx context.Context, h clusterHost, knownHosts string) (clus
 		}
 		methods = append(methods, ssh.PublicKeysCallback(agent.NewClient(agentConn).Signers))
 	}
-	if knownHosts == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		knownHosts = filepath.Join(home, ".ssh", "known_hosts")
-	}
-	callback, err := knownhosts.New(knownHosts)
-	if err != nil {
-		if agentConn != nil {
-			agentConn.Close()
-		}
-		return nil, fmt.Errorf("读取 known_hosts 失败；请先通过受信方式确认并登记主机指纹: %w", err)
-	}
 	address := net.JoinHostPort(h.Address, fmt.Sprint(h.Port))
 	dialer := net.Dialer{Timeout: 15 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", address)
@@ -104,13 +88,15 @@ func dialClusterSSH(ctx context.Context, h clusterHost, knownHosts string) (clus
 		deadline = d
 	}
 	_ = conn.SetDeadline(deadline)
-	clientConn, channels, requests, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{User: h.User, Auth: methods, HostKeyCallback: callback, Timeout: 15 * time.Second})
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	clientConn, channels, requests, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{User: h.User, Auth: methods, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second})
 	if err != nil {
 		conn.Close()
 		if agentConn != nil {
 			agentConn.Close()
 		}
-		return nil, fmt.Errorf("%s: SSH 认证或主机身份校验失败: %w", h.Name, err)
+		return nil, fmt.Errorf("%s: SSH 连接或认证失败: %w", h.Name, err)
 	}
 	_ = conn.SetDeadline(time.Time{})
 	return &sshClusterRemote{client: ssh.NewClient(clientConn, channels, requests), host: h, password: password, sudoPassword: sudo, agentConn: agentConn}, nil

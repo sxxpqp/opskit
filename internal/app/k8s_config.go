@@ -67,11 +67,10 @@ type clusterSettings struct {
 	} `yaml:"registry" json:"registry"`
 	KubeSphere sphereSettings `yaml:"kubesphere" json:"kubesphere"`
 	Deploy     struct {
-		Concurrency    int               `yaml:"concurrency" json:"concurrency"`
-		Timeout        string            `yaml:"timeout" json:"timeout"`
-		KnownHostsFile string            `yaml:"knownHostsFile" json:"-"`
-		NodeBinaries   map[string]string `yaml:"nodeBinaries" json:"-"`
-		OutputDir      string            `yaml:"outputDir" json:"-"`
+		Concurrency  int               `yaml:"concurrency" json:"concurrency"`
+		Timeout      string            `yaml:"timeout" json:"timeout"`
+		NodeBinaries map[string]string `yaml:"nodeBinaries" json:"-"`
+		OutputDir    string            `yaml:"outputDir" json:"-"`
 	} `yaml:"deploy" json:"-"`
 }
 
@@ -253,7 +252,6 @@ func resolveClusterPaths(c *clusterSettings, base string) {
 		return s
 	}
 	c.Network.Manifest = resolve(c.Network.Manifest)
-	c.Deploy.KnownHostsFile = resolve(c.Deploy.KnownHostsFile)
 	c.Deploy.OutputDir = resolve(c.Deploy.OutputDir)
 	for arch, path := range c.Deploy.NodeBinaries {
 		c.Deploy.NodeBinaries[arch] = resolve(path)

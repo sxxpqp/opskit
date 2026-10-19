@@ -63,6 +63,7 @@ func TestClusterConfigVersionIsolationAndRemovedFields(t *testing.T) {
 	}
 	for _, body := range []string{
 		"schema_version: 1\nk8s:\n  registry:\n    registryMirrors: [https://old-proxy.example]\n",
+		"schema_version: 1\nk8s:\n  deploy:\n    knownHostsFile: known_hosts\n",
 		"schema_version: 1\nversions:\n  kubernetes: v1.24.7\n",
 		"schema_version: 1\nk8s:\n  kubectl:\n    version: v1.24.7\n",
 		"schema_version: 1\nkubeadm:\n  advertise_address: 192.168.10.10\n",
@@ -217,7 +218,7 @@ func TestClusterSSHPreflightStopsBeforeWrites(t *testing.T) {
 	var events []string
 	var mu sync.Mutex
 	var remotes []*clusterMockRemote
-	dial := func(ctx context.Context, h clusterHost, known string) (clusterRemote, error) {
+	dial := func(ctx context.Context, h clusterHost) (clusterRemote, error) {
 		r := &clusterMockRemote{name: h.Name, events: &events, eventMu: &mu, preflightFail: h.Name == "worker1"}
 		remotes = append(remotes, r)
 		return r, nil
@@ -271,7 +272,7 @@ func TestClusterOrchestrationDownloadsOnceAndJoins(t *testing.T) {
 			var events []string
 			var mu sync.Mutex
 			var remotes []*clusterMockRemote
-			dial := func(ctx context.Context, h clusterHost, known string) (clusterRemote, error) {
+			dial := func(ctx context.Context, h clusterHost) (clusterRemote, error) {
 				r := &clusterMockRemote{name: h.Name, events: &events, eventMu: &mu}
 				remotes = append(remotes, r)
 				return r, nil

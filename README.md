@@ -388,7 +388,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 集群名称填写在 YAML 的 `k8s.name`（例如 `sxxpqp`）；执行 `opskit k8s create --config config/config.yaml`，不接受 `k8s create sxxpqp` 位置参数。缺少配置时先执行 `opskit config init`，再编辑节点、版本与网络配置。
 
-模板默认只启用 master1，worker 节点和角色组注释；需要时同时取消注释即可自动加入。默认不安装 KubeSphere。支持 root/普通用户、密码/私钥/Agent，以及免密或密码 sudo；known_hosts 必须提前登记可信指纹。
+模板默认只启用 master1，worker 节点和角色组注释；需要时同时取消注释即可自动加入。默认不安装 KubeSphere。支持 root/普通用户、密码/私钥/Agent，以及免密或密码 sudo；SSH 按 KK 方式使用配置凭据直接连接，不读取或写入 known_hosts，不要求手动 SSH 或输入 yes；不校验服务端主机指纹。旧配置需删除 `k8s.deploy.knownHostsFile`。
 
 ```sh
 opskit config init
@@ -471,6 +471,7 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.m
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
 | v0.1.11（待发布） | Cobra 命令框架、Go SDK 与代理、原生 SSH + kubeadm 集群部署、固定版本 Calico；版本按安装类型隔离，修复镜像源覆盖、Windows CRI socket 路径校验并自动配置 Docker inotify。已通过本地回归，未完成真机验收 |
+| main（未发布） | SSH 改为 KK 式直接认证，不使用 known_hosts 或指纹确认；移除 knownHostsFile 配置 |
 | main（未发布） | Docker 脚本/二进制安装自动备份并应用 inotify 限额，保留更高值并回读验证 |
 | main（未发布） | 删除重复的 k8s.registry.registryMirrors；集群 Docker/containerd 分别读取顶层 mirrors 配置，保留 containerd 路径代理及 TLS 设置 |
 | main（未发布） | k8s create 默认自动安装固定版本 Calico，下载摘要校验、Pod CIDR 渲染及就绪等待；保留本地清单覆盖 |

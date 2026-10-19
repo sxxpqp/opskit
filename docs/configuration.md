@@ -363,7 +363,6 @@ k8s:
   deploy:
     concurrency: 3
     timeout: 45m
-    knownHostsFile: "" # 默认管理机 ~/.ssh/known_hosts
     outputDir: "" # 默认 ~/.opskit/clusters/<name>
     nodeBinaries: {} # 非 Linux 管理机/异构节点指定 Linux opskit 文件路径
 ```
@@ -374,7 +373,7 @@ k8s:
 
 address 用于 SSH，internalAddress 用于 API/kubelet 集群通信。省略 internalAddress 时使用 address，因此 address 必须是可用于集群通信的 IPv4；多网卡时必须显式填写本机正确内网地址。首版仅支持一个 master，同节点 kubeadm etcd；roleGroups.etcd 必须等于 master，不支持独立 etcd 或 HA。每个 hosts 节点须出现在 master 或 worker 中；worker 注释时不会连接该节点。只有一个 master 且无 worker 时，会移除控制平面的调度 taint。
 
-密码和私钥互斥，password 与 passwordEnv 互斥。没有密码和私钥时使用管理机 SSH Agent。普通用户自动 sudo；未填 sudoPassword/sudoPasswordEnv 则使用 sudo -n，填写则通过标准输入传入，不放进命令参数。requiretty 等强制交互 sudo 策略需由管理员提前调整。不会自动信任新 SSH 主机密钥，也不使用 InsecureIgnoreHostKey；先通过受信渠道核对指纹并登记 known_hosts，密钥变化直接报错。相对文件路径基于 YAML 所在目录，不展开 ~。
+密码和私钥互斥，password 与 passwordEnv 互斥。没有密码和私钥时使用管理机 SSH Agent。普通用户自动 sudo；未填 sudoPassword/sudoPasswordEnv 则使用 sudo -n，填写则通过标准输入传入，不放进命令参数。requiretty 等强制交互 sudo 策略需由管理员提前调整。SSH 按 KK 方式使用配置的密码、私钥或 Agent 直接认证，HostKeyCallback 使用 InsecureIgnoreHostKey；不读取或写入 known_hosts，不提示 yes，也不校验主机密钥变化。移除 `k8s.deploy.knownHostsFile` 字段，旧配置需删除该项，不保留别名。相对文件路径基于 YAML 所在目录，不展开 ~。
 
 管理机需可访问 SSH 和配置的下载源。节点需运行 Linux amd64/arm64 + systemd，并预装 tar、modprobe、sysctl、swapoff、conntrack、socat、iptables、ip、tc、mount、nsenter、ethtool。全节点连接、root/sudo 和依赖预检全部通过前不安装或修改系统。OS 依赖通过发行版包管理器由管理员预先安装，不自动选择 apt/yum 软件包版本。
 
@@ -400,7 +399,7 @@ Linux 同架构管理机直接分发当前 opskit 可执行文件。非 Linux �
 
 本地维护命令 `opskit kubeadm install/prepare/init/join` 保留，版本和网络默认从 k8s 获取；init 的 advertise-address、join 的 endpoint/token/CA hash 使用 CLI 显式传入。install 不覆盖已存在工具；prepare/init/join 不接受已有节点数据。所有命令支持 --dry-run，拒绝旧 --apply。
 
-已验证：本地 SSH 认证与 host key 拒绝、sudo stdin、下载/离线校验、模拟多节点编排、配置隔离、worker 自动加入顺序与所有预期节点的就绪判定。尚未验证真实多服务器的服务启动、网络连通性、重跑恢复和 KS 端到端安装；HA、升级、删除和 SSH 密码交互输入尚未实现。
+已验证：本地 SSH 密码认证及 KK 式主机指纹跳过、sudo stdin、下载/离线校验、模拟多节点编排、配置隔离、worker 自动加入顺序与所有预期节点的就绪判定。尚未验证真实多服务器的服务启动、网络连通性、重跑恢复和 KS 端到端安装；HA、升级、删除和 SSH 密码交互输入尚未实现。
 
 重跑控制平面初始化时先核对服务端实际 Kubernetes 版本，再应用网络清单，版本不匹配直接停止。运行时等待要求 CRI 的 RuntimeReady=true，不能只以 info 命令成功为准。单节点模式仅移除 master/control-plane 的 NoSchedule taint，保留其他 taint，并使用 resourceVersion 防止覆盖并发更新；API/权限错误会返回，不再忽略。
 
@@ -489,3 +488,11 @@ opskit k8s create --calico-version v3.26.5
 新节点已有 `.conf` / `.conflist` / `.json` CNI 配置时拒绝自动替换。重跑会核对目标 Calico 版本，不自动更换网络或 IP 池；已存在 IP 池不会因改环境变量而迁移。所有就绪等待共用部署总超时。内部节点协议已更新为 v2，异构架构的 `nodeBinaries` 必须重新从同一份代码构建。`--dry-run` 不下载、不连接 SSH；本地 `kubeadm init` 维护入口仍只接受已准备的本地清单，不单独触发自动下载。
 
 已验证官方完整清单 31 个对象的渲染语义、摘要、模拟下载/分发、版本和 CIDR 拒绝路径及超时/错误传播；尚未在真实集群验证 Calico 网络连通性和策略执行。
+
+### SSH 直接连接（KK 方式）
+
+直接运行 `opskit k8s create`，使用 `hosts.password` / `passwordEnv`、私钥或 SSH Agent 登录。无需提前执行 ssh，不依赖管理用户的 known_hosts，也没有首次指纹确认提示。sudo 密码仍由对应 sudo 配置传入。错误的 SSH 凭据仍会认证失败。
+
+实现与所核对的 [KubeKey SSH 连接器](https://github.com/kubesphere/kubekey/blob/99699fa9c30102f3941768b205a6bb612dbba348/pkg/connector/ssh_connector.go#L185) 一致，使用 `ssh.InsecureIgnoreHostKey()`，因此不会验证服务端身份或阻止主机指纹变化。原有 known_hosts 文件保持不动。`k8s.deploy.knownHostsFile` 已移除，包含该字段的旧配置会报未知字段，需手动删除。
+
+`--dry-run` 不连接 SSH。此方式同样适用于非交互和批量运行；不会额外从终端询问 SSH 或 sudo 密码。已通过本地 SSH 测试覆盖缺少/损坏/不匹配 known_hosts 时正常连接、不修改该文件、正确密码认证、错误密码拒绝、sudo stdin 和私密文件上传；尚未进行真实生产节点部署验收。

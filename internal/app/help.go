@@ -35,6 +35,7 @@ network.manifest 留空自动安装固定版本 Calico；填写本地清单可�
 --calico-version 覆盖 k8s.network.calico.version；当前支持 v3.26.5 / Kubernetes 1.24～1.28。
 原生 SSH 集群编排，不依赖 KK；使用 k8s.hosts / roleGroups 和组件 version。
 支持单 master（同节点 etcd）、可选 worker、containerd 或 Docker 二进制运行时。
+SSH 使用配置凭据直接连接，不读取 known_hosts、不确认或校验主机指纹。
 默认执行，--dry-run 只校验配置和展示计划；KubeSphere 默认关闭。
 示例: opskit k8s create --config config/config.yaml --dry-run`,
 	"kubeadm": `用法: opskit kubeadm install|prepare|init|join [参数]

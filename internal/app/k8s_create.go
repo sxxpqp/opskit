@@ -193,7 +193,7 @@ func clusterParallel(ctx context.Context, nodes []*connectedClusterNode, limit i
 	}
 	return errors.Join(failures...)
 }
-func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.Writer, dial func(context.Context, clusterHost, string) (clusterRemote, error)) error {
+func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.Writer, dial func(context.Context, clusterHost) (clusterRemote, error)) error {
 	autoCalico := c.K8s.Network.Manifest == ""
 	var nodes []*connectedClusterNode
 	defer func() {
@@ -203,7 +203,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 	}()
 	// Complete read-only SSH/root/OS checks on every host before transferring or modifying files.
 	for _, h := range c.K8s.Hosts {
-		remote, err := dial(ctx, h, c.K8s.Deploy.KnownHostsFile)
+		remote, err := dial(ctx, h)
 		if err != nil {
 			return fmt.Errorf("%s: %w", h.Name, err)
 		}
@@ -283,7 +283,6 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		cfg := fileConfig{SchemaVersion: 1, Install: c.Install, K8s: c.K8s, Mirrors: c.Mirrors}
 		cfg.K8s.Hosts = nil
 		cfg.K8s.Deploy.NodeBinaries = nil
-		cfg.K8s.Deploy.KnownHostsFile = ""
 		cfg.K8s.Network.Manifest = ""
 		if !autoCalico {
 			cfg.K8s.Network.Calico.Version = ""
