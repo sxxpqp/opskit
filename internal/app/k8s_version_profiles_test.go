@@ -213,7 +213,7 @@ func TestK8sCreateNewerVersionRequiresPinnedNetwork(t *testing.T) {
 	c.K8s.Network.Manifest = manifest
 	write()
 	code, err, output = workflowRun(t, "k8s", "create", "--config", configPath, "--dry-run")
-	if code != 0 || err != nil || !strings.Contains(output, "Kubernetes v1.35.1") || !strings.Contains(output, "CNI 本地清单") {
+	if code != 0 || err != nil || !strings.Contains(output, "Kubernetes v1.35.1") || !strings.Contains(output, "CNI 本地清单") || !strings.Contains(output, "crictl=v1.35.0") || !strings.Contains(output, "containerd=v2.1.3") {
 		t.Fatalf("valid newer Kubernetes with explicit network rejected: %d %v %s", code, err, output)
 	}
 }
