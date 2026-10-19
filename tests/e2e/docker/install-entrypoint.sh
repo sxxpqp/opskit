@@ -27,8 +27,9 @@ OPSKIT_DOCKER_E2E_PASSWORD="$(cat /run/e2e/password)"
 
 /usr/local/bin/opskit-e2e-generate-config   /etc/opskit/config.example.yaml "$cfg" | tee "$report/config-summary.log"
 
-echo "Running REAL OpsKit k8s create --dry-run..."
-/usr/local/bin/opskit k8s create --config "$cfg" --dry-run > "$report/dry-run.log" 2>&1
+echo "Running REAL OpsKit k8s create --dry-run (STDOUT/STDERR are sanitized and labeled)..."
+python3 /usr/local/bin/opskit-e2e-stream-log --run "$report/dry-run.log" \
+  /usr/local/bin/opskit k8s create --config "$cfg" --dry-run
 
 # A bounded experiment should reveal a failed CNI early enough to preserve
 # useful diagnostic logs; do not turn an API/Calico failure into a pass.
@@ -38,23 +39,15 @@ if [[ ! "$install_timeout" =~ ^[1-9][0-9]*m$ ]]; then
   exit 2
 fi
 echo "Running REAL OpsKit k8s create (downloads, runtime, kubeadm init, Calico; timeout=$install_timeout)..."
-echo "Streaming sanitized Kubernetes installation output to CI and $report/install.log."
-# The redactor runs BEFORE tee. No unfiltered installer output is written to
-# uploaded artifacts or the public Actions log (kubeadm prints join tokens).
-# tee preserves a copy while Python flushes each sanitized line immediately.
+echo "Streaming separate redacted [STDOUT] and [STDERR] lines to CI and $report/install.log."
+# Python owns the child process and reads stdout/stderr concurrently.
+# Redaction precedes both console output and artifact writes; the Python
+# process exits with the original installer's status, not a tee status.
 set +e
-/usr/local/bin/opskit k8s create --config "$cfg" --timeout "$install_timeout" 2>&1 \
-  | python3 /usr/local/bin/opskit-e2e-stream-log \
-  | tee "$report/install.log"
-pipeline_status=("${PIPESTATUS[@]}")
+python3 /usr/local/bin/opskit-e2e-stream-log --run "$report/install.log" \
+  /usr/local/bin/opskit k8s create --config "$cfg" --timeout "$install_timeout"
+status=$?
 set -e
-status="${pipeline_status[0]}"
-# The installer cannot be reported successful if the log sanitizer or tee
-# failed. A non-zero installer exit status is still propagated unchanged.
-if [[ "${pipeline_status[1]}" -ne 0 || "${pipeline_status[2]}" -ne 0 ]]; then
-  echo "FAILED: real-time diagnostic log pipeline (redactor or tee)" | tee "$report/result.txt"
-  exit 1
-fi
 
 if [[ "$status" -ne 0 ]]; then
   printf 'FAILED: opskit k8s create exit code %s\n' "$status" | tee "$report/result.txt"
