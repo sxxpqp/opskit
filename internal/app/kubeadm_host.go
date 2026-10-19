@@ -166,6 +166,22 @@ func verifyKubeadmTool(ctx context.Context, path, name, version string) error {
 	return nil
 }
 
+// ensureKubeadmKernelModules loads only missing kernel modules; it does not
+// swallow a real load failure, which must block kubeadm preparation.
+func ensureKubeadmKernelModules(sysModule string, load func(string) error) error {
+	for _, module := range []string{"overlay", "br_netfilter"} {
+		if _, err := os.Stat(filepath.Join(sysModule, module)); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("检查内核模块 %s: %w", module, err)
+		}
+		if err := load(module); err != nil {
+			return fmt.Errorf("加载内核模块 %s: %w", module, err)
+		}
+	}
+	return nil
+}
+
 func prepareKubeadmHost(ctx context.Context, out, diag io.Writer) error {
 	// Verify OS dependencies before touching persistent host settings.
 	for _, tool := range []string{"modprobe", "sysctl", "swapoff", "conntrack", "socat", "iptables", "ip", "tc", "mount", "nsenter", "ethtool"} {
@@ -173,10 +189,13 @@ func prepareKubeadmHost(ctx context.Context, out, diag io.Writer) error {
 			return fmt.Errorf("缺少系统依赖 %s；请先通过发行版软件包管理器安装", tool)
 		}
 	}
-	for _, module := range []string{"overlay", "br_netfilter"} {
-		if err := commandRun(ctx, nil, out, diag, "modprobe", module); err != nil {
-			return err
-		}
+	// Modules built into the kernel or already loaded appear under /sys/module.
+	// In minimal containers there may be no matching /lib/modules tree even
+	// though the running host kernel already provides the required capability.
+	if err := ensureKubeadmKernelModules("/sys/module", func(module string) error {
+		return commandRun(ctx, nil, out, diag, "modprobe", module)
+	}); err != nil {
+		return err
 	}
 	fstab, err := os.ReadFile("/etc/fstab")
 	if err != nil {
@@ -195,12 +214,34 @@ func prepareKubeadmHost(ctx context.Context, out, diag io.Writer) error {
 	if err = commandRun(ctx, nil, out, diag, "sysctl", "-p", "/etc/sysctl.d/99-opskit-kubernetes.conf"); err != nil {
 		return err
 	}
-	if err = commandRun(ctx, nil, out, diag, "swapoff", "-a"); err != nil {
+	// Calling swapoff -a when no swap is enabled can fail in isolated
+	// containers even though there is nothing to disable. Never skip it when
+	// /proc/swaps reports active swap devices.
+	if err = disableActiveKubeadmSwap("/proc/swaps", func() error {
+		return commandRun(ctx, nil, out, diag, "swapoff", "-a")
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "节点准备完成；systemd swap unit、zram 等非 fstab swap 来源需自行禁用，init/join 会再次检查实际 swap。")
 	return nil
 }
+// disableActiveKubeadmSwap skips swapoff only when the kernel reports no
+// active swap. If swap is active, failure to disable it blocks installation.
+func disableActiveKubeadmSwap(procSwaps string, swapoff func() error) error {
+	data, err := os.ReadFile(procSwaps)
+	if err != nil {
+		return fmt.Errorf("读取 swap 状态: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 1 || !strings.HasPrefix(strings.TrimSpace(lines[0]), "Filename") {
+		return errors.New("/proc/swaps 格式无法识别，拒绝跳过 swap")
+	}
+	if len(lines) == 1 {
+		return nil
+	}
+	return swapoff()
+}
+
 func disableFstabSwap(text string) string {
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {

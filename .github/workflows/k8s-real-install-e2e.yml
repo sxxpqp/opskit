@@ -1,0 +1,89 @@
+name: Experimental real OpsKit kubeadm installation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/k8s-real-install-e2e.yml"
+      - "tests/e2e/docker/**"
+      - "internal/app/**"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+concurrency:
+  group: opskit-real-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-install:
+    # Use only ephemeral hosted runners. Never run a privileged container on a
+    # self-hosted runner, or run untrusted fork code with elevated Docker access.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: OpsKit real kubeadm init on disposable Docker node
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      OPSKIT_ALLOW_PRIVILEGED_INSTALL_E2E: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm disposable GitHub-hosted Linux runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$GITHUB_ACTIONS" = true
+          docker info --format '{{.OperatingSystem}}'
+      - name: Ensure host swap is disabled on disposable runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Swap is kernel-wide and cannot reliably be disabled from a Docker
+          # container. Never run this step on a shared/self-hosted machine.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$GITHUB_ACTIONS" = true
+          echo "Kernel swap entries before test:"
+          cat /proc/swaps
+          if test "$(wc -l < /proc/swaps)" -gt 1; then
+            sudo swapoff -a
+          fi
+          echo "Kernel swap entries after preflight:"
+          cat /proc/swaps
+          test "$(wc -l < /proc/swaps)" -eq 1
+      - name: Validate full installation Compose configuration
+        run: docker compose -f tests/e2e/docker/compose.yaml -f tests/e2e/docker/full-install.compose.yaml config --quiet
+      - name: Verify live STDOUT/STDERR capture, redaction and failure summarization
+        run: |
+          python3 tests/e2e/docker/test_stream_install_log.py
+          python3 tests/e2e/docker/test_summarize_install_diagnostics.py
+      - name: Install actual Kubernetes through OpsKit (live sanitized output)
+        shell: bash
+        run: bash tests/e2e/docker/run-install.sh
+      - name: Show root-cause errors from Calico, Pod Events and CRI
+        if: failure()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=tests/e2e/docker/artifacts/full-install/node-diagnostics.log
+          if [[ -s "$file" ]]; then
+            echo "::group::Root-cause summary (Calico, Pod events and container runtime)"
+            python3 tests/e2e/docker/summarize-install-diagnostics.py < "$file" \
+              | python3 tests/e2e/docker/stream-install-log.py
+            echo "::endgroup::"
+            echo "The full node-diagnostics.log is available in this run's uploaded artifact."
+          else
+            echo "No node diagnostics captured (installation may have failed before node startup)."
+          fi
+      - name: Upload install and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opskit-real-kubeadm-install-logs
+          path: |
+            tests/e2e/docker/artifacts/full-install/*.log
+            tests/e2e/docker/artifacts/full-install/result.txt
+          if-no-files-found: warn
+          retention-days: 5
