@@ -37,6 +37,22 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$GITHUB_ACTIONS" = true
           docker info --format '{{.OperatingSystem}}'
+      - name: Ensure host swap is disabled on disposable runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Swap is kernel-wide and cannot reliably be disabled from a Docker
+          # container. Never run this step on a shared/self-hosted machine.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$GITHUB_ACTIONS" = true
+          echo "Kernel swap entries before test:"
+          cat /proc/swaps
+          if test "$(wc -l < /proc/swaps)" -gt 1; then
+            sudo swapoff -a
+          fi
+          echo "Kernel swap entries after preflight:"
+          cat /proc/swaps
+          test "$(wc -l < /proc/swaps)" -eq 1
       - name: Validate full installation Compose configuration
         run: docker compose -f tests/e2e/docker/compose.yaml -f tests/e2e/docker/full-install.compose.yaml config --quiet
       - name: Install actual Kubernetes through OpsKit
