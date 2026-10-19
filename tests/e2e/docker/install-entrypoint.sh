@@ -38,14 +38,23 @@ if [[ ! "$install_timeout" =~ ^[1-9][0-9]*m$ ]]; then
   exit 2
 fi
 echo "Running REAL OpsKit k8s create (downloads, runtime, kubeadm init, Calico; timeout=$install_timeout)..."
+echo "Streaming sanitized Kubernetes installation output to CI and $report/install.log."
+# The redactor runs BEFORE tee. No unfiltered installer output is written to
+# uploaded artifacts or the public Actions log (kubeadm prints join tokens).
+# tee preserves a copy while Python flushes each sanitized line immediately.
 set +e
-/usr/local/bin/opskit k8s create --config "$cfg" --timeout "$install_timeout" \
-  > "$report/install.log" 2>&1
-status=$?
+/usr/local/bin/opskit k8s create --config "$cfg" --timeout "$install_timeout" 2>&1 \
+  | python3 /usr/local/bin/opskit-e2e-stream-log \
+  | tee "$report/install.log"
+pipeline_status=("${PIPESTATUS[@]}")
 set -e
-
-# Do not dump kubeconfig or bootstrap credentials into public CI logs.
-tail -n 60 "$report/install.log" | sed -E 's/[a-z0-9]{6}[.][a-z0-9]{16}/<join-token>/g'
+status="${pipeline_status[0]}"
+# The installer cannot be reported successful if the log sanitizer or tee
+# failed. A non-zero installer exit status is still propagated unchanged.
+if [[ "${pipeline_status[1]}" -ne 0 || "${pipeline_status[2]}" -ne 0 ]]; then
+  echo "FAILED: real-time diagnostic log pipeline (redactor or tee)" | tee "$report/result.txt"
+  exit 1
+fi
 
 if [[ "$status" -ne 0 ]]; then
   printf 'FAILED: opskit k8s create exit code %s\n' "$status" | tee "$report/result.txt"
