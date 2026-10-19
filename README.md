@@ -70,7 +70,7 @@ opskit completion powershell > opskit.ps1
 | kubectl 安装（main，未发布） | 按版本与系统架构下载，SHA-256 与客户端版本校验，复用 PATH；支持 -h / --help |
 | kind 管理（main，未发布） | 版本安装与跨系统 PATH 配置、集群创建/状态/日志、context 切换及按配置删除 |
 | 统一镜像源（main，未发布） | Docker、containerd、Go、npm、pip、Maven；默认备份后写入，--dry-run 预览 |
-| K8s SSH（main，未发布） | KK 风格配置、密码/密钥/sudo、下载复用、自动加入及固定版本 Calico；单 master、未真机验收 |
+| K8s SSH（main，未发布） | SSH/密码/密钥/sudo、下载复用、单 Master+Worker 编排；依赖版本自动匹配方案（1.24～1.37，1.29+ CNI 须手动提供），未完成全版本真实安装验收 |
 | kubeadm（main，未发布） | install/prepare/init/join，containerd 兼容检查、systemd、单控制平面和工作节点；未真机验收 |
 | KubeSphere（main，未发布） | 3.4.1 清单内嵌，兼容性/存储检查、初始密码注入、核心服务等待 |
 | etcd 集群检查 | 成员数量、投票节点 / learner、逐节点健康、Leader 与版本 |
@@ -384,7 +384,7 @@ containerd 默认配置启用 SystemdCgroup 和 certs.d lookup，保持上游 sa
 
 ## K8s SSH 集群部署（main，未发布）
 
-`opskit k8s create` 原生实现 SSH 编排，不安装或调用 KK。配置采用 hosts、roleGroups、controlPlaneEndpoint 风格；kubeadm/kubelet/kubectl 统一跟随 `k8s.kubernetes.version`，kind 使用独立的 `kind.version` / `kind.kubernetes.version`。旧全局 versions、顶层 kubeadm/kubesphere 配置已移除，读取会报未知字段。
+`opskit k8s create` 原生实现 SSH 编排，不安装或调用 KK。配置采用 hosts、roleGroups、controlPlaneEndpoint 风格；kubeadm/kubelet/kubectl 统一跟随 `k8s.kubernetes.version`，containerd/runc/criTools/cniPlugins 写 `version: auto` 时跟随 Kubernetes minor 解析锁定版本（显式版本仍保留），kind 使用独立的 `kind.version` / `kind.kubernetes.version`。旧全局 versions、顶层 kubeadm/kubesphere 配置已移除，读取会报未知字段。
 
 集群名称填写在 YAML 的 `k8s.name`（例如 `sxxpqp`）；执行 `opskit k8s create --config config/config.yaml`，不接受 `k8s create sxxpqp` 位置参数。缺少配置时先执行 `opskit config init`，再编辑节点、版本与网络配置。
 
@@ -417,7 +417,7 @@ k8s:
 
 管理机按 `install.calico.download_base` 下载一次清单，校验模板记录的官方文件 SHA-256 后分发；设置 Calico IP 池为 Pod CIDR，使用 Kubernetes InternalIP 探测节点地址，并等待 calico-node / calico-kube-controllers 就绪。镜像沿用官方名称，由现有节点 mirror 加速。指定本地 `manifest` 时使用该文件，不下载或改写；首次节点检测到其他 CNI 配置会停止。下载源与生产网络要求见 [Calico 配置指南](docs/configuration.md#calico-自动安装)。
 
-现有本地 `kubeadm install / prepare / init / join` 继续作为维护入口，不自动 reset、覆盖已有工具或加入外部集群。目前配置渲染限定 Kubernetes 1.24～1.30，示例沿用旧 KS 环境，不是生产版本推荐。已完成本地 SSH、编排模拟和下载校验测试，真实多主机部署尚未验收；没有宣称支持 HA、独立 etcd 或升级。完整配置和迁移方法见 [K8s 部署指南](docs/configuration.md#k8s-ssh-集群部署)。
+现有本地 `kubeadm install / prepare / init / join` 继续作为维护入口，不自动 reset、覆盖已有工具或加入外部集群。新版本兼容层可按 Kubernetes 1.24～1.37 的已审查版本档案自动选择 containerd/runc/crictl/CNI，并按 1.31 分界生成 kubeadm v1beta3/v1beta4 配置；**1.29+ 的 CNI 清单暂须显式提供，完整多版本安装尚未真机验收**。旧 KS 配置不是生产版本推荐。参见 [Kubernetes 版本自动匹配指南](docs/k8s-version-profiles.md)。已完成本地 SSH、编排模拟和下载校验测试，真实多主机部署尚未验收；没有宣称支持 HA、独立 etcd 或升级。完整配置和迁移方法见 [K8s 部署指南](docs/configuration.md#k8s-ssh-集群部署)。
 
 ## 路线图
 

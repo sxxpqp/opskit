@@ -93,6 +93,11 @@ func newRuntimeInstallCommand(parent context.Context, tool string, out, diag io.
 		if err != nil {
 			return 1, err
 		}
+		if tool == "containerd" && c.K8s.Kubernetes.Version != "" {
+			if err = resolveClusterComponentVersions(&c); err != nil {
+				return 2, err
+			}
+		}
 		setConfigFlag(f, "download-dir", c.Install.DownloadDir)
 		if *downloadDir == "" {
 			*downloadDir, err = defaultDownloadDir()

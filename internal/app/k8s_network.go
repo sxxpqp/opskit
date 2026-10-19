@@ -18,11 +18,11 @@ import (
 )
 
 func validateClusterCalico(c *clusterSettings, minor int) error {
-	if c.Network.Calico.Version != "v3.26.5" {
-		return errors.New("Calico 自动安装当前支持固定版本 v3.26.5；请设置 k8s.network.calico.version 或使用本地 network.manifest")
-	}
 	if minor < 24 || minor > 28 {
-		return errors.New("Calico v3.26.5 自动安装仅支持 Kubernetes 1.24～1.28；其他组合请提供已验证的本地 network.manifest")
+		return errors.New("Kubernetes 1.29+ 暂无经过校验的 Calico 自动安装配置；请指定 k8s.network.manifest 指向可信的本地 CNI 清单，不会沿用旧 Calico")
+	}
+	if c.Network.Calico.Version != "v3.26.5" {
+		return errors.New("Kubernetes 1.24～1.28 当前仅自动支持 Calico v3.26.5；其他版本请使用本地 network.manifest")
 	}
 	ip, pool, err := net.ParseCIDR(c.Network.PodSubnet)
 	if err != nil || ip.To4() == nil {

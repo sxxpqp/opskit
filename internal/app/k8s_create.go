@@ -51,7 +51,7 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 	f := cmd.Flags()
 
 	path := f.String("config", defaultConfigPath, "统一 YAML；k8s 节点和版本配置")
-	calicoVersion := f.String("calico-version", "", "Calico 版本；默认 k8s.network.calico.version，当前支持 v3.26.5")
+	calicoVersion := f.String("calico-version", "", "Calico 自动版本；1.24～1.28 选择 v3.26.5，更新版本需提供本地 CNI 清单")
 	calicoBase := f.String("calico-download-base", "", "Calico 清单根地址；CALICO_DOWNLOAD_BASE / install.calico.download_base")
 	version := f.String("version", "", "覆盖 k8s.kubernetes.version（kubeadm/kubelet/kubectl 同版）")
 	dry := f.Bool("dry-run", false, "只校验和显示计划，不连接 SSH、不下载、不修改节点")
@@ -76,6 +76,9 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 			c.K8s.Network.Calico.Version = *calicoVersion
 		}
 		if err = mergeClusterDefaults(&c); err != nil {
+			return 2, err
+		}
+		if err = resolveClusterComponentVersions(&c); err != nil {
 			return 2, err
 		}
 		if err = validateCluster(&c.K8s); err != nil {
@@ -115,6 +118,11 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 			fmt.Fprintf(out, "节点 %s: SSH %s@%s:%d；集群地址 %s\n", host.Name, host.User, host.Address, host.Port, host.InternalAddress)
 		}
 		fmt.Fprintf(out, "Kubernetes %s（kubeadm/kubelet/kubectl 同版），运行时 %s；并发 %d，总超时 %s；KubeSphere=%t\n", c.K8s.Kubernetes.Version, c.K8s.Kubernetes.ContainerManager, c.K8s.Deploy.Concurrency, duration, c.K8s.KubeSphere.Enabled)
+		if c.K8s.Kubernetes.ContainerManager == "containerd" {
+			fmt.Fprintf(out, "组件版本: containerd=%s, runc=%s, crictl=%s, CNI plugins=%s\n", c.K8s.Containerd.Version, c.K8s.Runc.Version, c.K8s.CRITools.Version, c.K8s.CNIPlugins.Version)
+		} else {
+			fmt.Fprintf(out, "组件版本: Docker=%s, cri-dockerd=%s, crictl=%s, CNI plugins=%s\n", c.K8s.Docker.Version, c.K8s.CRIDockerd.Version, c.K8s.CRITools.Version, c.K8s.CNIPlugins.Version)
+		}
 		if *dry {
 			fmt.Fprintln(out, "预览完成；未连接节点或读取认证秘密。")
 			return 0, nil

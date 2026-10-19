@@ -42,7 +42,7 @@ SSH 使用配置凭据直接连接，不读取 known_hosts、不确认或校验�
 install 安装固定版本 kubeadm/kubelet/kubectl/crictl 和 kubelet systemd unit，不安装 containerd。
 prepare 配置内核模块、转发和 bridge sysctl、禁用 swap（备份 fstab）。
 init 初始化单控制平面；join 加入工作节点。均拒绝覆盖已有节点。
-版本读取 k8s.kubernetes.version，CLI --version 优先；当前支持 Kubernetes 1.24～1.30。
+版本读取 k8s.kubernetes.version，CLI --version 优先；已配置 1.24～1.37 档案，1.31+ 使用 v1beta4。
 默认执行，--dry-run 只预览；各命令 --help 查看参数。
 网络清单通过 k8s.network.manifest 或 init --network-manifest 指定本地文件。`,
 	"kubectl": `用法: opskit kubectl install [参数]
