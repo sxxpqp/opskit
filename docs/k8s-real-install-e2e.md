@@ -39,7 +39,10 @@ The script:
 4. Disables the repository example's private Nexus and insecure image proxies,
    substituting public upstream download endpoints and TLS-verified registries.
 5. Runs a harmless `--dry-run`, then runs **the actual**
-   `opskit k8s create --config ... --timeout 32m` command.
+   `opskit k8s create --config ... --timeout 15m` command (overridable via
+   `OPSKIT_INSTALL_E2E_TIMEOUT`). The installer output is streamed line by
+   line into the Actions console **through a credential redactor before
+   `tee`**; the uploaded `install.log` is the same sanitized stream.
 6. Requires the installer to exit successfully and produce a kubeconfig.
 7. Downloads the matching kubectl binary with SHA-256 verification, checks the
    API readiness endpoint, master Node Ready, Calico and CoreDNS rollout.
@@ -134,11 +137,27 @@ separate product changes and testing.
 ## Results and evidence
 
 Logs are written to `tests/e2e/docker/artifacts/full-install/` and stored as
-short-lived GitHub Actions artifacts. `install.log` captures OpsKit output,
+short-lived GitHub Actions artifacts. **Installation progress, stage names and
+errors are shown live** in the `Install actual Kubernetes through OpsKit
+(live sanitized output)` Actions step; there is no need to wait for timeout
+to read the last 60 lines. The Python stream redactor removes known ephemeral
+passwords, bootstrap join tokens, kubeconfig key-data values, bearer tokens,
+PEM blocks and workflow command prefixes before any output is printed or
+written to `install.log`. It flushes each line immediately. The command exit
+status is taken from Bash `PIPESTATUS[0]`, never from `tee`.
+
+The `Show sanitized node diagnostics after a failure` CI step prints a
+redacted, bounded (last 180 lines) summary of kubelet/containerd and Calico
+logs to help distinguish download, runtime and CNI startup errors. The
 `verify.log` contains post-install checks, `node-diagnostics.log` collects
-a bounded kubelet/containerd journal tail, and `result.txt` contains the
-final status. Generated kubeconfig, SSH key and install bundles are never
-included in the uploaded artifact paths.
+systemd/CRI/Calico events and journal output, and `result.txt` contains the
+final status. The CI job tests the redactor before beginning any privileged
+installation. Artifact logs remain available for deeper diagnosis.
+
+Generated kubeconfig, SSH key and install bundles are never included in the
+uploaded artifact paths. Redaction is best-effort: use only disposable test
+credentials and never provide production kubeconfig, passwords or tokens to
+this public CI job.
 
 This does not fix OpsKit's existing insecure SSH host-key handling. Test
 credentials are ephemeral and container-only. For real deployments,
