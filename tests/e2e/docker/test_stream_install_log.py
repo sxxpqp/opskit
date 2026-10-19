@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Black-box regression tests for the public E2E installer log stream."""
 import os
+import tempfile
 from pathlib import Path
 import subprocess
 import sys
@@ -52,6 +53,50 @@ class StreamInstallLogTests(unittest.TestCase):
         self.assertIn("context deadline exceeded", result)
         self.assertIn("Running kubeadm init", result)
         self.assertIn("[PEM key/certificate redacted]", result)
+
+    def test_separate_stdout_and_stderr_and_preserve_failure_exit_code(self):
+        command = (
+            "import sys;"
+            "print('control plane initialized', flush=True);"
+            "print('Calico failed: not a shared mount', file=sys.stderr, flush=True);"
+            "print('kubeadm join 172.18.0.2:6443 --token abcdef.0123456789abcdef',"
+            " file=sys.stderr, flush=True);"
+            "sys.exit(17)"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "install.log")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--run",
+                    path,
+                    sys.executable,
+                    "-c",
+                    command,
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 17)
+            self.assertIn("[STDOUT] control plane initialized", result.stdout)
+            self.assertIn("[STDERR] Calico failed: not a shared mount", result.stdout)
+            self.assertNotIn("abcdef.0123456789abcdef", result.stdout)
+            self.assertIn("[STDERR] kubeadm join", result.stdout)
+            self.assertEqual(Path(path).read_text(), result.stdout)
+
+    def test_successful_command_returns_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "--run",
+                    str(Path(tmp) / "install.log"),
+                    sys.executable, "-c", "print('OK')",
+                ],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("[STDOUT] OK", result.stdout)
 
     def test_actions_workflow_command_is_neutralized(self):
         result = self.run_filter("::error file=a,line=1::unsafe action\n[master/ready] 开始\n")
