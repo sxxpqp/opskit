@@ -95,6 +95,27 @@ checks or change OpsKit's production containerd configuration. The new run
 must actually reach Ready for a PASS; if the error persists, inspect the
 uploaded `node-diagnostics.log` for CRI, snapshotter and kernel details.
 
+### 2026-10-19: actual control plane installed; Calico startup stalled
+
+Actions run [39213308900](https://github.com/sxxpqp/opskit/actions/runs/39213308900)
+**successfully executed kubeadm init** after the dedicated containerd storage
+volume fix. The static etcd, API server, controller-manager, scheduler, and
+kube-proxy containers were running. The manifest applied Calico resources, but
+OpsKit's **master/ready** phase hit the total deadline. Collected kubelet and
+containerd logs show that CoreDNS and calico-kube-controllers cannot get
+network sandboxes because `/var/lib/calico/nodename` is absent. The
+`calico-node` main container does **not** appear in `crictl ps -a`, while
+its `install-cni` and `upgrade-ipam` init containers have exited.
+
+This evidence establishes that Calico was not initialized, **not why** its
+init-to-main transition stalled. The pipeline now collects Calico container
+exit codes and logs, Pod descriptions, DaemonSet status, and kube-system
+events before removing test containers. Do not fake `/var/lib/calico/nodename`
+or bypass the network setup check: those approaches would produce a false
+installation success. A bounded 15-minute test timeout (overridable with
+`OPSKIT_INSTALL_E2E_TIMEOUT`) makes stalled CNI failures easier to diagnose.
+A PASS still requires real node/Calico/CoreDNS readiness.
+
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
 before classifying failures. Docker uses the host kernel and may not support
