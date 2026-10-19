@@ -1,0 +1,70 @@
+name: Docker Kubernetes integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ssh-systemd:
+    name: Real SSH/systemd containers (not kubeadm E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose configuration
+        run: docker compose -f tests/e2e/docker/compose.yaml config --quiet
+      - name: Run real SSH and systemd integration checks
+        shell: bash
+        run: bash tests/e2e/docker/run.sh
+      - name: Upload Docker integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-ssh-systemd-logs
+          path: tests/e2e/docker/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  kind:
+    name: Kind two-node Kubernetes smoke (not OpsKit installer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: opskit-e2e-kind
+          config: tests/e2e/docker/kind.yaml
+          wait: 300s
+      - name: Check API, nodes and CoreDNS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p tests/e2e/docker/artifacts
+          {
+            kubectl --context kind-opskit-e2e-kind get --raw=/readyz
+            kubectl --context kind-opskit-e2e-kind wait --for=condition=Ready nodes --all --timeout=180s
+            kubectl --context kind-opskit-e2e-kind -n kube-system rollout status deployment/coredns --timeout=180s
+            kubectl --context kind-opskit-e2e-kind get nodes -o wide
+            kubectl --context kind-opskit-e2e-kind get pods -A
+          } | tee tests/e2e/docker/artifacts/kind-smoke.log
+      - name: Collect Kind cluster logs
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p tests/e2e/docker/artifacts/kind-diagnostics
+          kind export logs --name opskit-e2e-kind tests/e2e/docker/artifacts/kind-diagnostics || true
+      - name: Upload Kind diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-kind-smoke-logs
+          path: tests/e2e/docker/artifacts/
+          if-no-files-found: warn
+          retention-days: 7

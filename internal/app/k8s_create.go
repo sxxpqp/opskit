@@ -193,6 +193,15 @@ func clusterParallel(ctx context.Context, nodes []*connectedClusterNode, limit i
 	}
 	return errors.Join(failures...)
 }
+// clusterHostPreflightCommand is deliberately read-only. The Docker SSH E2E
+// exercises this same probe against real systemd/SSH test containers.
+func clusterHostPreflightCommand(clusterName string) string {
+	probe := `set -eu; test "$(id -u)" = 0; test -d /run/systemd/system; uname -s; uname -m; for x in tar systemctl modprobe sysctl swapoff conntrack socat iptables ip tc mount nsenter ethtool; do command -v "$x" >/dev/null || { echo "missing dependency: $x" >&2; exit 1; }; done`
+	state := filepath.ToSlash(filepath.Join("/var/lib/opskit/clusters", clusterName, "state.json"))
+	probe += `; if test -e /etc/kubernetes/kubelet.conf -o -e /etc/kubernetes/admin.conf -o -d /etc/kubernetes/manifests; then test -f ` + shellQuote(state) + ` || { echo 'node already belongs to an unmanaged cluster' >&2; exit 1; }; fi`
+	return probe
+}
+
 func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.Writer, dial func(context.Context, clusterHost) (clusterRemote, error)) error {
 	autoCalico := c.K8s.Network.Manifest == ""
 	var nodes []*connectedClusterNode
@@ -209,9 +218,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		}
 		node := &connectedClusterNode{host: h, remote: remote}
 		nodes = append(nodes, node)
-		probe := `set -eu; test "$(id -u)" = 0; test -d /run/systemd/system; uname -s; uname -m; for x in tar systemctl modprobe sysctl swapoff conntrack socat iptables ip tc mount nsenter ethtool; do command -v "$x" >/dev/null || { echo "missing dependency: $x" >&2; exit 1; }; done`
-		state := filepath.ToSlash(filepath.Join("/var/lib/opskit/clusters", c.K8s.Name, "state.json"))
-		probe += `; if test -e /etc/kubernetes/kubelet.conf -o -e /etc/kubernetes/admin.conf -o -d /etc/kubernetes/manifests; then test -f ` + shellQuote(state) + ` || { echo 'node already belongs to an unmanaged cluster' >&2; exit 1; }; fi`
+		probe := clusterHostPreflightCommand(c.K8s.Name)
 		raw, err := remote.Exec(ctx, true, probe)
 		if err != nil {
 			return fmt.Errorf("%s: 全节点预检失败: %w", h.Name, err)

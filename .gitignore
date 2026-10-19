@@ -17,3 +17,6 @@ __pycache__/
 
 /.opskit/
 .vscode/
+
+# Docker Kubernetes E2E outputs
+/tests/e2e/docker/artifacts/
