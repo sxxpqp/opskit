@@ -348,8 +348,8 @@ k8s:
   kubernetes: {version: v1.24.7, containerManager: containerd, clusterName: cluster.local}
   containerd: {version: v1.7.24}
   runc: {version: v1.2.6}
-  criTools: {version: v1.24.2}
-  cniPlugins: {version: v1.5.1}
+  criTools: {version: auto}
+  cniPlugins: {version: auto}
   docker: {version: v27.3.1}
   criDockerd: {version: v0.3.22}
   network:
@@ -367,7 +367,7 @@ k8s:
     nodeBinaries: {} # 非 Linux 管理机/异构节点指定 Linux opskit 文件路径
 ```
 
-样例保留当前旧 KS 测试环境的固定版本，并非新生产环境推荐。首版使用 kubeadm v1beta3，支持 Kubernetes 1.24～1.30；不猜测更高版本配置。Kubernetes 1.24/1.25 拒绝 containerd 2.x；1.26+ 的 containerd 1.6 至少需要 1.6.15，其他搭配仍需真机验证。criTools 与 Kubernetes 必须同 minor。选择 docker 时使用 Docker 二进制包及 cri-dockerd，不安装独立 containerd/runc；k8s.containerd/runc 仅用于 containerd 路线。
+样例保留旧 KS 测试环境的 Kubernetes 版本，并非新生产环境推荐。自动版本档案支持 Kubernetes 1.24～1.37：1.24～1.30 使用 kubeadm v1beta3；1.31～1.37 使用 v1beta4。containerd、runc、criTools、cniPlugins 可设置 `version: auto`，由 Kubernetes minor 解析固定依赖版本；旧配置如显式锁定其他版本须自行改为 auto 才会自动切换。1.29 及以后暂无内置可信 Calico 自动清单，须提供明确的 `k8s.network.manifest`；见 [版本自动匹配说明](k8s-version-profiles.md)。Kubernetes 1.24/1.25 拒绝 containerd 2.x；1.26+ 的 containerd 1.6 至少需要 1.6.15，其他搭配仍需真机验证。criTools 与 Kubernetes 必须同 minor。选择 docker 时使用 Docker 二进制包及 cri-dockerd，不安装独立 containerd/runc；k8s.containerd/runc 仅用于 containerd 路线。
 
 ### 节点与认证
 
@@ -385,7 +385,7 @@ Windows/macOS 管理机预检 Linux 节点的 CRI socket 时，按 Unix 路径�
 
 Linux 同架构管理机直接分发当前 opskit 可执行文件。非 Linux 管理机或异构架构需配置 `nodeBinaries: {amd64: /path/opskit_linux_amd64, arm64: /path/opskit_linux_arm64}`；文件必须从相同代码构建，不得拿缺少内部节点协议的旧 Release 替代。目标主机不需要 Go。现有仓库发布包仍区分操作系统/架构；本功能尚未完成发布，不宣称当前公开附件已支持。
 
-`k8s.registry.imageRepository` 仅控制 kubeadm 系统镜像仓库。运行时镜像源统一读取顶层 `mirrors`：Docker 使用 `mirrors.docker` / `mirrors.docker_insecure_registries`；containerd 使用完整的 `mirrors.containerd`，保留各仓库 endpoint、server、skip_verify、override_path，不再由 DockerHub 列表覆盖。重复的 `k8s.registry.registryMirrors` 已删除，旧配置须移除此字段，读取时会报未知字段，不保留别名。Docker 的 registry-mirrors 仅加速 DockerHub；使用 Docker 时请将 imageRepository 按需设置为可访问的系统镜像仓库，insecure-registries 本身不会重写其他仓库地址。`network.manifest` 留空自动下载固定版本 Calico，校验 SHA-256 并按 Pod CIDR 渲染；填入本地 YAML 则优先使用，不下载、不改写，由部署者确认镜像、版本和 Pod CIDR 配套。CNI plugins 二进制不等于网络插件 Deployment/DaemonSet。网络和存储清单可以按环境准备，KS 默认关闭，不会自动安装存储驱动。
+`k8s.registry.imageRepository` 仅控制 kubeadm 系统镜像仓库。运行时镜像源统一读取顶层 `mirrors`：Docker 使用 `mirrors.docker` / `mirrors.docker_insecure_registries`；containerd 使用完整的 `mirrors.containerd`，保留各仓库 endpoint、server、skip_verify、override_path，不再由 DockerHub 列表覆盖。重复的 `k8s.registry.registryMirrors` 已删除，旧配置须移除此字段，读取时会报未知字段，不保留别名。Docker 的 registry-mirrors 仅加速 DockerHub；使用 Docker 时请将 imageRepository 按需设置为可访问的系统镜像仓库，insecure-registries 本身不会重写其他仓库地址。`network.manifest` 在 Kubernetes 1.24～1.28 留空时自动下载固定 Calico v3.26.5，校验 SHA-256 并按 Pod CIDR 渲染；Kubernetes 1.29 及以后必须提供本地已验证 CNI YAML；填入本地 YAML 则优先使用，不下载、不改写，由部署者确认镜像、版本和 Pod CIDR 配套。CNI plugins 二进制不等于网络插件 Deployment/DaemonSet。网络和存储清单可以按环境准备，KS 默认关闭，不会自动安装存储驱动。
 
 ### 执行、重跑与结果
 
