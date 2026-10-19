@@ -51,7 +51,7 @@ func newK8sCreateCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 	f := cmd.Flags()
 
 	path := f.String("config", defaultConfigPath, "统一 YAML；k8s 节点和版本配置")
-	calicoVersion := f.String("calico-version", "", "Calico 版本；默认 k8s.network.calico.version，当前支持 v3.26.5")
+	calicoVersion := f.String("calico-version", "", "Calico 自动版本；1.24～1.28 选择 v3.26.5，更新版本需提供本地 CNI 清单")
 	calicoBase := f.String("calico-download-base", "", "Calico 清单根地址；CALICO_DOWNLOAD_BASE / install.calico.download_base")
 	version := f.String("version", "", "覆盖 k8s.kubernetes.version（kubeadm/kubelet/kubectl 同版）")
 	dry := f.Bool("dry-run", false, "只校验和显示计划，不连接 SSH、不下载、不修改节点")
