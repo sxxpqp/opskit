@@ -75,7 +75,7 @@ func TestKubeadmInvalidInput(t *testing.T) {
 	config := kubeadmTestConfig(t)
 	for _, args := range [][]string{
 		{"install", "--version", "latest"}, {"install", "--version", "v1.38.0"},
-		{"install", "--version", "v1.26.15"}, {"install", "--kubeadm-download-base", "https://user:pass@example.com"},
+		{"install", "--version", "v1.23.17"}, {"install", "--kubeadm-download-base", "https://user:pass@example.com"},
 		{"install", "--download-base", "https://old.example"}, {"init", "--apply"}, {"init"},
 		{"join", "--endpoint", "192.168.10.10:6443", "--token", "abcdef.0123456789abcdef"},
 		{"prepare", "--timeout", "0s"},
