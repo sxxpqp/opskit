@@ -45,9 +45,11 @@ def redact(line: str) -> str:
     for secret in KNOWN_SECRETS:
         line = line.replace(secret, "<redacted>")
     line = BASIC_AUTH_URL.sub(r"\1<redacted>@", line)
+    # Bearer must be removed BEFORE the authorization: field. Otherwise the
+    # field filter hides only the word "Bearer" and leaves its token behind.
+    line = BEARER.sub(r"\1<redacted>", line)
     line = SECRET_FLAG.sub(r"\1<redacted>", line)
     line = SECRET_FIELD.sub(r"\1<redacted>", line)
-    line = BEARER.sub(r"\1<redacted>", line)
     line = JOIN_TOKEN.sub("<join-token>", line)
     # The Actions runner parses workflow commands sent by programs; never
     # allow subprocess output to create a GitHub Actions command.
