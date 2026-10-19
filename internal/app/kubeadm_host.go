@@ -214,12 +214,34 @@ func prepareKubeadmHost(ctx context.Context, out, diag io.Writer) error {
 	if err = commandRun(ctx, nil, out, diag, "sysctl", "-p", "/etc/sysctl.d/99-opskit-kubernetes.conf"); err != nil {
 		return err
 	}
-	if err = commandRun(ctx, nil, out, diag, "swapoff", "-a"); err != nil {
+	// Calling swapoff -a when no swap is enabled can fail in isolated
+	// containers even though there is nothing to disable. Never skip it when
+	// /proc/swaps reports active swap devices.
+	if err = disableActiveKubeadmSwap("/proc/swaps", func() error {
+		return commandRun(ctx, nil, out, diag, "swapoff", "-a")
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "节点准备完成；systemd swap unit、zram 等非 fstab swap 来源需自行禁用，init/join 会再次检查实际 swap。")
 	return nil
 }
+// disableActiveKubeadmSwap skips swapoff only when the kernel reports no
+// active swap. If swap is active, failure to disable it blocks installation.
+func disableActiveKubeadmSwap(procSwaps string, swapoff func() error) error {
+	data, err := os.ReadFile(procSwaps)
+	if err != nil {
+		return fmt.Errorf("读取 swap 状态: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 1 || !strings.HasPrefix(strings.TrimSpace(lines[0]), "Filename") {
+		return errors.New("/proc/swaps 格式无法识别，拒绝跳过 swap")
+	}
+	if len(lines) == 1 {
+		return nil
+	}
+	return swapoff()
+}
+
 func disableFstabSwap(text string) string {
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
