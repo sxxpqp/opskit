@@ -346,8 +346,8 @@ k8s:
     # worker: [worker1]
   controlPlaneEndpoint: {address: 192.168.10.10, port: 6443}
   kubernetes: {version: v1.24.7, containerManager: containerd, clusterName: cluster.local}
-  containerd: {version: v1.7.24}
-  runc: {version: v1.2.6}
+  containerd: {version: auto}
+  runc: {version: auto}
   criTools: {version: auto}
   cniPlugins: {version: auto}
   docker: {version: v27.3.1}
@@ -355,8 +355,8 @@ k8s:
   network:
     kubePodsCIDR: 10.244.0.0/16
     kubeServiceCIDR: 10.96.0.0/12
-    manifest: ""  # 自动安装固定版本 Calico；本地文件可覆盖
-    calico: {version: v3.26.5}
+    manifest: ""  # 仅 Kubernetes 1.24～1.28 自动 Calico；1.29+ 指定本地已验证 CNI 清单
+    calico: {version: auto}
   registry:
     imageRepository: registry.k8s.io
   kubesphere: {enabled: false, version: v3.4.1, password: Sxxpqp.top1, storageClass: ""}
