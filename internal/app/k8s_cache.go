@@ -290,6 +290,8 @@ func yamlClusterDefaults(c *fileConfig) error {
 	if err := yaml.Unmarshal(templates.ConfigTemplate, c); err != nil {
 		return err
 	}
-	c.projectComponents()
+	if err := resolveClusterComponentVersions(c); err != nil {
+		return err
+	}
 	return nil
 }
