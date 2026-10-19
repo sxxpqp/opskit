@@ -43,7 +43,7 @@
 
 当前代码覆盖 **Go / kubectl / Docker / cri-dockerd / containerd 版本安装、原生 SSH + kubeadm 集群部署、固定版本 Calico、kind 管理和 KubeSphere 安装**，并支持 **etcd 健康检查与快照、MinIO / AWS / 自定义 S3 检查及上传**。命令使用 Cobra，提供中文帮助和 Shell 补全。
 
-**v0.1.12 为本次补丁标签，尚未发布。** 新增安装与部署流程已通过本地自动化验证，真实多机部署、Calico 连通性和网络策略仍需验收；SSH 部署目前支持单控制平面与可选工作节点，未实现该部署方式的 HA、升级或集群删除。配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并。下载表仍对应已发布版本，GitHub / Nexus 入口与正式版摘要由发布流水线维护。
+**v0.1.11 为本次代码标签，尚未发布。** 新增安装与部署流程已通过本地自动化验证，真实多机部署、Calico 连通性和网络策略仍需验收；SSH 部署目前支持单控制平面与可选工作节点，未实现该部署方式的 HA、升级或集群删除。配置统一为 `config/config.yaml`，旧 `opskit.yaml` 仅在默认文件不存在时回退读取，不合并。下载表仍对应已发布版本，GitHub / Nexus 入口与正式版摘要由发布流水线维护。
 
 命令入口已迁移至 Cobra，帮助页从实际命令和参数生成，按行展示中文说明；`opskit kind --help` 等命令组帮助列出可选子命令。命令帮助支持 `opskit -h` / `--help`；命令组如 `opskit kind`、`opskit kind -h`、`opskit kind --help` 均显示子命令列表，其他已有命令组同样适用。具体参数使用 `opskit kind install --help` 等形式查看，帮助不依赖配置文件或外部工具。
 
@@ -468,8 +468,7 @@ Docker 脚本安装默认使用清华 Docker CE 软件包源，`install.docker.m
 | [v0.1.8](https://github.com/sxxpqp/opskit/releases/tag/v0.1.8) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.7](https://github.com/sxxpqp/opskit/releases/tag/v0.1.7) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.6](https://github.com/sxxpqp/opskit/releases/tag/v0.1.6) | 新版本已发布，详细变化见对应 Release 说明 |
-| v0.1.12（待发布） | 修复 Windows 管理机按 Windows 规则校验 Linux CRI socket 导致的配置预检和测试失败；保留实际节点安装仅支持 Linux 的限制 |
-| v0.1.11（待发布） | Cobra 命令框架、Go SDK 与代理、原生 SSH + kubeadm 集群部署、固定版本 Calico；版本按安装类型隔离，修复镜像源覆盖并自动配置 Docker inotify。已通过本地回归，未完成真机验收 |
+| v0.1.11（待发布） | Cobra 命令框架、Go SDK 与代理、原生 SSH + kubeadm 集群部署、固定版本 Calico；版本按安装类型隔离，修复镜像源覆盖、Windows CRI socket 路径校验并自动配置 Docker inotify。已通过本地回归，未完成真机验收 |
 | main（未发布） | Docker 脚本/二进制安装自动备份并应用 inotify 限额，保留更高值并回读验证 |
 | main（未发布） | 删除重复的 k8s.registry.registryMirrors；集群 Docker/containerd 分别读取顶层 mirrors 配置，保留 containerd 路径代理及 TLS 设置 |
 | main（未发布） | k8s create 默认自动安装固定版本 Calico，下载摘要校验、Pod CIDR 渲染及就绪等待；保留本地清单覆盖 |
