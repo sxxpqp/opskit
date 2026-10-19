@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	templates "github.com/sxxpqp/opskit"
 	"gopkg.in/yaml.v3"
 )
 
