@@ -76,6 +76,25 @@ GitHub-hosted runner provides it. **No preflight errors are ignored.**
 The kernel config may still be absent on a particular hosted image; such a
 failure is recorded rather than passed.
 
+### CI install failure: nested containerd rootfs mount
+
+The most recent completed installation run (2026-10-19, Actions run
+`39212219930`) progressed through actual binary/runtime installation and
+`kubeadm init` certificate/static-pod manifest generation. The kubelet service
+remained running, but containerd repeatedly failed to create control-plane Pod
+sandboxes with `failed to mount rootfs component: invalid argument`. As a
+result, no API server started and kubeadm timed out. The `pause:3.8` versus
+`pause:3.9` warning is recorded but not proven to cause this failure.
+
+**Hypothesis under test:** the nested containerd overlay snapshotter tries to
+mount root filesystems atop the outer Docker overlay filesystem. The test
+harness now mounts a fresh, run-scoped Docker volume at `/var/lib/containerd`
+and checks that its filesystem is not `overlay` before running the installer.
+This is strictly a test-infrastructure adjustment: it does not bypass kubeadm
+checks or change OpsKit's production containerd configuration. The new run
+must actually reach Ready for a PASS; if the error persists, inspect the
+uploaded `node-diagnostics.log` for CRI, snapshotter and kernel details.
+
 The Ubuntu GitHub runner has finite CPU, RAM and disk. Public registry
 downloads can fail due to rate limits or network outages; inspect stage logs
 before classifying failures. Docker uses the host kernel and may not support
