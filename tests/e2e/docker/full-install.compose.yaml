@@ -5,6 +5,8 @@ services:
     # Read-only host kernel metadata. Still only safe on disposable runners.
     volumes:
       - /lib/modules:/lib/modules:ro
+      - /boot:/boot:ro
+      - /usr/src:/usr/src:ro
   tester:
     entrypoint: ["/bin/bash", "/usr/local/bin/opskit-e2e-install"]
     environment:
