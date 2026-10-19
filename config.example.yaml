@@ -68,17 +68,18 @@ k8s:
     address: 192.168.10.10
     port: 6443
   kubernetes:
-    version: v1.24.7  # kubeadm/kubelet/kubectl 统一使用此版本，不提供独立版本字段
+    version: v1.24.7  # 只需指定 Kubernetes 完整版本；依赖组件可使用 auto
     containerManager: containerd  # containerd / docker，所选运行时使用二进制包
     clusterName: cluster.local
+  # auto 根据 Kubernetes minor 解析审查过的依赖组合，也可显式锁定版本。
   containerd:
-    version: v1.7.24
+    version: auto
   runc:
-    version: v1.2.6
+    version: auto
   criTools:
-    version: v1.24.2
+    version: auto
   cniPlugins:
-    version: v1.5.1
+    version: auto
   docker:
     version: v27.3.1
   criDockerd:
@@ -86,10 +87,10 @@ k8s:
   network:
     kubePodsCIDR: 10.244.0.0/16
     kubeServiceCIDR: 10.96.0.0/12
-    # 留空自动下载并安装下方固定版本 Calico；填写本地清单则优先使用，不改写。
+    # Kubernetes 1.24～1.28 可自动安装固定 Calico；1.29+ 需明确提供本地 CNI 清单。
     manifest: ""
     calico:
-      version: v3.26.5  # 当前自动安装支持此版本，适配 Kubernetes 1.24～1.28
+      version: auto  # 1.24～1.28 自动锁定 v3.26.5，后续 minor 暂不猜测 CNI 清单
   registry:
     # kubeadm 系统镜像原始仓库；containerd 的代理映射见顶层 mirrors.containerd。
     # Docker 的 registry-mirrors 仅加速 DockerHub；需要时将此项改为可访问的系统镜像仓库。
