@@ -86,7 +86,7 @@ opskit completion powershell > opskit.ps1
 | 跨平台交付 | Windows / Linux / macOS，amd64 与 arm64，直接下载可执行文件 |
 | 备用下载 | GitHub / Nexus 同版本双入口，发布成功后自动刷新首页版本与链接 |
 
-**真实安装实验（正在验证）**：除快速 Docker SSH / Kind 测试外，增加 [真实 kubeadm 安装实验](docs/k8s-real-install-e2e.md) 和 [独立 CI 工作流](.github/workflows/k8s-real-install-e2e.yml)。它会在专用 Ubuntu Runner 的全新特权 systemd 容器中真实运行 `opskit k8s create`（非 dry-run），验证实际安装与集群就绪。该实验可能受到 Docker 的 cgroup、内核与网络限制；未取得成功的安装日志前不得宣称成功，更不能将容器级验收等同 VM/裸机验收。只在隔离可销毁的 Linux CI 环境运行，不在生产 Docker 主机操作。
+**真实安装实验（正在验证）**：除快速 Docker SSH / Kind 测试外，增加 [真实 kubeadm 安装实验](docs/k8s-real-install-e2e.md) 和 [独立 CI 工作流](.github/workflows/k8s-real-install-e2e.yml)。首次 CI 已抵达 `kubeadm prepare`，发现容器未提供宿主机内核模块目录的问题，目前已增加已加载模块检查及只读模块目录映射重新验证。它会在专用 Ubuntu Runner 的全新特权 systemd 容器中真实运行 `opskit k8s create`（非 dry-run），验证实际安装与集群就绪。该实验可能受到 Docker 的 cgroup、内核与网络限制；未取得成功的安装日志前不得宣称成功，更不能将容器级验收等同 VM/裸机验收。只在隔离可销毁的 Linux CI 环境运行，不在生产 Docker 主机操作。
 
 **K8s Docker 测试（开发中）**：执行 `bash tests/e2e/docker/run.sh` 可在 Docker 上启动两台带 systemd/SSH 的 Ubuntu 测试容器，使用 OpsKit 真正的 SSH 客户端检查密码/密钥、sudo、上传和主机预检；独立 Kind 作业检查两节点集群与 CoreDNS。详见 [Docker K8s E2E 测试指南](docs/k8s-docker-e2e.md) 和 [专用工作流](.github/workflows/k8s-docker-e2e.yml)。容器测试需要特权权限及合适的 cgroup 后端，不在共享生产 Docker 主机运行。**目前不执行 OpsKit 的 kubeadm init/join，不代表真机安装验收已完成。**
 
