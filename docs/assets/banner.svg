@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
   <title id="title">opskit — 运维工具，随取随用</title>
-  <desc id="desc">Go 运维工具箱，统一工具安装、Kubernetes 部署、健康检查与数据备份；安装与部署功能尚未完成真机验收。</desc>
+  <desc id="desc">Go 运维工具箱，统一工具安装、Kubernetes 部署、健康检查与数据备份，支持原生 SSH 部署、版本配套与镜像源配置。</desc>
   <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0f172a"/><stop offset="1" stop-color="#133e4a"/></linearGradient></defs>
   <rect width="1200" height="340" rx="20" fill="url(#bg)"/>
   <circle cx="1120" cy="35" r="210" fill="#22d3ee" opacity=".05"/>
