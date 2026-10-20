@@ -109,6 +109,18 @@ chmod +x opskit
 
 模板已预填 kubeadm 常见 etcd 证书路径；其他部署方式请按实际环境修改，且需单独安装匹配版本的 `etcdctl`。只做本地备份时将 bucket 留空，跳过 S3 检查。下载文件可先按 Release 附带的 `checksums.txt` 校验。
 
+### 使用 go install 安装
+
+已安装 Go 的用户也可直接安装 opskit（当前 main 要求 Go 1.26.2 或更新工具链）：
+
+```sh
+go install github.com/sxxpqp/opskit/cmd/opskit@latest
+opskit version
+opskit config init
+```
+
+`@latest` 安装 Go 模块解析到的最新可用版本，并非 main 分支；需要固定版本时将其替换为已推送的版本标签。命令安装到 `go env GOBIN` 指定目录；未设置时使用 `go env GOPATH` 下的 `bin`（默认 `~/go/bin`，Windows 为 `%USERPROFILE%\go\bin`），请将该目录加入 PATH。后续更新可再次执行上述安装命令。Go 构建需要能访问模块源及依赖，已有配置不会被覆盖。
+
 ## 常用命令
 
 | 目的 | 命令 |
