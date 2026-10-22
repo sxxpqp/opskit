@@ -24,6 +24,8 @@ install:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBEADM_DOWNLOAD_BASE / --kubeadm-download-base
   kubelet:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBELET_DOWNLOAD_BASE / --kubelet-download-base
+  etcd:
+    download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # ETCD_DOWNLOAD_BASE / k8s download --etcd-download-base；包含 SHA256SUMS
   cri_tools:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github  # CRI_TOOLS_DOWNLOAD_BASE / --cri-tools-download-base
   kind:
@@ -32,7 +34,7 @@ install:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
     # 可换官方 https://dl.k8s.io/release 或阿里云/OSS 自建镜像的兼容根地址。
     # 必须同时提供 <version>/bin/<os>/<arch>/kubectl[.exe] 和追加 .sha256 的校验文件。
-  download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads，可覆盖
+  download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads；k8s download 在此创建独立任务目录
   # Docker 安装自动持久化并应用 inotify 最小限额：instances=8192 / watches=524288，保留更高值。
   docker:
     method: script  # script / binary
@@ -53,6 +55,8 @@ go:
   version: 1.26.2
 
 # 原生 SSH 编排；不依赖 KK。示例沿用 KS 历史测试版本，不是新生产环境推荐。
+# k8s download 只读取组件版本/下载源，不需要 hosts、角色或 SSH 凭据。
+# calico install 在手动 kubeadm init 后单独执行，读取 network 与 install.calico。
 # 全节点预检和管理机下载通过后，自动使用节点 apt-get/dnf/yum 安装缺失系统依赖；沿用节点软件源候选版本。
 k8s:
   name: sxxpqp  # k8s create 使用此名称，不接受 create <名称> 位置参数
@@ -74,6 +78,10 @@ k8s:
     version: v1.24.7  # kubeadm/kubelet/kubectl 统一使用此版本，不提供独立版本字段
     containerManager: containerd  # containerd / docker，所选运行时使用二进制包
     clusterName: cluster.local
+  # 仅供 k8s download --components etcd 使用；填写所需完整版本或传 --etcd-version。
+  # 不改变 kubeadm 管理的 etcd 镜像版本，不自动部署外置 etcd。
+  etcd:
+    version: ""
   # containerd/runc/criTools/cniPlugins/docker/criDockerd 默认按 Kubernetes 版本自动选择。
   # 运行时按 KK 配套：K8s 1.24～1.29 使用 containerd 1.7 / Docker 28；1.30 使用 containerd 2.2 / Docker 29。
   # 高级覆盖示例：containerd: {version: v1.7.24}；仍执行版本兼容检查。
@@ -207,6 +215,35 @@ etcd:
   # 若 etcd 启用了用户名密码认证，另设置 ETCDCTL_USER='用户名:密码'。
   # 配置中的非空连接字段会作为 etcdctl 参数传递，优先于对应 ETCDCTL_* 环境变量。
 
+mysql:
+  # local 使用本地 mysql/mysqldump；docker 使用镜像内客户端，仅需可用的本机 Linux Docker 引擎。
+  # 目前面向 MySQL 8.0/8.4，客户端/镜像需匹配服务端，不承诺 MariaDB 兼容。
+  client_mode: local
+  docker:
+    image: mysql:8.4  # --image；支持私有仓库/代理或固定 tag/digest；镜像需含 mysql/mysqldump、/bin/sh、cp、chmod
+    binary: docker  # --docker-bin；裸名称从 PATH 查找
+    network: bridge  # --docker-network；已有网络名、host（Linux），Docker Desktop 宿主机用 host.docker.internal
+    pull_policy: missing  # --pull-policy：missing / always / never
+  host: 127.0.0.1
+  port: 3306
+  user: backup
+  password_env: MYSQL_BACKUP_PASSWORD  # 环境变量名；不在 YAML 填密码；空字符串表示显式无密码
+  databases: []  # 必填目标库，或重复 --database app --database logs；不隐式全实例备份
+  directory: ../data/backups/mysql  # 每次生成独立任务目录；失败保留 .partial，有效文件不自动删除
+  mysqldump: mysqldump
+  mysql_client: mysql  # 用于数据库可见性与表引擎预检
+  gzip: true  # backup.sql.gz；false 为 backup.sql
+  routines: true
+  events: true
+  triggers: true
+  allow_non_transactional: false  # 默认拒绝非 InnoDB 表；true 仅表示接受限制，不提供一致性保证
+  ssl_mode: REQUIRED  # DISABLED / REQUIRED / VERIFY_CA / VERIFY_IDENTITY；REQUIRED 加密但不验证服务端身份
+  ssl_ca: ""  # VERIFY_CA / VERIFY_IDENTITY 必须提供；相对路径基于本配置文件
+  ssl_cert: ""
+  ssl_key: ""  # 客户端 cert/key 必须成对配置
+  # 使用 single-transaction/quick/no-tablespaces，GTID_PURGED=OFF；备份期间请避免并发 DDL。
+  # S3 自动上传复用下方所选厂家：bucket 留空仅本地，填写后上传，默认对象前缀 mysql/。
+
 s3:
   # 配好后执行 opskit s3 check --timeout 15s 检查桶访问，不写入测试对象。
   # 选择要使用的厂家：minio / aws / custom。只读取所选配置块。
@@ -231,7 +268,7 @@ s3:
     region: us-east-1
     path_style: true
     # 对象完整名称，不是访问密钥，也不是目录前缀。
-    # 留空自动生成 etcd/<UTC时间-随机任务号>/snapshot.db，推荐定时备份使用。
+    # 留空按备份类型生成 etcd/<任务>/snapshot.db 或 mysql/<任务>/backup.sql[.gz]。
     # 固定 key（如 manual/snapshot.db）不自动追加文件名，重复上传不会覆盖。
     key: ""
 

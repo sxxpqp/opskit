@@ -11,15 +11,17 @@
 
 <p align="center">
   <strong>一个统一工具安装、Kubernetes 部署、健康检查与数据备份的 Go 运维工具箱。</strong><br>
-  Go / Docker / containerd / kubectl · Kubernetes SSH / kubeadm / Calico · kind / KubeSphere · etcd / S3
+  Go / Docker / containerd / kubectl · 组件下载 / Kubernetes SSH / 手动 kubeadm / Calico · kind / KubeSphere · MySQL / etcd / S3
 </p>
 
 <p align="center">
   <a href="#快速上手">安装与上手</a> ·
   <a href="#kubernetes-集群部署">Kubernetes 部署</a> ·
+  <a href="docs/manual-kubeadm.md">组件下载与手动部署</a> ·
   <a href="#工具与运行时安装">工具安装</a> ·
   <a href="#镜像源与下载">镜像源</a> ·
   <a href="#检查与备份">检查与备份</a> ·
+  <a href="docs/mysql-backup.md">MySQL 备份</a> ·
   <a href="#下载">下载</a> ·
   <a href="docs/configuration.md">配置指南</a> ·
   <a href="#近期更新">近期更新</a>
@@ -40,12 +42,14 @@ opskit 将工具安装、Kubernetes 部署、镜像源设置、健康检查和�
 | 能力 | 当前支持 |
 |---|---|
 | Kubernetes 部署 | 原生 SSH + kubeadm，单控制平面与可选工作节点、自动加入、Calico 安装及 Ready 检查 |
+| 分步准备与诊断 | 按组件下载 Linux amd64／arm64 文件、附带 kubelet systemd 配置；SSH 只读预检、集群状态查询、Calico 独立安装 |
 | 组件版本配套 | 按 Kubernetes 次版本选择固定运行时组合，支持显式覆盖与兼容校验 |
 | 工具安装 | Go SDK、kubectl、kind，指定版本、下载校验与命令入口配置 |
 | 容器运行时 | Docker 脚本／二进制、containerd + runc + CNI plugins、cri-dockerd |
 | kind 与 KubeSphere | kind 创建／状态／日志／删除／context 切换；KubeSphere v3.4.1 安装 |
 | 镜像源 | Docker、containerd、Go、npm、pip、Maven，备份后写入，支持预览 |
 | 检查与备份 | etcd 成员和健康检查、快照及 SHA-256 清单；S3 桶／对象检查及上传 |
+| MySQL 逻辑备份 | 本地客户端或 Docker 镜像执行，指定单库或多库、表引擎预检、流式 SQL／gzip、SHA-256 清单及可选 S3 上传 |
 | 命令行与交付 | Cobra 中文帮助、Shell 补全；Windows／Linux／macOS 的 amd64／arm64 构建 |
 
 ## 快速上手
@@ -82,6 +86,8 @@ chmod +x opskit
 ```sh
 opskit --help
 opskit k8s create --help
+opskit k8s download --components kubeadm,kubelet,kubectl,crictl --dry-run
+opskit k8s check
 opskit k8s create --dry-run
 opskit k8s create
 opskit kubectl install --version v1.24.7
@@ -90,6 +96,7 @@ opskit mirror containerd --dry-run
 opskit etcd check --timeout 30s
 opskit s3 check --timeout 15s
 opskit etcd backup
+opskit mysql backup --database app --dry-run
 ```
 
 安装、集群创建与 mirror 默认执行，预览使用 `--dry-run`，不接受旧 `--apply`。`k8s create --dry-run` 只检查配置、展示计划，不连接 SSH 或下载安装。
@@ -167,6 +174,27 @@ kubectl get nodes -o wide
 Linux 同架构管理机可分发当前 opskit；macOS／Windows 或异构管理需提供相同代码构建的 `k8s.deploy.nodeBinaries`。管理机保存阶段日志和 kubeconfig，不覆盖用户默认 kubeconfig。系统包安装依赖节点网络及软件源，已有组件不主动升级。
 
 `opskit kubeadm install|prepare|init|join` 为本地维护入口，具体操作与参数见[部署指南](docs/configuration.md#k8s-ssh-集群部署)。已有 K8s v1.24.7 + containerd v1.7.24 单节点与 Calico Ready 的实际运行记录；新配套版本、多节点网络、策略及生产恢复仍需验收。
+
+### 只下载组件与手动 kubeadm 部署
+
+```sh
+# 默认只下载 kubeadm、kubelet、kubectl、crictl，不连接 SSH 或安装
+opskit k8s download --arch amd64 --download-dir ./downloads
+# 按需添加 Calico 清单和运行时包；可在 Windows/macOS 上准备 Linux 文件
+opskit k8s download --components kubeadm,kubelet,kubectl,crictl,containerd,runc,cni-plugins,calico --arch arm64
+# etcd 工具包需显式选择版本；此处仅为历史版本下载示例
+opskit k8s download --components etcd --etcd-version v3.5.5
+
+# SSH 只读预检：节点环境、初步已有集群保护、磁盘及缺少的系统工具
+opskit k8s check
+# 自行安装组件并执行 kubeadm init 后，再独立安装 Calico
+opskit calico install --kubeconfig /etc/kubernetes/admin.conf
+opskit k8s status --kubeconfig /etc/kubernetes/admin.conf
+```
+
+下载结果位于独立 `k8s-<版本>-linux-<架构>-<任务标识>` 目录，按组件保留原文件名、上游校验文件及 `downloads.json`；选择 kubelet 时附带 `kubelet.service` 和 `10-kubeadm.conf`。所有选中资源成功后才提供完成目录。Docker／cri-dockerd 只记录本地摘要，其余二进制核对上游摘要。下载不包含容器镜像或系统软件包，也不自动安装外置 etcd；kubeadm 默认使用自身管理的 etcd 镜像。
+
+Calico 独立入口沿用 v3.26.5 / Kubernetes 1.24～1.28 边界，核对实际服务端版本、kubeadm Pod CIDR 和已识别的 CNI；默认等待就绪，拒绝替换已有网络。`--manifest` 可使用下载目录中的 `calico/network.yaml`。`k8s status` 使用 kubeconfig 查询节点 Ready 和系统 Pod，节点为空或未 Ready 返回非零；`k8s check` 不验证节点间端口连通性或镜像可拉取性。完整步骤与参数见[手动 kubeadm 指南](docs/manual-kubeadm.md)。
 
 ## 工具与运行时安装
 
@@ -251,6 +279,21 @@ etcd 检查报告成员、投票节点、learner、健康节点、Leader 和版�
 
 etcd 快照依赖单独安装且版本匹配的 `etcdctl`。模板为 kubeadm 常见控制平面提供证书路径，其他发行版或外置 etcd 需自行调整。每个任务保存独立 `snapshot.db` 和 `manifest.json`，记录大小、SHA-256 和上传状态；失败快照保留 `.partial`，上传失败保留完整本地快照。
 
+MySQL 备份保留本地官方 `mysql`／`mysqldump` 方式，并支持通过 MySQL Docker 镜像执行，免装本地客户端。已在 Windows Docker Desktop + MySQL 8.4.13 完成指定测试数据的备份与隔离恢复；8.0、本地客户端及其他环境仍需验收。编辑 `mysql` 配置，设置密码环境变量后执行：
+
+```sh
+opskit mysql backup --database app --dry-run
+# 先在当前终端安全设置 MYSQL_BACKUP_PASSWORD，再执行备份
+opskit mysql backup --database app
+opskit mysql backup --database app --database logs --gzip=false
+# Docker 镜像方式；镜像版本按服务端选择，地址需从容器内可达
+opskit mysql backup --client-mode docker --host mysql.example.com --database app
+# Linux 宿主机本地数据库可显式选择 host 网络
+opskit mysql backup --client-mode docker --docker-network host --host 127.0.0.1 --database app
+```
+
+默认事务模式、gzip、包含存储过程／事件／触发器，拒绝检测到的非 InnoDB 表；并发 DDL 和非事务表的一致性不受保证。每个任务保存 `backup.sql.gz`（或 `.sql`）及 v1 清单；失败保留 `.partial`，有效本地文件不因上传失败删除。默认要求 TLS，密码通过受限权限的临时客户端文件传入并清理；Docker 模式只读挂载该配置与 TLS 文件。镜像源统一配置于 `mysql.docker.image`，支持私有仓库/代理和固定 digest；Docker bridge 网络中的 localhost 指向客户端容器，连接 Docker Desktop 宿主机可用 `host.docker.internal`。S3 沿用下方统一配置；完整配置、限制与隔离恢复步骤见[MySQL 备份指南](docs/mysql-backup.md)。
+
 通过 `s3.provider: minio|aws|custom` 选择厂家，只填写对应配置块。bucket 留空仅本地备份，填写后自动上传；支持块内凭据或 AWS SDK 默认凭据链。上传默认禁止覆盖，完成后 HEAD 核对长度和 SHA-256 metadata；这不等于内容回读验证。模板不自动创建桶，也不清理旧备份。
 
 ```sh
@@ -290,12 +333,16 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 
 ## 验证范围与后续计划
 
-本地自动化已覆盖版本解析、配置优先级、下载摘要、临时网关错误重试、Calico 备用源、SSH／sudo 和部署编排，完整 `go test -race ./...` 已通过。单节点实际结果不等于完整生产验收，新运行时组合和多机部署仍需验证。
+自动化已覆盖版本解析、配置优先级、下载摘要、临时网关错误重试、Calico 备用源、SSH／sudo 和部署编排，CI 配置在 Ubuntu、Windows、macOS 执行 `go vet ./...` 与 `go test -race ./...`。单节点实际结果不等于完整生产验收，新运行时组合和多机部署仍需验证。
+
+main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安装及 MySQL 备份有自动化回归覆盖。MySQL 镜像方式已在 Windows Docker Desktop + MySQL 8.4.13 验证 gzip／SQL、多库、文件摘要、真实 CA、错误 CA 拒绝和隔离恢复的数据及对象行为，详见[验收记录](docs/mysql-validation-2026-10-22.md)；真实 kubeadm 独立安装及其他 MySQL 组合仍待验收。
 
 - [ ] 新配套版本的 Linux 端到端部署、多节点连通性和网络策略验收
 - [ ] HA、升级和集群删除能力
 - [ ] 启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
 - [ ] 真实 etcd／S3 集成测试、隔离恢复及备份保留策略
+- [x] Windows Docker Desktop + MySQL 8.4.13 的镜像备份、CA 校验及指定测试数据的隔离恢复
+- [ ] MySQL 8.0、本地客户端、Linux/macOS、最小权限账号及复杂一致性场景验收
 - [ ] S3 下载、列举和内容回读校验
 
 长期方向见[设计文档](go-opskit-design.md)和[M0 技术设计基线](docs/m0-design-baseline.md)，设计内容不代表已实现功能。
@@ -308,6 +355,8 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 | [v0.1.12](https://github.com/sxxpqp/opskit/releases/tag/v0.1.12) | 历史发布详情见 Release 说明 |
 | [v0.1.11](https://github.com/sxxpqp/opskit/releases/tag/v0.1.11) | 历史发布详情见 Release 说明 |
 | main（文档更新） | 补充 go install 安装方式，重整首页导航、配置与功能说明 |
+| main（未发布） | 新增 k8s download/check/status 与 calico install，提供组件下载和手动 kubeadm 部署指南 |
+| main（未发布，MySQL） | 新增 mysql backup：本地客户端或 Docker 镜像、SQL／gzip、SHA-256 清单与可选 S3 上传；修复 Windows 挂载凭据被 MySQL 忽略，已通过 MySQL 8.4.13 指定数据隔离恢复 |
 
 新标签只有在发布流水线通过后才作为正式 Release 提供下载。下载配置见 [downloads.json](downloads.json)，代理说明见[Nexus 下载指南](docs/downloads.md)。
 

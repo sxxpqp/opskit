@@ -61,6 +61,12 @@ func fakeWorkflowTool() {
 	}
 	if name == "kubectl" {
 		switch {
+		case strings.HasSuffix(args, "version -o json"):
+			fmt.Printf(`{"serverVersion":{"gitVersion":%q}}`, envOr("OPSKIT_FAKE_K8S", "v1.24.7"))
+		case strings.Contains(args, "get configmap kubeadm-config -o json"):
+			fmt.Print(`{"data":{"ClusterConfiguration":"networking:\n  podSubnet: 10.244.0.0/16\n"}}`)
+		case strings.Contains(args, "get daemonsets -A -o json"):
+			fmt.Print(`{"items":[]}`)
 		case args == "version --client=true --output=json":
 			if os.Getenv("OPSKIT_FAKE_KUBECTL_JSON") == "invalid" {
 				fmt.Print("not-json")
@@ -76,7 +82,7 @@ func fakeWorkflowTool() {
 		case strings.Contains(args, "get clusterconfiguration/ks-installer -o json"):
 			fmt.Print(`{"status":{"core":{"status":"enabled"}}}`)
 		case strings.Contains(args, "get nodes -o json"):
-			fmt.Printf(`{"items":[{"metadata":{"name":"node1"},"status":{"nodeInfo":{"kubeletVersion":%q},"conditions":[{"type":"Ready","status":"True"}]}}]}`, envOr("OPSKIT_FAKE_K8S", "v1.24.7"))
+			fmt.Printf(`{"items":[{"metadata":{"name":"node1"},"status":{"nodeInfo":{"kubeletVersion":%q},"conditions":[{"type":"Ready","status":%q}]}}]}`, envOr("OPSKIT_FAKE_K8S", "v1.24.7"), envOr("OPSKIT_FAKE_NODE_READY", "True"))
 		case strings.Contains(args, "get storageclasses"):
 			fmt.Print(`{"items":[{"metadata":{"name":"openebs-hostpath","annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}]}`)
 		case strings.Contains(args, "auth can-i"):

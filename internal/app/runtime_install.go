@@ -40,6 +40,7 @@ type runtimeInstallSettings struct {
 	} `yaml:"go"`
 	Kubeadm     componentDownloadSettings `yaml:"kubeadm"`
 	Kubelet     componentDownloadSettings `yaml:"kubelet"`
+	Etcd        componentDownloadSettings `yaml:"etcd"`
 	CRITools    componentDownloadSettings `yaml:"cri_tools"`
 	Kind        componentDownloadSettings `yaml:"kind"`
 	Kubectl     componentDownloadSettings `yaml:"kubectl"`

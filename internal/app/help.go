@@ -28,7 +28,11 @@ var commandGroupHelp = map[string]string{
 安装后根据 mirrors.go 设置当前用户的持久 GOPROXY；默认执行，--dry-run 仅预览。
 示例: opskit go install --version 1.26.2
 使用 opskit go install --help 查看参数。`,
-	"k8s": `用法: opskit k8s create [参数]
+	"k8s": `用法: opskit k8s create|download|check|status [参数]
+download 只下载所选 Linux 组件，不要求 SSH/root；默认 kubeadm,kubelet,kubectl,crictl。
+--components 支持 etcd（需 --etcd-version）、calico 和运行时组件；--arch amd64|arm64。
+check 通过 SSH 只读检查部署环境；status 使用 kubeconfig 查询节点和系统 Pod。
+手动 kubeadm 流程可先 download，再自行安装组件、初始化集群，最后执行 calico install。
 集群名填写在配置的 k8s.name（例如 sxxpqp），不接受 create sxxpqp 这样的参数。
 首次执行 opskit config init，编辑节点、角色和版本后创建。
 network.manifest 留空自动安装固定版本 Calico；填写本地清单可覆盖。
@@ -42,6 +46,13 @@ Ubuntu/Debian: sudo apt-get update
 SSH 使用配置凭据直接连接，不读取 known_hosts、不确认或校验主机指纹。
 默认执行，--dry-run 只校验配置和展示计划；KubeSphere 默认关闭。
 示例: opskit k8s create --config config/config.yaml --dry-run`,
+	"calico": `用法: opskit calico install [参数]
+为手动 kubeadm 初始化后的集群单独安装 Calico，不执行 init/join。
+检查实际 Kubernetes 1.24～1.28、kubeadm Pod CIDR 和已识别的网络插件，默认等待就绪。
+固定 Calico v3.26.5；配置来自 k8s.network 和 install.calico。
+使用 --kubeconfig / --context 选择集群；默认 KUBECONFIG 或 ~/.kube/config。
+--dry-run 只检查本地配置，不连接集群或下载。
+示例: opskit calico install --kubeconfig /etc/kubernetes/admin.conf`,
 	"kubeadm": `用法: opskit kubeadm install|prepare|init|join [参数]
 install 安装固定版本 kubeadm/kubelet/kubectl/crictl 和 kubelet systemd unit，不安装 containerd。
 prepare 配置内核模块、转发和 bridge sysctl、禁用 swap（备份 fstab）。
@@ -99,6 +110,16 @@ init 初始化单控制平面；join 加入工作节点。均拒绝覆盖已有�
 	"etcd": `用法: opskit etcd <命令> [参数]
 命令: backup（快照备份） | check（集群健康检查）
 示例: opskit etcd backup --help`,
+	"mysql": `用法: opskit mysql backup [参数]
+使用本地 mysql/mysqldump，或 --client-mode docker 在 MySQL 镜像内导出，无需本地客户端。
+支持 gzip、SHA-256 清单及可选 S3 上传；镜像读取 mysql.docker.image，--image 可覆盖。
+Docker 模式仅需可用的本机 Linux Docker 引擎；--docker-network 选择网络，--host 为容器可达地址。
+目标来自 mysql.databases，或重复 --database；不隐式导出整个实例。
+默认事务模式并拒绝非 InnoDB 表；并发 DDL 和非事务表的一致性需另行安排。
+密码通过 mysql.password_env 指定的环境变量读取；临时凭据不进入命令行、日志或清单。
+默认要求 TLS；--dry-run 只输出计划，不读取密码或连接数据库。
+示例: opskit mysql backup --database app --dry-run
+详细参数: opskit mysql backup --help`,
 	"s3": `用法: opskit s3 <命令> [参数]
 命令: upload（上传文件） | check（连通性检查）
 示例: opskit s3 upload --help`,

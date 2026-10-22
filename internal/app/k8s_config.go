@@ -51,6 +51,7 @@ type clusterSettings struct {
 		ClusterName      string `yaml:"clusterName" json:"clusterName"`
 	} `yaml:"kubernetes" json:"kubernetes"`
 	Containerd versionSetting `yaml:"containerd" json:"containerd"`
+	Etcd       versionSetting `yaml:"etcd" json:"etcd"`
 	Runc       versionSetting `yaml:"runc" json:"runc"`
 	CRITools   versionSetting `yaml:"criTools" json:"criTools"`
 	CNIPlugins versionSetting `yaml:"cniPlugins" json:"cniPlugins"`

@@ -54,8 +54,9 @@ type fileConfig struct {
 		Password        string `yaml:"password"`
 	} `yaml:"-"`
 
-	SchemaVersion int    `yaml:"schema_version"`
-	Timeout       string `yaml:"timeout"`
+	SchemaVersion int                 `yaml:"schema_version"`
+	Timeout       string              `yaml:"timeout"`
+	MySQL         mysqlBackupSettings `yaml:"mysql"`
 	Etcd          struct {
 		Endpoint  *string `yaml:"endpoint"`
 		Directory *string `yaml:"directory"`
@@ -188,6 +189,49 @@ func loadConfig(path string, required bool, f *pflag.FlagSet, stores ...*storage
 		return &s
 	}
 	values := map[string]*string{"timeout": nil, "endpoint": c.Etcd.Endpoint, "directory": resolve(c.Etcd.Directory), "cacert": resolve(c.Etcd.CA), "cert": resolve(c.Etcd.Cert), "key-file": resolve(c.Etcd.Key), "bucket": selected.Bucket, "s3-endpoint": selected.Endpoint, "region": selected.Region, "key": selected.Key}
+	if f.Lookup("mysqldump") != nil {
+		// MySQL and etcd directory/TLS flags must never borrow each other's settings.
+		for _, name := range []string{"endpoint", "directory", "cacert", "cert", "key-file"} {
+			delete(values, name)
+		}
+		binaryPath := func(v *string) *string {
+			if v != nil && strings.ContainsAny(*v, "/\\") {
+				return resolve(v)
+			}
+			return v
+		}
+		for name, value := range map[string]*string{
+			"client-mode": c.MySQL.ClientMode, "image": c.MySQL.Docker.Image, "docker-bin": binaryPath(c.MySQL.Docker.Binary), "docker-network": c.MySQL.Docker.Network, "pull-policy": c.MySQL.Docker.PullPolicy,
+			"host": c.MySQL.Host, "user": c.MySQL.User, "password-env": c.MySQL.PasswordEnv,
+			"directory": resolve(c.MySQL.Directory), "mysqldump": binaryPath(c.MySQL.Dump), "mysql-client": binaryPath(c.MySQL.Client),
+			"ssl-mode": c.MySQL.SSLMode, "ssl-ca": resolve(c.MySQL.SSLCA), "ssl-cert": resolve(c.MySQL.SSLCert), "ssl-key": resolve(c.MySQL.SSLKey),
+		} {
+			values[name] = value
+		}
+		setValue := func(name, value string) error {
+			if !f.Changed(name) {
+				return f.Set(name, value)
+			}
+			return nil
+		}
+		if c.MySQL.Port != nil {
+			if err := setValue("port", strconv.Itoa(*c.MySQL.Port)); err != nil {
+				return err
+			}
+		}
+		for name, value := range map[string]*bool{"gzip": c.MySQL.Gzip, "routines": c.MySQL.Routines, "events": c.MySQL.Events, "triggers": c.MySQL.Triggers, "allow-non-transactional": c.MySQL.AllowNonTransactional} {
+			if value != nil {
+				if err := setValue(name, strconv.FormatBool(*value)); err != nil {
+					return err
+				}
+			}
+		}
+		if c.MySQL.Databases != nil && !f.Changed("database") {
+			if err := f.Lookup("database").Value.(pflag.SliceValue).Replace(c.MySQL.Databases); err != nil {
+				return err
+			}
+		}
+	}
 	if c.Timeout != "" {
 		values["timeout"] = &c.Timeout
 	}

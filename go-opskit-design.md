@@ -15,7 +15,8 @@
 | `version`、`config init`、`etcd check`、`etcd backup` | 已实现；真实 etcd 恢复验收尚未完成 |
 | `s3 check`、`s3 upload`、MinIO/AWS/custom 厂家配置 | 已实现；远端 HEAD 元数据验证不等于内容回读 |
 | GitHub Actions 三系统测试、六架构构建和 tag 发布 | 已有 CI 流程；不能由构建成功推定恢复验证成功 |
-| 备份保留、S3 下载/列举、TCP/DNS/ICMP、ss/netstat、MySQL/PG | 规划中，尚未实现 |
+| `mysql backup` | main 已实现本地客户端/Docker 镜像的单库/多库备份；未发布，Windows Docker Desktop + MySQL 8.4.13 指定数据已通过隔离恢复，其他组合待验收 |
+| 备份保留、S3 下载/列举、TCP/DNS/ICMP、ss/netstat、PostgreSQL | 规划中，尚未实现 |
 | 任务状态机、新 Manifest 字段、隔离恢复演练 | M0 设计目标，不是当前发布功能 |
 
 本文件第 12 节的 M1-M5 为历史功能路线图；实际实施优先级以 M0 基线中的 **M0→M1→M2→M3→M4** 为准。

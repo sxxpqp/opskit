@@ -16,12 +16,12 @@ func TestCobraCommandTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"config init", "go install", "k8s create", "k8s node",
+		"config init", "go install", "k8s create", "k8s node", "k8s download", "k8s check", "k8s status", "calico install",
 		"kubeadm install", "kubeadm prepare", "kubeadm init", "kubeadm join",
 		"kubectl install", "docker install", "cri-dockerd install", "containerd install",
 		"kind install", "kind create", "kind status", "kind logs", "kind delete", "kind use", "kind unuse",
 		"mirror docker", "mirror containerd", "mirror go", "mirror npm", "mirror pip", "mirror maven",
-		"kubesphere install", "etcd backup", "etcd check", "s3 upload", "s3 check",
+		"kubesphere install", "etcd backup", "etcd check", "mysql backup", "s3 upload", "s3 check",
 	} {
 		cmd, remaining, err := root.Find(strings.Fields(path))
 		if err != nil || len(remaining) != 0 || cmd.RunE == nil {
@@ -47,7 +47,7 @@ func TestCobraLeafHelpWithoutConfigOrTools(t *testing.T) {
 	if err := os.WriteFile(config, []byte("invalid: ["), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"config init", "go install", "k8s create", "kubeadm install", "kubeadm init", "kubectl install", "kind install", "kind create", "mirror go", "kubesphere install", "docker install", "containerd install", "cri-dockerd install", "etcd backup", "s3 upload"} {
+	for _, path := range []string{"config init", "go install", "k8s create", "k8s download", "k8s check", "k8s status", "calico install", "kubeadm install", "kubeadm init", "kubectl install", "kind install", "kind create", "mirror go", "kubesphere install", "docker install", "containerd install", "cri-dockerd install", "etcd backup", "mysql backup", "s3 upload"} {
 		t.Run(path, func(t *testing.T) {
 			var out, diag bytes.Buffer
 			args := append(strings.Fields(path), "--config", config, "--help")

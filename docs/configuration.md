@@ -15,6 +15,78 @@ kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和�
 
 完整字段说明在 [config.example.yaml](../config.example.yaml)。以下示例均使用当前实现支持的字段。
 
+## 分步下载、检查与手动 kubeadm
+
+完整命令、下载目录结构和手动安装步骤见[手动 kubeadm 指南](manual-kubeadm.md)。这些命令与 `k8s create` 独立：
+
+- `k8s download`：版本读取 `k8s.kubernetes.version` 及已有组件版本字段，默认下载 kubeadm/kubelet/kubectl/crictl；`--components` 选择其他组件，`--arch` 选择 Linux amd64/arm64，不校验 SSH hosts 或读取节点密码。输出根目录为 `--download-dir` > `install.download_dir` > `~/.opskit/downloads`，YAML 相对路径基于配置文件目录。
+- etcd 包下载源为 `install.etcd.download_base`，优先级为 `--etcd-download-base` > `ETCD_DOWNLOAD_BASE` > YAML > 嵌入模板。版本必须设置 `--etcd-version` 或 `k8s.etcd.version`，不从 Kubernetes 次版本推断，不改变 kubeadm 的 etcd 镜像。不提供 `etcd install` 或外置 etcd 部署。
+- `calico install`：版本和 Pod CIDR 读取 `k8s.network.calico.version`、`k8s.network.kubePodsCIDR`，可用 `--version` / `--pod-subnet` 覆盖；本地清单为 `--manifest` > `k8s.network.manifest`。主源优先级为 `--calico-download-base` > `CALICO_DOWNLOAD_BASE` > `install.calico.download_base` > 模板，备用源及摘要沿用 `install.calico`。本地清单校验版本与显式 Pod CIDR，保留原内容。
+- `k8s check`：读取完整 `k8s` 部署配置，通过 SSH/root/sudo 只读检查目标，缺依赖返回非零；不下载安装，不验证节点间端口连通性、可用磁盘阈值、镜像可拉取性或完整部署归属。
+- `k8s status` 和 `calico install` 使用 `--kubeconfig` / `--context` 选择集群，未指定时交给 kubectl 读取 `KUBECONFIG` 或 `~/.kube/config`。不会用 SSH hosts 或 kind 配置隐式选择集群。opskit 保存的独立 kubeconfig 需显式传入。`status` 的退出结果依据节点 Ready 和查询错误，系统 Pod 表仅用于诊断。
+
+```yaml
+schema_version: 1
+install:
+  download_dir: ./downloads
+  etcd:
+    download_base: https://github.com
+k8s:
+  kubernetes:
+    version: v1.24.7
+  etcd:
+    version: v3.5.5  # 历史下载示例，按目标环境选择版本
+  network:
+    kubePodsCIDR: 10.244.0.0/16
+    calico:
+      version: v3.26.5
+```
+
+版本示例不表示新生产环境推荐。下载来源与各组件环境变量对照表见[手动指南](manual-kubeadm.md#下载源与优先级)。默认源只维护在嵌入的 `config.example.yaml`；新增 etcd 配置不改变已有 etcd 备份连接字段。
+
+## MySQL 逻辑备份
+
+完整步骤与边界见 [MySQL 备份指南](mysql-backup.md)。新增 `mysql` 配置只影响 `mysql backup`，不会借用或覆盖 `etcd` 的目录、证书或客户端。
+
+```yaml
+schema_version: 1
+timeout: 1h
+mysql:
+  client_mode: local  # local / docker；保留本地方式
+  docker:
+    image: mysql:8.4  # 按服务端选择固定 tag/digest，支持私有仓库或代理
+    binary: docker
+    network: bridge
+    pull_policy: missing  # missing / always / never
+  host: mysql.example.com
+  port: 3306
+  user: backup
+  password_env: MYSQL_BACKUP_PASSWORD
+  databases: [app]
+  directory: ./backups/mysql
+  mysqldump: mysqldump
+  mysql_client: mysql
+  gzip: true
+  routines: true
+  events: true
+  triggers: true
+  allow_non_transactional: false
+  ssl_mode: VERIFY_IDENTITY
+  ssl_ca: ./certs/mysql-ca.pem
+  ssl_cert: ""
+  ssl_key: ""
+```
+
+CLI 参数优先于 YAML；`--database` 可重复且整体替换 YAML 数据库列表，不能留空或隐式全实例备份。密码只从 `password_env` 指定的环境变量读取，不支持明文 `--password` 或 YAML `password`。空 `password_env` 明确使用无密码认证。`mysql` 客户端、输出目录及 TLS 文件的 YAML 相对路径基于配置文件目录；裸客户端名称从 PATH 查找；CLI 相对路径基于当前目录。
+
+`client_mode` 默认 local，`--client-mode docker` 改用镜像内的 mysql/mysqldump，只检查 Docker CLI 依赖。镜像源优先级为 `--image` > `mysql.docker.image` > 嵌入模板；默认镜像只维护在 `config.example.yaml`。`--docker-bin`、`--docker-network`、`--pull-policy` 覆盖 `mysql.docker.binary/network/pull_policy`，没有组件环境变量别名。Docker CLI 的 YAML 相对路径同样按配置文件解析，本地客户端路径在 Docker 模式不使用。
+
+Docker 方式要求本机可用的 Linux Docker 引擎及可挂载的本地目录。`network: bridge` 不允许把 localhost/127.0.0.1 误当成宿主机，需设置远程地址、Docker Desktop 的 `host.docker.internal`，或在 Linux 上显式 `network: host`；也支持已存在的自定义网络名称。镜像拉取受总超时约束，策略 missing/always/never 分别对应缺少时拉取、每次检查拉取、不拉取。登录私有仓库应预先使用 Docker 的凭据管理，不在镜像 URL 中放密码。
+
+镜像需包含 mysql/mysqldump、`/bin/sh`、`cp`、`chmod`。容器固定启动脚本将只读挂载的密码及 TLS 文件复制到临时 tmpfs，并设为 0600 后执行客户端；用户参数通过独立 argv 转发，不拼入脚本。这样可避免 Windows Docker Desktop 挂载的权限映射使 MySQL 忽略客户端配置。[Windows + MySQL 8.4.13 验收记录](mysql-validation-2026-10-22.md)包含可重复测试脚本入口。
+
+默认 `ssl_mode: REQUIRED` 要求加密但不验证服务端身份；身份验证请设置 `VERIFY_IDENTITY` 并提供 CA。`DISABLED` 是显式关闭 TLS，不与证书配置混用。顶层 `timeout` 覆盖完整预检、导出和上传；CLI `--timeout` 优先。上传使用顶层所选 `s3` 厂家，bucket 留空仅本地，默认 key 为 `mysql/<任务标识>/backup.sql[.gz]`，不自动安装客户端或创建桶。
+
 ## kubeadm 控制平面节点：只备份到本地
 
 ```sh

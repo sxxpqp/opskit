@@ -218,10 +218,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		}
 		node := &connectedClusterNode{host: h, remote: remote}
 		nodes = append(nodes, node)
-		probe := `set -eu; test "$(id -u)" = 0; test -d /run/systemd/system; uname -s; uname -m; command -v systemctl >/dev/null; if ! command -v apt-get >/dev/null && ! command -v dnf >/dev/null && ! command -v yum >/dev/null; then for x in tar modprobe sysctl swapoff conntrack socat iptables ip tc mount nsenter ethtool; do command -v "$x" >/dev/null || { echo "missing dependency and unsupported package manager: $x" >&2; exit 1; }; done; fi`
-		state := filepath.ToSlash(filepath.Join("/var/lib/opskit/clusters", c.K8s.Name, "state.json"))
-		probe += `; if test -e /etc/kubernetes/kubelet.conf -o -e /etc/kubernetes/admin.conf -o -d /etc/kubernetes/manifests; then test -f ` + shellQuote(state) + ` || { echo 'node already belongs to an unmanaged cluster' >&2; exit 1; }; fi`
-		raw, err := remote.Exec(ctx, true, probe)
+		raw, err := remote.Exec(ctx, true, clusterHostProbe(c.K8s))
 		if err != nil {
 			return fmt.Errorf("%s: 全节点预检失败: %w", h.Name, err)
 		}

@@ -24,6 +24,7 @@ type clusterCacheEntry struct {
 	SHA256 string `json:"sha256"`
 }
 type clusterAsset struct {
+	Name      string
 	URL       string
 	CheckURL  string
 	CheckName string
@@ -72,32 +73,32 @@ func clusterAssets(c fileConfig, arch string) []clusterAsset {
 	var assets []clusterAsset
 	for _, x := range []struct{ name, base string }{{"kubeadm", c.Install.Kubeadm.DownloadBase}, {"kubelet", c.Install.Kubelet.DownloadBase}, {"kubectl", c.Install.Kubectl.DownloadBase}} {
 		u := fmt.Sprintf("%s/%s/bin/linux/%s/%s", strings.TrimRight(x.base, "/"), v, arch, x.name)
-		assets = append(assets, clusterAsset{URL: u, CheckURL: u + ".sha256"})
+		assets = append(assets, clusterAsset{Name: x.name, URL: u, CheckURL: u + ".sha256"})
 	}
 	base := func(s string) string { return strings.TrimRight(s, "/") }
 	cv := c.K8s.CRITools.Version
 	u := fmt.Sprintf("%s/kubernetes-sigs/cri-tools/releases/download/%s/crictl-%s-linux-%s.tar.gz", base(c.Install.CRITools.DownloadBase), cv, cv, arch)
-	assets = append(assets, clusterAsset{URL: u, CheckURL: u + ".sha256"})
+	assets = append(assets, clusterAsset{Name: "crictl", URL: u, CheckURL: u + ".sha256"})
 	cni := c.K8s.CNIPlugins.Version
 	u = fmt.Sprintf("%s/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", base(c.Install.CNIPlugins.DownloadBase), cni, arch, cni)
-	assets = append(assets, clusterAsset{URL: u, CheckURL: u + ".sha256"})
+	assets = append(assets, clusterAsset{Name: "cni-plugins", URL: u, CheckURL: u + ".sha256"})
 	if c.K8s.Kubernetes.ContainerManager == "containerd" {
 		v := c.K8s.Containerd.Version
 		u = fmt.Sprintf("%s/containerd/containerd/releases/download/%s/containerd-%s-linux-%s.tar.gz", base(c.Install.Containerd.DownloadBase), v, strings.TrimPrefix(v, "v"), arch)
-		assets = append(assets, clusterAsset{URL: u, CheckURL: u + ".sha256sum"})
+		assets = append(assets, clusterAsset{Name: "containerd", URL: u, CheckURL: u + ".sha256sum"})
 		rv := c.K8s.Runc.Version
 		u = fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.%s", base(c.Install.Runc.DownloadBase), rv, arch)
-		assets = append(assets, clusterAsset{URL: u, CheckURL: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.sha256sum", base(c.Install.Runc.DownloadBase), rv), CheckName: "runc." + arch})
+		assets = append(assets, clusterAsset{Name: "runc", URL: u, CheckURL: fmt.Sprintf("%s/opencontainers/runc/releases/download/%s/runc.sha256sum", base(c.Install.Runc.DownloadBase), rv), CheckName: "runc." + arch})
 	} else {
 		machine := "x86_64"
 		if arch == "arm64" {
 			machine = "aarch64"
 		}
 		u = fmt.Sprintf("%s/%s/docker-%s.tgz", base(c.Install.Docker.BinaryBase), machine, strings.TrimPrefix(c.K8s.Docker.Version, "v"))
-		assets = append(assets, clusterAsset{URL: u})
+		assets = append(assets, clusterAsset{Name: "docker", URL: u})
 		v := c.K8s.CRIDockerd.Version
 		u = fmt.Sprintf("%s/Mirantis/cri-dockerd/releases/download/%s/cri-dockerd-%s.%s.tgz", base(c.Install.CRIDockerd.DownloadBase), v, strings.TrimPrefix(v, "v"), arch)
-		assets = append(assets, clusterAsset{URL: u})
+		assets = append(assets, clusterAsset{Name: "cri-dockerd", URL: u})
 	}
 	return assets
 }
