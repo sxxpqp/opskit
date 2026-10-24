@@ -16,7 +16,7 @@ func TestClusterDependenciesInstallMissingPackages(t *testing.T) {
 	for _, manager := range []string{"apt-get", "dnf", "yum"} {
 		t.Run(manager, func(t *testing.T) {
 			dir := t.TempDir()
-			for _, cmd := range strings.Fields("tar systemctl modprobe sysctl swapoff socat iptables mount nsenter ethtool") {
+			for _, cmd := range strings.Fields("tar systemctl modprobe sysctl swapoff iptables mount nsenter ethtool") {
 				if err := os.WriteFile(filepath.Join(dir, cmd), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -25,7 +25,7 @@ func TestClusterDependenciesInstallMissingPackages(t *testing.T) {
 printf '%s\n' "$*" >> "$TEST_LOG"
 if test "$1" = update; then exit 0; fi
 if test "$TEST_FAIL" = 1; then exit 42; fi
-for cmd in conntrack ip tc; do
+for cmd in conntrack socat ip tc; do
  printf '#!/bin/sh\nexit 0\n' > "$PATH/$cmd"
  /bin/chmod 700 "$PATH/$cmd"
 done
@@ -52,9 +52,9 @@ done
 			if err != nil {
 				t.Fatal(err)
 			}
-			expected := "install -y conntrack-tools iproute iproute-tc"
+			expected := "install -y conntrack-tools socat iproute iproute-tc"
 			if manager == "apt-get" {
-				expected = "install -y --no-install-recommends conntrack iproute2"
+				expected = "install -y --no-install-recommends conntrack socat iproute2"
 			}
 			if !strings.Contains(string(raw), expected) {
 				t.Fatalf("unexpected packages: %s", raw)

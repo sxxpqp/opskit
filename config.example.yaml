@@ -34,7 +34,7 @@ install:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/kubernetes-binaries  # KUBECTL_DOWNLOAD_BASE / --kubectl-download-base
     # 可换官方 https://dl.k8s.io/release 或阿里云/OSS 自建镜像的兼容根地址。
     # 必须同时提供 <version>/bin/<os>/<arch>/kubectl[.exe] 和追加 .sha256 的校验文件。
-  download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads；k8s download 在此创建独立任务目录
+  download_dir: ""  # 所有组件共用；默认 ~/.opskit/downloads；完整文件校验后复用，k8s download 创建独立任务目录
   # Docker 安装自动持久化并应用 inotify 最小限额：instances=8192 / watches=524288，保留更高值。
   docker:
     method: script  # script / binary
@@ -254,7 +254,7 @@ s3:
   minio:
     # 必填：S3 API 入口，如 https://minio.example.com:9000。
     # 不是 Web Console 地址，不包含 bucket 或对象 key。
-    endpoint: ""
+    endpoint: "https://ihome.sxxpqp.top:8443"
     # 必填：已创建的桶名，如 k8s-backups；程序不会创建桶。
     bucket: ""
     # MinIO 服务账号的 Access Key / Secret Key，需成对填写。

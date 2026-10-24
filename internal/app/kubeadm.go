@@ -156,7 +156,7 @@ func newKubeadmCommand(parent context.Context, action string, out, diag io.Write
 			}
 		}
 		if action == "prepare" {
-			fmt.Fprintf(out, "kubeadm prepare: Kubernetes %s；加载 overlay/br_netfilter，持久化转发 sysctl，禁用 swap 并备份 fstab。\n", *version)
+			fmt.Fprintf(out, "kubeadm prepare: Kubernetes %s；自动安装缺失的 conntrack、socat 等系统依赖，加载 overlay/br_netfilter，持久化转发 sysctl，禁用 swap 并备份 fstab。\n", *version)
 			if *dry {
 				return 0, nil
 			}

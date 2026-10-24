@@ -216,7 +216,7 @@ s3:
 
 ## 厂家选择与旧配置兼容
 
-`provider` 支持 `minio`、`aws`、`custom`，只加载对应配置块，不回退到其他厂家。未填写 region 时默认 `us-east-1`；MinIO/custom 默认 path-style，AWS 默认虚拟主机方式。MinIO/custom 在启用上传时必须有 endpoint。其他 S3 厂家可使用 `custom`，按其文档设置 endpoint、region、path_style，兼容性仍需实际验证。
+`provider` 支持 `minio`、`aws`、`custom`，只加载对应配置块，不回退到其他厂家。未填写 region 时默认 `us-east-1`；MinIO/custom 默认 path-style，AWS 默认虚拟主机方式。备份是否上传由 bucket 决定，仅配置 endpoint、bucket 留空时仍只生成本地备份。MinIO/custom 在启用上传时必须有 endpoint。其他 S3 厂家可使用 `custom`，按其文档设置 endpoint、region、path_style，兼容性仍需实际验证。
 
 旧版平铺的 `s3.bucket` / `s3.endpoint` 等仍可使用，但不能与 `provider` 混用。迁移时将原字段移入对应厂家块，再设置 `provider`。已有 opskit.yaml 不会被自动覆盖，可用 `opskit config init --config opskit.new.yaml` 生成新模板对照迁移。
 
@@ -243,6 +243,8 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 `--url` 只覆盖主包/脚本，`--sha256` 只校验该文件；runc/CNI 无单独摘要字段，使用源站 HTTPS。安装不改既有配置、不升级现有运行时，不自动修改主机网络参数。完整示例见首页运行时安装章节。既有 config/config.yaml 不自动覆盖；用 `opskit config init --config config/config.new.yaml` 生成对照模板，手工合并新字段。
 
 安装下载统一使用 `install.download_dir`；模板留空，默认用户目录下的 `.opskit/downloads`，不随工作目录变化。配置非空相对路径仍按配置文件目录解析；CLI `--download-dir` 优先，按当前目录解析。既有显式配置不自动改变，想使用新默认值请将 download_dir 设为 ""。
+
+同一下载根目录下的组件下载、安装和 `k8s create` 共用按完整 URL 区分的文件缓存，索引位于 `.cache`。复用前重新计算本地 SHA-256，文件或索引缺失、损坏时重新下载；原有的上游摘要和版本验证照常执行。版本、架构或下载源改变会使用不同 URL，不复用其他资源。JSON 发布元数据与安装脚本每次重新获取。缓存只在完整传输后登记，失败任务仍保留已完成文件；旧版没有索引的文件首次运行会重新获取。若上游修正了相同 URL 的内容，可删除该下载根目录的 `.cache` 索引强制重新获取。使用 sudo 或切换用户时应配置相同的绝对下载目录，才能跨入口共享缓存。
 
 kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
 
@@ -489,7 +491,7 @@ Linux 同架构管理机直接分发当前 opskit 可执行文件。非 Linux �
 
 最终按配置中的节点名称逐一确认 Ready；缺失节点不视为成功。KubeSphere 仅 enabled=true 时安装，沿用前置条件和已有实例保护，不能将创建集群当作升级 KS 的入口。用户选择开启 KS 时仍需提供可用的默认或指定 StorageClass。
 
-本地维护命令 `opskit kubeadm install/prepare/init/join` 保留，版本和网络默认从 k8s 获取；init 的 advertise-address、join 的 endpoint/token/CA hash 使用 CLI 显式传入。install 可复用同目标版本的已有 kubectl，保留其原路径和链接；其他已有工具仍拒绝覆盖；prepare/init/join 不接受已有节点数据。所有命令支持 --dry-run，拒绝旧 --apply。
+本地维护命令 `opskit kubeadm install/prepare/init/join` 保留，版本和网络默认从 k8s 获取；init 的 advertise-address、join 的 endpoint/token/CA hash 使用 CLI 显式传入。install 可复用同目标版本的已有 kubectl，保留其原路径和链接；其他已有工具仍拒绝覆盖；prepare/init/join 不接受已有节点数据。prepare 与自动 create 使用同一套系统依赖逻辑，通过 apt-get/dnf/yum 安装缺失的 conntrack、socat 等工具，已有工具不重复安装，然后才修改内核、sysctl 与 swap。check 仍为只读检查，不安装软件。所有命令支持 --dry-run，拒绝旧 --apply。
 
 已验证：本地 SSH 密码认证及 KK 式主机指纹跳过、sudo stdin、下载/离线校验、模拟多节点编排、配置隔离、worker 自动加入顺序与所有预期节点的就绪判定。尚未验证真实多服务器的服务启动、网络连通性、重跑恢复和 KS 端到端安装；HA、升级、删除和 SSH 密码交互输入尚未实现。
 

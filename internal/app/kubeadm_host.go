@@ -179,6 +179,9 @@ func verifyKubeadmTool(ctx context.Context, path, name, version string) error {
 }
 
 func prepareKubeadmHost(ctx context.Context, out, diag io.Writer) error {
+	if err := commandRun(ctx, nil, out, diag, "sh", "-c", clusterDependenciesScript); err != nil {
+		return fmt.Errorf("安装系统前置组件失败: %w", err)
+	}
 	// Verify OS dependencies before touching persistent host settings.
 	for _, tool := range []string{"modprobe", "sysctl", "swapoff", "conntrack", "socat", "iptables", "ip", "tc", "mount", "nsenter", "ethtool"} {
 		if _, err := exec.LookPath(tool); err != nil {

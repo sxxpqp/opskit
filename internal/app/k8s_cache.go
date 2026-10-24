@@ -102,7 +102,7 @@ func clusterAssets(c fileConfig, arch string) []clusterAsset {
 	}
 	return assets
 }
-func fetchClusterAssets(ctx context.Context, assets []clusterAsset, root string, out io.Writer) error {
+func fetchClusterAssets(ctx context.Context, assets []clusterAsset, root, downloads string, out io.Writer) error {
 	entries := map[string]clusterCacheEntry{}
 	if raw, err := os.ReadFile(filepath.Join(root, "cache.json")); err == nil {
 		if err = json.Unmarshal(raw, &entries); err != nil {
@@ -121,7 +121,7 @@ func fetchClusterAssets(ctx context.Context, assets []clusterAsset, root string,
 			return "", err
 		}
 		hash := sha256.New()
-		err = download(ctx, source, io.MultiWriter(f, hash))
+		err = downloadRetained(ctx, source, io.MultiWriter(f, hash), downloads, "k8s", "assets")
 		closeErr := f.Close()
 		if err != nil {
 			return "", err

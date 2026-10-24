@@ -241,6 +241,12 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 		return err
 	}
 	defer os.RemoveAll(work)
+	if c.Install.DownloadDir == "" {
+		c.Install.DownloadDir, err = defaultDownloadDir()
+		if err != nil {
+			return err
+		}
+	}
 	if err = prepareClusterNetwork(ctx, &c, work, out); err != nil {
 		return err
 	}
@@ -260,7 +266,7 @@ func executeK8sCluster(ctx context.Context, c fileConfig, output string, out io.
 			return err
 		}
 		caches[node.arch] = root
-		if err = fetchClusterAssets(ctx, clusterAssets(c, node.arch), root, out); err != nil {
+		if err = fetchClusterAssets(ctx, clusterAssets(c, node.arch), root, c.Install.DownloadDir, out); err != nil {
 			return err
 		}
 	}

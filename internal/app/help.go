@@ -33,6 +33,7 @@ download 只下载所选 Linux 组件，不要求 SSH/root；默认 kubeadm,kube
 --components 支持 etcd（需 --etcd-version）、calico 和运行时组件；--arch amd64|arm64。
 check 通过 SSH 只读检查部署环境；status 使用 kubeconfig 查询节点和系统 Pod。
 手动 kubeadm 流程可先 download，再自行安装组件、初始化集群，最后执行 calico install。
+相同下载目录复用完整且 SHA-256 校验通过的文件，缺失或损坏时重新下载；不跳过上游校验。
 集群名填写在配置的 k8s.name（例如 sxxpqp），不接受 create sxxpqp 这样的参数。
 首次执行 opskit config init，编辑节点、角色和版本后创建。
 network.manifest 留空自动安装固定版本 Calico；填写本地清单可覆盖。
@@ -55,7 +56,7 @@ SSH 使用配置凭据直接连接，不读取 known_hosts、不确认或校验�
 示例: opskit calico install --kubeconfig /etc/kubernetes/admin.conf`,
 	"kubeadm": `用法: opskit kubeadm install|prepare|init|join [参数]
 install 安装固定版本 kubeadm/kubelet/kubectl/crictl 和 kubelet systemd unit，不安装 containerd。
-prepare 配置内核模块、转发和 bridge sysctl、禁用 swap（备份 fstab）。
+prepare 自动安装缺失的 conntrack、socat 等系统依赖，再配置内核模块、转发和 bridge sysctl、禁用 swap（备份 fstab）。
 init 初始化单控制平面；join 加入工作节点。均拒绝覆盖已有节点。
 版本读取 k8s.kubernetes.version，CLI --version 优先；当前支持 Kubernetes 1.24～1.30。
 默认执行，--dry-run 只预览；各命令 --help 查看参数。

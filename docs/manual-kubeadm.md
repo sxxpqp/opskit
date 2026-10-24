@@ -11,7 +11,7 @@
 | `k8s status` | 使用 kubectl 查询节点版本、Ready 和 kube-system Pod |
 | `calico install` | 在 kubeadm 初始化后独立安装 Calico，默认等待网络就绪 |
 | `kubeadm install` | 本机安装 kubeadm/kubelet/kubectl/crictl 和 systemd 配置，仍需下载 |
-| `kubeadm prepare` | 本机准备内核模块、转发与 swap；会修改系统配置 |
+| `kubeadm prepare` | 自动补齐 conntrack、socat 等系统依赖，再准备内核模块、转发与 swap；会修改系统配置 |
 | `k8s create` | 执行已有 SSH 全流程，不把下载命令当作完整离线安装包 |
 
 ## 只下载组件
@@ -49,12 +49,11 @@ downloads/k8s-v1.24.7-linux-amd64-<任务标识>/
     SHA256SUMS
   calico/
     network.yaml
-    upstream/...
 ```
 
 其余组件同样使用组件名子目录与上游文件名。`downloads.json` 记录产物相对路径、本地 SHA-256、来源 URL 与 `upstream_verified`。二进制包核对上游摘要后才发布完成目录；Docker/cri-dockerd 沿用现有下载限制，无上游摘要验证，记录为 `false`。kubelet 配套文本与渲染后的 `network.yaml` 记录本地摘要，`false` 不表示下载失败；Calico 原始下载仍核对模板中的固定 SHA-256。
 
-上游摘要不匹配、下载失败或取消时停止并移除本次临时产物，不覆盖已有完成目录。每次执行创建新任务，不自动复用旧下载。下载文件没有安装为可执行命令，手动安装需设置权限。
+上游摘要不匹配、下载失败或取消时停止并移除本次临时任务，不覆盖已有完成目录；已完整获取的缓存文件保留，后续仍需通过校验。每次执行创建新任务目录，文件从同一下载根目录的共享缓存复用，避免再次请求上游；缓存缺失或本地 SHA-256 不匹配时重新下载。上游摘要检查仍然执行。Calico 原始清单保存在共享下载目录，任务目录只保存渲染后的清单。下载文件没有安装为可执行命令，手动安装需设置权限。
 
 这不是完整离线集群包：不包含控制平面/etcd/Calico 容器镜像、操作系统软件包或离线镜像仓库；后续拉镜像与系统依赖需自行准备。
 
@@ -80,7 +79,7 @@ etcd 根地址追加 `/etcd-io/etcd/releases/download/<版本>/etcd-<版本>-lin
 
 ## 手动安装与初始化示例
 
-以下使用项目历史测试组合说明操作顺序，不表示完成了新增入口的真实集群验收。先按环境准备 Linux/systemd、系统依赖、CRI 运行时、CNI plugins 及可访问镜像仓库。运行时与主机配置操作见[配置指南](configuration.md)，有 sudo 权限并确认目标主机后执行。
+以下组合已在 Ubuntu 24.04.3 单节点验证 kubeadm v1.24.7、containerd v1.7.28 和 Calico v3.26.5 的独立安装及网络测试，具体条件见[验收记录](k8s-validation-2026-10-24.md)。先按环境准备 Linux/systemd、系统依赖、CRI 运行时、CNI plugins 及可访问镜像仓库。运行时与主机配置操作见[配置指南](configuration.md)，有 sudo 权限并确认目标主机后执行。
 
 1. 在管理机下载 `kubeadm,kubelet,kubectl,crictl,calico`，选择与节点一致的架构；将完整任务目录复制到节点。
 2. 在节点安装组件及 kubelet 服务文件：
@@ -97,12 +96,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now kubelet
 ```
 
-crictl 文件名须替换为实际版本和架构。kubelet 在 kubeadm 写入配置前可能反复重启。若使用 `opskit kubeadm install` 安装工具，则无需手工安装上述文件，但该命令仍会下载，不会直接消费这份目录。
+crictl 文件名须替换为实际版本和架构。kubelet 在 kubeadm 写入配置前可能反复重启。若使用 `opskit kubeadm install` 安装工具，则无需手工安装上述文件；该命令按统一下载配置获取组件，不直接消费任务目录。
+
+`kubeadm install` 不解析任务目录，但会复用同一 `install.download_dir` 下有索引且校验通过的完整文件。下载与安装请配置相同根目录；sudo 默认使用 root 的主目录，可通过 YAML 的绝对路径或各安装入口的 `--download-dir` 指定共享目录。
 
 3. 配置主机与运行时，确认 CRI 可用后运行原生 kubeadm。以下命令需按实际 IP、版本、CIDR 和镜像仓库调整；原生 kubeadm 不读取 opskit YAML。
 
 ```sh
 # 在每台节点执行；会修改内核设置、swap 和 fstab
+# 自动使用 apt-get/dnf/yum 安装缺失的 conntrack、socat 等系统依赖
 sudo opskit kubeadm prepare --config /path/to/config.yaml
 # 控制平面节点；运行时已安装并可用
 sudo kubeadm init --kubernetes-version v1.24.7 \
@@ -136,4 +138,4 @@ opskit k8s status --kubeconfig /path/to/kubeconfig --context my-cluster
 
 `status` 和 `calico install` 默认遵循 kubectl 的 KUBECONFIG/默认文件，解析一次 current-context 后固定目标；不从 SSH hosts 或 kind 配置推断集群。opskit 自动部署的 kubeconfig 位于 `~/.opskit/clusters/<名称>/kubeconfig`，应显式传入。`status` 无节点或任一节点非 Ready 返回非零；kube-system Pod 表仅供诊断，不作为所有应用健康的证明。
 
-这些入口已有模拟下载、摘要失败、取消、SSH 与 kubectl 调用边界的自动化覆盖；真实 kubeadm + Calico 的独立流程、多节点与恢复验收仍待完成。
+这些入口已有模拟下载、摘要失败、取消、SSH 与 kubectl 调用边界的自动化覆盖；上述组合的真实单节点 kubeadm + Calico 独立流程、DNS、Service 和同节点 NetworkPolicy 已通过验收。测试使用已校验的组件 HTTP 缓存和预载镜像，不代表完整离线包；多节点、其他版本及恢复验收仍待完成。

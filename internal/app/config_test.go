@@ -61,6 +61,30 @@ func TestConfigPrecedenceAndRelativePaths(t *testing.T) {
 		t.Fatal("explicit missing config accepted")
 	}
 }
+func TestBackupEndpointWithoutBucketRemainsLocal(t *testing.T) {
+	t.Chdir(t.TempDir())
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPSKIT_FAKE_ETCD", "1")
+	config := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(config, []byte("schema_version: 1\ns3:\n  provider: minio\n  minio:\n    endpoint: http://127.0.0.1:1\n    bucket: \"\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	args := []string{"etcd", "backup", "--config", config, "--etcdctl", exe, "--directory", t.TempDir()}
+	if code, err := Run(context.Background(), args, &output, &output, "test"); code != 0 || err != nil {
+		t.Fatalf("endpoint alone enabled upload: %d %v %s", code, err, output.String())
+	}
+	if err := validateMySQLStorage(storage{provider: "minio", endpoint: "http://127.0.0.1:1"}); err != nil {
+		t.Fatal("endpoint alone must allow local MySQL backup", err)
+	}
+	if err := validateMySQLStorage(storage{key: "backup.sql"}); err == nil {
+		t.Fatal("object key without a bucket accepted")
+	}
+}
+
 func TestInitAndDefaultConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var output bytes.Buffer

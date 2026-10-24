@@ -42,7 +42,7 @@ opskit 将工具安装、Kubernetes 部署、镜像源设置、健康检查和�
 | 能力 | 当前支持 |
 |---|---|
 | Kubernetes 部署 | 原生 SSH + kubeadm，单控制平面与可选工作节点、自动加入、Calico 安装及 Ready 检查 |
-| 分步准备与诊断 | 按组件下载 Linux amd64／arm64 文件、附带 kubelet systemd 配置；SSH 只读预检、集群状态查询、Calico 独立安装 |
+| 分步准备与诊断 | 按组件下载 Linux amd64／arm64 文件并复用校验通过的缓存、附带 kubelet systemd 配置；前置依赖自动补齐、SSH 只读预检、状态查询、Calico 独立安装 |
 | 组件版本配套 | 按 Kubernetes 次版本选择固定运行时组合，支持显式覆盖与兼容校验 |
 | 工具安装 | Go SDK、kubectl、kind，指定版本、下载校验与命令入口配置 |
 | 容器运行时 | Docker 脚本／二进制、containerd + runc + CNI plugins、cri-dockerd |
@@ -173,7 +173,7 @@ kubectl get nodes -o wide
 
 Linux 同架构管理机可分发当前 opskit；macOS／Windows 或异构管理需提供相同代码构建的 `k8s.deploy.nodeBinaries`。管理机保存阶段日志和 kubeconfig，不覆盖用户默认 kubeconfig。系统包安装依赖节点网络及软件源，已有组件不主动升级。
 
-`opskit kubeadm install|prepare|init|join` 为本地维护入口，具体操作与参数见[部署指南](docs/configuration.md#k8s-ssh-集群部署)。已有 K8s v1.24.7 + containerd v1.7.24 单节点与 Calico Ready 的实际运行记录；新配套版本、多节点网络、策略及生产恢复仍需验收。
+`opskit kubeadm install|prepare|init|join` 为本地维护入口，具体操作与参数见[部署指南](docs/configuration.md#k8s-ssh-集群部署)。K8s v1.24.7 + containerd v1.7.28 + Calico v3.26.5 已通过 Ubuntu 单节点自动部署、续跑、DNS、Service 和同节点网络策略测试，详见[验收记录](docs/k8s-validation-2026-10-24.md)；多节点、其他版本组合及生产恢复仍需验收。
 
 ### 只下载组件与手动 kubeadm 部署
 
@@ -263,7 +263,7 @@ mirror 默认备份后写入。标准 Linux Docker 配置写入后自动重启�
 
 Calico 支持 `install.calico.download_base` 主源及 `fallback_bases` 备用根地址列表，下载失败依次切换，单源最多 60 秒，摘要不匹配立即停止。通用下载遇到 HTTP 502／503／504 最多尝试 3 次，等待 2 秒、4 秒，并受命令总超时约束；持续 504 仍需排查代理回源。
 
-下载保留在 `install.download_dir`（默认 `~/.opskit/downloads`），但安装仍重新下载并校验，不将旧文件直接作为可信缓存。配置示例和证书选项见[下载源指南](docs/configuration.md#下载源配置)。
+下载保留在 `install.download_dir`（默认 `~/.opskit/downloads`）。同一根目录内，`k8s download`、`k8s create` 与组件安装共用按 URL 区分的缓存，每次复用前检查本地 SHA-256，缺失或损坏时重新下载，安装仍执行原有上游摘要校验。JSON 发布元数据和安装脚本每次重新获取。切换用户或使用 sudo 时请显式配置相同的下载目录。配置示例和证书选项见[下载源指南](docs/configuration.md#下载源配置)。
 
 ## 检查与备份
 
@@ -294,7 +294,7 @@ opskit mysql backup --client-mode docker --docker-network host --host 127.0.0.1 
 
 默认事务模式、gzip、包含存储过程／事件／触发器，拒绝检测到的非 InnoDB 表；并发 DDL 和非事务表的一致性不受保证。每个任务保存 `backup.sql.gz`（或 `.sql`）及 v1 清单；失败保留 `.partial`，有效本地文件不因上传失败删除。默认要求 TLS，密码通过受限权限的临时客户端文件传入并清理；Docker 模式只读挂载该配置与 TLS 文件。镜像源统一配置于 `mysql.docker.image`，支持私有仓库/代理和固定 digest；Docker bridge 网络中的 localhost 指向客户端容器，连接 Docker Desktop 宿主机可用 `host.docker.internal`。S3 沿用下方统一配置；完整配置、限制与隔离恢复步骤见[MySQL 备份指南](docs/mysql-backup.md)。
 
-通过 `s3.provider: minio|aws|custom` 选择厂家，只填写对应配置块。bucket 留空仅本地备份，填写后自动上传；支持块内凭据或 AWS SDK 默认凭据链。上传默认禁止覆盖，完成后 HEAD 核对长度和 SHA-256 metadata；这不等于内容回读验证。模板不自动创建桶，也不清理旧备份。
+通过 `s3.provider: minio|aws|custom` 选择厂家，只填写对应配置块。bucket 留空仅本地备份，即使已配置 endpoint 也不启用上传；填写 bucket 后自动上传。支持块内凭据或 AWS SDK 默认凭据链。上传默认禁止覆盖，完成后 HEAD 核对长度和 SHA-256 metadata；这不等于内容回读验证。模板不自动创建桶，也不清理旧备份。
 
 ```sh
 # 快照状态与恢复仅在隔离环境验收
@@ -335,9 +335,11 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 
 自动化已覆盖版本解析、配置优先级、下载摘要、临时网关错误重试、Calico 备用源、SSH／sudo 和部署编排，CI 配置在 Ubuntu、Windows、macOS 执行 `go vet ./...` 与 `go test -race ./...`。单节点实际结果不等于完整生产验收，新运行时组合和多机部署仍需验证。
 
-main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安装及 MySQL 备份有自动化回归覆盖。MySQL 镜像方式已在 Windows Docker Desktop + MySQL 8.4.13 验证 gzip／SQL、多库、文件摘要、真实 CA、错误 CA 拒绝和隔离恢复的数据及对象行为，详见[验收记录](docs/mysql-validation-2026-10-22.md)；真实 kubeadm 独立安装及其他 MySQL 组合仍待验收。
+main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安装及 MySQL 备份有自动化回归覆盖。Ubuntu 单节点已验证 9 个组件下载、自动部署与续跑、手动 kubeadm 初始化和独立 Calico 安装，以及 DNS／Service／同节点网络策略，详见[Kubernetes 验收记录](docs/k8s-validation-2026-10-24.md)。MySQL 镜像方式已在 Windows Docker Desktop + MySQL 8.4.13 验证 gzip／SQL、多库、文件摘要、真实 CA、错误 CA 拒绝和隔离恢复的数据及对象行为，详见[MySQL 验收记录](docs/mysql-validation-2026-10-22.md)；其他 MySQL 组合仍待验收。
 
-- [ ] 新配套版本的 Linux 端到端部署、多节点连通性和网络策略验收
+- [x] Ubuntu 单节点 Kubernetes v1.24.7 + containerd v1.7.28 自动部署、DNS、Service 和同节点网络策略验收
+- [x] 同组合的手动 kubeadm 初始化、Calico 独立安装及归属 / CIDR / 已有 CNI 保护
+- [ ] 多节点连通性、跨节点网络策略和其他版本组合验收
 - [ ] HA、升级和集群删除能力
 - [ ] 启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
 - [ ] 真实 etcd／S3 集成测试、隔离恢复及备份保留策略
@@ -356,6 +358,7 @@ main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安�
 | [v0.1.11](https://github.com/sxxpqp/opskit/releases/tag/v0.1.11) | 历史发布详情见 Release 说明 |
 | main（文档更新） | 补充 go install 安装方式，重整首页导航、配置与功能说明 |
 | main（未发布） | 新增 k8s download/check/status 与 calico install，提供组件下载和手动 kubeadm 部署指南 |
+| main（未发布） | kubeadm prepare 自动补齐 conntrack、socat 等系统依赖；下载与安装共用经本地摘要校验的完整文件缓存 |
 | main（未发布，MySQL） | 新增 mysql backup：本地客户端或 Docker 镜像、SQL／gzip、SHA-256 清单与可选 S3 上传；修复 Windows 挂载凭据被 MySQL 忽略，已通过 MySQL 8.4.13 指定数据隔离恢复 |
 
 新标签只有在发布流水线通过后才作为正式 Release 提供下载。下载配置见 [downloads.json](downloads.json)，代理说明见[Nexus 下载指南](docs/downloads.md)。

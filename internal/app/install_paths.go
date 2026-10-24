@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// Retain downloads for inspection; always fetch again rather than trust an unchecked cache.
+// Retain complete downloads and verify their digest before reusing them.
 func downloadRetained(ctx context.Context, source string, dst io.Writer, root, tool, version string) error {
 	if cached, err := cachedClusterDownload(ctx, source, dst); cached {
 		return err
@@ -30,6 +30,13 @@ func downloadRetained(ctx context.Context, source string, dst io.Writer, root, t
 	if name == "." || name == "/" || name == "" {
 		name = "install.sh"
 	}
+	// Release metadata and installer scripts may change at the same URL.
+	cacheable := !strings.HasSuffix(name, ".json") && !strings.HasSuffix(name, ".sh")
+	if cacheable {
+		if reused, err := reuseRetainedDownload(ctx, root, source, dst); reused {
+			return err
+		}
+	}
 	sum := sha256.Sum256([]byte(source))
 	dir := filepath.Join(root, tool, version, fmt.Sprintf("%x", sum[:6]))
 	if e = os.MkdirAll(dir, 0755); e != nil {
@@ -40,7 +47,8 @@ func downloadRetained(ctx context.Context, source string, dst io.Writer, root, t
 		return e
 	}
 	defer os.Remove(f.Name())
-	e = download(ctx, source, io.MultiWriter(dst, f))
+	hash := sha256.New()
+	e = download(ctx, source, io.MultiWriter(dst, f, hash))
 	ce := f.Close()
 	if e != nil {
 		return e
@@ -52,10 +60,16 @@ func downloadRetained(ctx context.Context, source string, dst io.Writer, root, t
 	// Windows rename cannot replace an existing regular file. Preserve the prior download.
 	if runtime.GOOS == "windows" {
 		if _, e = os.Lstat(target); e == nil {
-			target = f.Name() + "-" + name
+			target = filepath.Join(dir, strings.TrimPrefix(filepath.Base(f.Name()), ".download-")+"-"+name)
 		}
 	}
-	return os.Rename(f.Name(), target)
+	if e = os.Rename(f.Name(), target); e != nil {
+		return e
+	}
+	if cacheable {
+		return indexRetainedDownload(root, source, target, fmt.Sprintf("%x", hash.Sum(nil)))
+	}
+	return nil
 }
 
 func defaultDownloadDir() (string, error) {

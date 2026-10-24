@@ -199,7 +199,7 @@ func (o mysqlBackupOptions) validate() error {
 }
 
 func validateMySQLStorage(s storage) error {
-	if (s.key != "" || s.endpoint != "") && s.bucket == "" {
+	if s.key != "" && s.bucket == "" {
 		return errors.New("S3 参数需要 bucket")
 	}
 	if s.bucket != "" {

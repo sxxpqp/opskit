@@ -80,7 +80,7 @@ func TestK8sDownloadFilesAndChecksumFailure(t *testing.T) {
 			defer server.Close()
 			root := t.TempDir()
 			code, err, text := workflowRun(t, "k8s", "download", "--components", "kubelet,etcd", "--etcd-version", "v3.5.5", "--arch", "arm64", "--download-dir", root, "--kubelet-download-base", server.URL, "--etcd-download-base", server.URL)
-			entries, readErr := os.ReadDir(root)
+			entries, readErr := filepath.Glob(filepath.Join(root, "k8s-*"))
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
@@ -93,7 +93,7 @@ func TestK8sDownloadFilesAndChecksumFailure(t *testing.T) {
 			if code != 0 || err != nil || len(entries) != 1 {
 				t.Fatal(code, err, text, entries)
 			}
-			dir := filepath.Join(root, entries[0].Name())
+			dir := entries[0]
 			for _, name := range []string{"kubelet/kubelet", "kubelet/kubelet.sha256", "kubelet/kubelet.service", "kubelet/10-kubeadm.conf", "etcd/etcd-v3.5.5-linux-arm64.tar.gz", "etcd/SHA256SUMS"} {
 				if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 					t.Fatal(name, err)
@@ -112,6 +112,16 @@ func TestK8sDownloadFilesAndChecksumFailure(t *testing.T) {
 				if err != nil || m.SHA256 != record.SHA256 || (record.Source != "" && !record.UpstreamVerified) {
 					t.Fatal(record, err)
 				}
+			}
+			// Repeat without a reachable upstream; completed assets and checksum files are reused.
+			server.Close()
+			code, err, text = workflowRun(t, "k8s", "download", "--components", "kubelet,etcd", "--etcd-version", "v3.5.5", "--arch", "arm64", "--download-dir", root, "--kubelet-download-base", server.URL, "--etcd-download-base", server.URL)
+			if code != 0 || err != nil {
+				t.Fatal("repeat download contacted upstream", code, err, text)
+			}
+			assetURL := server.URL + "/v1.24.7/bin/linux/arm64/kubelet"
+			if err := fetchClusterAssets(context.Background(), []clusterAsset{{Name: "kubelet", URL: assetURL, CheckURL: assetURL + ".sha256"}}, t.TempDir(), root, io.Discard); err != nil {
+				t.Fatalf("create bundle failed to reuse download-only cache: %v", err)
 			}
 		})
 	}

@@ -28,6 +28,7 @@ func newK8sDownloadCommand(parent context.Context, out io.Writer) (*cobra.Comman
 etcd 必须显式配置版本；Calico 输出按 Pod CIDR 渲染的 network.yaml。
 Docker/cri-dockerd 上游摘要未配置，仅记录本地 SHA-256，不宣称上游校验。
 结果存入下载目录下独立的 k8s-* 子目录，保留原文件名和上游校验文件。
+同一下载根目录复用完整且本地 SHA-256 校验通过的下载文件，仍执行上游摘要校验。
 下载二进制不包含容器镜像或系统软件包；选择 kubelet 时附带 systemd 配置。`}
 	f := cmd.Flags()
 	config := f.String("config", defaultConfigPath, "统一 YAML 配置")
@@ -237,7 +238,7 @@ func saveClusterDownloads(ctx context.Context, c fileConfig, assets []clusterAss
 		if err := os.Mkdir(dir, 0755); err != nil {
 			return err
 		}
-		if err := fetchClusterAssets(ctx, []clusterAsset{asset}, dir, out); err != nil {
+		if err := fetchClusterAssets(ctx, []clusterAsset{asset}, dir, root, out); err != nil {
 			return err
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, "cache.json"))
@@ -286,7 +287,7 @@ func saveClusterDownloads(ctx context.Context, c fileConfig, assets []clusterAss
 		if err := os.Mkdir(dir, 0755); err != nil {
 			return err
 		}
-		c.Install.DownloadDir = filepath.Join(dir, "upstream")
+		c.Install.DownloadDir = root
 		if err := prepareClusterNetwork(ctx, &c, dir, out); err != nil {
 			return err
 		}

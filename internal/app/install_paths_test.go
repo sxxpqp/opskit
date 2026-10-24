@@ -42,12 +42,24 @@ func TestDownloadRetained(t *testing.T) {
 		t.Fatalf("%s %v", b, e)
 	}
 	fail = true
+	dst.Reset()
+	if e := downloadRetained(context.Background(), server.URL+"/kind-linux-amd64", &dst, root, "other-command", "v0.17.0"); e != nil || dst.String() != "package-data" {
+		t.Fatalf("complete download was not shared across commands: %v %s", e, dst.String())
+	}
+	if e := os.WriteFile(files[0], []byte("damaged"), 0600); e != nil {
+		t.Fatal(e)
+	}
 	if e := downloadRetained(context.Background(), server.URL+"/kind-linux-amd64", io.Discard, root, "kind", "v0.17.0"); e == nil {
-		t.Fatal("accepted HTTP failure")
+		t.Fatal("corrupt cache accepted or HTTP failure ignored")
 	}
 	b, _ = os.ReadFile(files[0])
-	if string(b) != "package-data" {
-		t.Fatal("prior download changed")
+	if string(b) != "damaged" {
+		t.Fatal("failed fetch changed prior file")
+	}
+	fail = false
+	dst.Reset()
+	if e := downloadRetained(context.Background(), server.URL+"/kind-linux-amd64", &dst, root, "kind", "v0.17.0"); e != nil || dst.String() != "package-data" {
+		t.Fatalf("corrupt cache was not repaired: %v %s", e, dst.String())
 	}
 	partial, _ := filepath.Glob(filepath.Join(root, "kind", "v0.17.0", "*", ".download-*"))
 	if len(partial) != 0 {

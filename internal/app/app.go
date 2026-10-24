@@ -84,7 +84,7 @@ func newDataCommand(ctx context.Context, command string, out, diag io.Writer) (*
 		if *timeout <= 0 {
 			return 2, errors.New("timeout must be positive")
 		}
-		if command != "etcd check" && (s.key != "" || s.endpoint != "") && s.bucket == "" {
+		if command != "etcd check" && s.key != "" && s.bucket == "" {
 			return 2, errors.New("S3 options require --bucket")
 		}
 		if command != "etcd check" && s.bucket != "" {
