@@ -9,9 +9,20 @@
 
 schema_version: 1
 
+openebs:
+  manifest: ""  # 可选，本地 Operator 清单；不改写，仅支持 openebs namespace 的 NDM + Local PV 配置
+  set_default: false  # 为 KubeSphere 3.4.1 准备存储时设为 true，或 install 加 --set-default；有其他默认类时拒绝
+
 # 工具与运行时安装；默认执行，--dry-run 仅预览。运行时要求 Linux systemd，不覆盖已有运行时。
 # URL 仅用于安装文件；容器镜像源仍统一由 mirrors 管理。
 install:
+  openebs:
+    # 官方 3.x Operator 固定提交；安装 NDM、Local PV，不包含 cStor/Jiva/Mayastor。
+    operator_url: https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/openebs/charts/4143c90d07948b84024a7a00c790ce1449e244e1/openebs-operator.yaml
+    # 默认直接用 Nexus；CLI/环境变量换主源后仍可回退到这里。重复地址只请求一次；[] 禁用备用。
+    fallback_urls:
+      - https://nexus.ihome.sxxpqp.top:8443/repository/raw-githubusercontent/openebs/charts/4143c90d07948b84024a7a00c790ce1449e244e1/openebs-operator.yaml
+    sha256: 6756a62998abed583e0c263babd9776cfd7601625887ecfa805479815406dab7
   calico:
     download_base: https://raw.githubusercontent.com  # --calico-download-base / CALICO_DOWNLOAD_BASE
     fallback_bases:  # 主源下载失败后按顺序尝试；[] 禁用备用源；摘要不匹配立即停止

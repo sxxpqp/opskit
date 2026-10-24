@@ -252,6 +252,10 @@ kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常
 
 ## kubectl 安装（main，未发布）
 
+OpenEBS 的 Operator 安装入口为 `opskit openebs install`。下载地址与摘要读取 `install.openebs.operator_url`／`sha256`，统一缓存读取 `install.download_dir`；`openebs.manifest` 可指定本地文件，`openebs.set_default` 控制是否显式设置默认存储类。参数、优先级和安装边界见[OpenEBS 指南](openebs.md)。
+
+`install.openebs.fallback_urls` 为备用完整地址列表，默认保留 Nexus。主源下载失败或 60 秒超时后顺序回退，重复地址去重，`[]` 关闭备用；所有尝试共享总超时及同一 SHA-256，摘要不匹配不切换。
+
 `opskit kubectl`、`opskit kubectl -h`、`opskit kubectl --help` 显示说明；`opskit kubectl install -h/--help` 显示全部参数。帮助不依赖配置或外部工具。
 
 ```yaml

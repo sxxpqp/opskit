@@ -22,6 +22,16 @@ const commandHelpTemplate = `用法: {{if .HasAvailableSubCommands}}{{.CommandPa
 `
 
 var commandGroupHelp = map[string]string{
+	"openebs": `用法: opskit openebs install [参数]
+通过官方 3.x Operator YAML 安装 NDM 和 Local PV，固定 openebs namespace。
+为 KubeSphere v3.4.1 准备存储时，首次安装加 --set-default，之后执行 kubesphere install。
+清单下载地址与摘要读取 install.openebs；共享 install.download_dir 的下载缓存。
+下载失败或单源 60 秒超时后，按 install.openebs.fallback_urls 回退 Nexus 等备用源；摘要不匹配不回退。
+--manifest 使用本地清单；--operator-url / OPENEBS_OPERATOR_URL 覆盖下载地址。
+默认等待 CRD 和工作负载就绪，--wait=false 仅提交；--dry-run 不下载或连接集群。
+拒绝覆盖已有同名资源；--set-default 显式设置 openebs-hostpath，存在其他默认类时拒绝。
+不安装复制存储引擎，不格式化或分配裸盘；Local PV 不提供跨节点副本。
+示例: opskit openebs install --kubeconfig /etc/kubernetes/admin.conf --dry-run`,
 	"go": `用法: opskit go install [参数]
 安装完整 Go SDK，校验 SHA-256、实际版本并创建 go/gofmt 命令入口。
 支持 Linux/macOS amd64、arm64；版本读取 go.version，--version 可覆盖。

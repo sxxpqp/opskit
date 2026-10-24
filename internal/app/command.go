@@ -66,6 +66,7 @@ func newRootCommand(ctx context.Context, out, diag io.Writer, version string) (*
 	root.AddCommand(&cobra.Command{Use: "version", Short: "查看 opskit 版本", Args: cobra.NoArgs, Run: func(cmd *cobra.Command, _ []string) { fmt.Fprintln(cmd.OutOrStdout(), version) }})
 	groups := map[string]*cobra.Command{}
 	for _, item := range []struct{ name, short string }{
+		{"openebs", "通过 Operator 安装 OpenEBS"},
 		{"config", "生成配置模板"}, {"go", "安装 Go 并设置 GOPROXY"}, {"k8s", "下载组件、检查或部署 Kubernetes"}, {"calico", "独立安装 Calico 网络插件"}, {"kubeadm", "安装工具、准备节点、初始化或加入集群"}, {"kubectl", "安装 Kubernetes 客户端"}, {"docker", "安装 Docker"}, {"cri-dockerd", "安装 cri-dockerd"}, {"containerd", "安装 containerd、runc 和 CNI plugins"}, {"kind", "安装 kind 或管理测试集群"}, {"mirror", "设置镜像源或代理"}, {"kubesphere", "安装 KubeSphere"}, {"etcd", "备份或检查 etcd"}, {"mysql", "MySQL 逻辑备份与可选 S3 上传"}, {"s3", "上传文件或检查 S3"},
 	} {
 		long := commandGroupHelp[item.name]
@@ -103,6 +104,7 @@ func newRootCommand(ctx context.Context, out, diag io.Writer, version string) (*
 		{"k8s", "通过 SSH 只读检查部署目标", func() (*cobra.Command, error) { return newK8sCheckCommand(ctx, out) }},
 		{"k8s", "只读查看节点 Ready 与系统 Pod", func() (*cobra.Command, error) { return newK8sStatusCommand(ctx, out) }},
 		{"calico", "在 kubeadm 集群独立安装 Calico", func() (*cobra.Command, error) { return newCalicoInstallCommand(ctx, out, diag) }},
+		{"openebs", "通过固定 Operator 清单安装 NDM 和 Local PV", func() (*cobra.Command, error) { return newOpenEBSInstallCommand(ctx, out, diag) }},
 		{"kubectl", "安装指定版本 kubectl", func() (*cobra.Command, error) { return newKubectlInstallCommand(ctx, out, diag) }},
 		{"kind", "安装指定版本 kind", func() (*cobra.Command, error) { return newKindInstallCommand(ctx, out, diag) }},
 		{"kubesphere", "安装 KubeSphere 并等待服务就绪", func() (*cobra.Command, error) { return newKubeSphereCommand(ctx, out, diag) }},

@@ -61,6 +61,7 @@ func commandConfig(f *pflag.FlagSet, path string) (fileConfig, error) {
 		return s
 	}
 	c.Install.DownloadDir = resolve(c.Install.DownloadDir)
+	c.OpenEBS.Manifest = resolve(c.OpenEBS.Manifest)
 	c.Kind.Kubeconfig = resolve(c.Kind.Kubeconfig)
 	resolveClusterPaths(&c.K8s, base)
 	c.projectComponents()

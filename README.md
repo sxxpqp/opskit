@@ -11,13 +11,14 @@
 
 <p align="center">
   <strong>一个统一工具安装、Kubernetes 部署、健康检查与数据备份的 Go 运维工具箱。</strong><br>
-  Go / Docker / containerd / kubectl · 组件下载 / Kubernetes SSH / 手动 kubeadm / Calico · kind / KubeSphere · MySQL / etcd / S3
+  Go / Docker / containerd / kubectl · 组件下载 / Kubernetes SSH / 手动 kubeadm / Calico / OpenEBS · kind / KubeSphere · MySQL / etcd / S3
 </p>
 
 <p align="center">
   <a href="#快速上手">安装与上手</a> ·
   <a href="#kubernetes-集群部署">Kubernetes 部署</a> ·
   <a href="docs/manual-kubeadm.md">组件下载与手动部署</a> ·
+  <a href="docs/openebs.md">OpenEBS Operator</a> ·
   <a href="#工具与运行时安装">工具安装</a> ·
   <a href="#镜像源与下载">镜像源</a> ·
   <a href="#检查与备份">检查与备份</a> ·
@@ -43,6 +44,7 @@ opskit 将工具安装、Kubernetes 部署、镜像源设置、健康检查和�
 |---|---|
 | Kubernetes 部署 | 原生 SSH + kubeadm，单控制平面与可选工作节点、自动加入、Calico 安装及 Ready 检查 |
 | 分步准备与诊断 | 按组件下载 Linux amd64／arm64 文件并复用校验通过的缓存、附带 kubelet systemd 配置；前置依赖自动补齐、SSH 只读预检、状态查询、Calico 独立安装 |
+| OpenEBS 存储 | 通过固定官方 3.x Operator YAML 安装 NDM 和 Local PV，校验摘要、保护已有资源、可显式设置默认 StorageClass |
 | 组件版本配套 | 按 Kubernetes 次版本选择固定运行时组合，支持显式覆盖与兼容校验 |
 | 工具安装 | Go SDK、kubectl、kind，指定版本、下载校验与命令入口配置 |
 | 容器运行时 | Docker 脚本／二进制、containerd + runc + CNI plugins、cri-dockerd |
@@ -175,6 +177,17 @@ Linux 同架构管理机可分发当前 opskit；macOS／Windows 或异构管理
 
 `opskit kubeadm install|prepare|init|join` 为本地维护入口，具体操作与参数见[部署指南](docs/configuration.md#k8s-ssh-集群部署)。K8s v1.24.7 + containerd v1.7.28 + Calico v3.26.5 已通过 Ubuntu 单节点自动部署、续跑、DNS、Service 和同节点网络策略测试，详见[验收记录](docs/k8s-validation-2026-10-24.md)；多节点、其他版本组合及生产恢复仍需验收。
 
+### OpenEBS Operator 存储安装（main，未发布）
+
+用于为 KubeSphere v3.4.1 准备存储时，首次安装 OpenEBS 加 `--set-default`，再执行 `opskit kubesphere install --version v3.4.1 --storage-class openebs-hostpath`。完整预检与已安装 OpenEBS 的处理步骤见[衔接指南](docs/openebs.md#为-kubesphere-3x-准备存储)。
+
+```sh
+opskit openebs install --kubeconfig /etc/kubernetes/admin.conf --dry-run
+opskit openebs install --kubeconfig /etc/kubernetes/admin.conf
+```
+
+仅用于首次安装。固定官方 3.x Operator 清单，安装 NDM 和 Local PV Hostpath／Device；默认不修改默认存储类，首次安装可加 `--set-default` 显式设置 `openebs-hostpath`，有其他默认类时拒绝。不部署 cStor／Jiva／Mayastor，不自动使用裸盘。通过 `install.openebs.operator_url` 与 `sha256` 配置下载，复用统一下载缓存；支持 `--manifest` 本地清单。默认等待 CRD 与工作负载就绪。Local PV 是节点本地存储，不提供跨节点副本。此入口不使用 Helm，也不代表 OpenEBS 4.x 的 Helm 安装方式。步骤与验证方法见[OpenEBS 指南](docs/openebs.md)。
+
 ### 只下载组件与手动 kubeadm 部署
 
 ```sh
@@ -261,7 +274,7 @@ mirror 默认备份后写入。标准 Linux Docker 配置写入后自动重启�
 
 安装文件源统一由 `install.<组件>` 配置，CLI 或组件环境变量可覆盖。模板的 Go SDK 包使用阿里云源、校验元数据使用 Go 官方地址；Kubernetes 二进制和 GitHub 发布包使用现有 Nexus 代理。内网地址需当前环境可达，Nexus 是上游代理缓存，首次请求可能回源。
 
-Calico 支持 `install.calico.download_base` 主源及 `fallback_bases` 备用根地址列表，下载失败依次切换，单源最多 60 秒，摘要不匹配立即停止。通用下载遇到 HTTP 502／503／504 最多尝试 3 次，等待 2 秒、4 秒，并受命令总超时约束；持续 504 仍需排查代理回源。
+Calico 支持 `install.calico.download_base` 主源及 `fallback_bases` 备用根地址列表，下载失败依次切换，单源最多 60 秒，摘要不匹配立即停止。OpenEBS 默认直用 Nexus，并通过 `install.openebs.fallback_urls` 保留 Nexus 备用；手动改用其他主源后，失败或 60 秒超时会回退，重复地址去重，摘要不匹配不回退。通用下载遇到 HTTP 502／503／504 最多尝试 3 次，等待 2 秒、4 秒，并受命令总超时约束；持续 504 仍需排查代理回源。
 
 下载保留在 `install.download_dir`（默认 `~/.opskit/downloads`）。同一根目录内，`k8s download`、`k8s create` 与组件安装共用按 URL 区分的缓存，每次复用前检查本地 SHA-256，缺失或损坏时重新下载，安装仍执行原有上游摘要校验。JSON 发布元数据和安装脚本每次重新获取。切换用户或使用 sudo 时请显式配置相同的下载目录。配置示例和证书选项见[下载源指南](docs/configuration.md#下载源配置)。
 
@@ -339,6 +352,7 @@ main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安�
 
 - [x] Ubuntu 单节点 Kubernetes v1.24.7 + containerd v1.7.28 自动部署、DNS、Service 和同节点网络策略验收
 - [x] 同组合的手动 kubeadm 初始化、Calico 独立安装及归属 / CIDR / 已有 CNI 保护
+- [x] OpenEBS 3.x Operator 单节点安装、Hostpath PVC 供给与重建 Pod 后的数据读回（[记录](docs/openebs.md#实际验证2026-10-24)）
 - [ ] 多节点连通性、跨节点网络策略和其他版本组合验收
 - [ ] HA、升级和集群删除能力
 - [ ] 启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
@@ -359,6 +373,7 @@ main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安�
 | main（文档更新） | 补充 go install 安装方式，重整首页导航、配置与功能说明 |
 | main（未发布） | 新增 k8s download/check/status 与 calico install，提供组件下载和手动 kubeadm 部署指南 |
 | main（未发布） | kubeadm prepare 自动补齐 conntrack、socat 等系统依赖；下载与安装共用经本地摘要校验的完整文件缓存 |
+| main（未发布） | 新增 openebs install：通过固定官方 Operator YAML 安装 NDM 和 Local PV，支持 Nexus 超时回退 |
 | main（未发布，MySQL） | 新增 mysql backup：本地客户端或 Docker 镜像、SQL／gzip、SHA-256 清单与可选 S3 上传；修复 Windows 挂载凭据被 MySQL 忽略，已通过 MySQL 8.4.13 指定数据隔离恢复 |
 
 新标签只有在发布流水线通过后才作为正式 Release 提供下载。下载配置见 [downloads.json](downloads.json)，代理说明见[Nexus 下载指南](docs/downloads.md)。

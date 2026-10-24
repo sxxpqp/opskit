@@ -16,6 +16,7 @@ func TestCobraCommandTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
+		"openebs install",
 		"config init", "go install", "k8s create", "k8s node", "k8s download", "k8s check", "k8s status", "calico install",
 		"kubeadm install", "kubeadm prepare", "kubeadm init", "kubeadm join",
 		"kubectl install", "docker install", "cri-dockerd install", "containerd install",

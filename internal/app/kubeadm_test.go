@@ -174,7 +174,7 @@ func TestKubeadmManifestRelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = bytes.Replace(raw, []byte(`manifest: ""`), []byte(`manifest: network.yaml`), 1)
+	raw = bytes.Replace(raw, []byte(`    manifest: ""`), []byte(`    manifest: network.yaml`), 1)
 	if err = os.WriteFile(config, raw, 0600); err != nil {
 		t.Fatal(err)
 	}

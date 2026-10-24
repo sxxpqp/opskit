@@ -173,7 +173,7 @@ func newKubeSphereCommand(parent context.Context, out, diag io.Writer) (*cobra.C
 			}
 		}
 		if len(defaults) != 1 {
-			return 2, errors.New("需要唯一默认 StorageClass；先部署并验证 OpenEBS/NFS 等存储驱动")
+			return 2, errors.New("需要唯一默认 StorageClass；使用 OpenEBS 时首次执行 opskit openebs install --set-default，并验证 PVC；已安装但未设默认时参见 docs/openebs.md 的 KubeSphere 3.x 步骤")
 		}
 		if *storageClass == "" {
 			*storageClass = defaults[0]

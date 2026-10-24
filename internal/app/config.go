@@ -57,6 +57,7 @@ type fileConfig struct {
 	SchemaVersion int                 `yaml:"schema_version"`
 	Timeout       string              `yaml:"timeout"`
 	MySQL         mysqlBackupSettings `yaml:"mysql"`
+	OpenEBS       openEBSSettings     `yaml:"openebs"`
 	Etcd          struct {
 		Endpoint  *string `yaml:"endpoint"`
 		Directory *string `yaml:"directory"`

@@ -29,6 +29,11 @@ type componentDownloadSettings struct {
 }
 
 type runtimeInstallSettings struct {
+	OpenEBS struct {
+		OperatorURL  string   `yaml:"operator_url"`
+		SHA256       string   `yaml:"sha256"`
+		FallbackURLs []string `yaml:"fallback_urls"`
+	} `yaml:"openebs"`
 	Calico struct {
 		FallbackBases []string `yaml:"fallback_bases"`
 		DownloadBase  string   `yaml:"download_base"`
