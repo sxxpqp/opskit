@@ -38,10 +38,10 @@ var commandGroupHelp = map[string]string{
 安装后根据 mirrors.go 设置当前用户的持久 GOPROXY；默认执行，--dry-run 仅预览。
 示例: opskit go install --version 1.26.2
 使用 opskit go install --help 查看参数。`,
-	"k8s": `用法: opskit k8s create|download|check|status [参数]
+	"k8s": `用法: opskit k8s create|download|check|status|diagnose [参数]
 download 只下载所选 Linux 组件，不要求 SSH/root；默认 kubeadm,kubelet,kubectl,crictl。
 --components 支持 etcd（需 --etcd-version）、calico 和运行时组件；--arch amd64|arm64。
-check 通过 SSH 只读检查部署环境；status 使用 kubeconfig 查询节点和系统 Pod。
+check 通过 SSH 只读检查部署环境；status 查询节点和系统 Pod；diagnose POD 诊断 Pod/PVC/VolumeAttachment/Longhorn。
 手动 kubeadm 流程可先 download，再自行安装组件、初始化集群，最后执行 calico install。
 相同下载目录复用完整且 SHA-256 校验通过的文件，缺失或损坏时重新下载；不跳过上游校验。
 集群名填写在配置的 k8s.name（例如 sxxpqp），不接受 create sxxpqp 这样的参数。

@@ -23,6 +23,7 @@
   <a href="#镜像源与下载">镜像源</a> ·
   <a href="#检查与备份">检查与备份</a> ·
   <a href="docs/mysql-backup.md">MySQL 备份</a> ·
+  <a href="docs/linux-capability-migration.md">Linux 能力迁移计划</a> ·
   <a href="#下载">下载</a> ·
   <a href="docs/configuration.md">配置指南</a> ·
   <a href="#近期更新">近期更新</a>
@@ -43,6 +44,7 @@ opskit 将工具安装、Kubernetes 部署、镜像源设置、健康检查和�
 | 能力 | 当前支持 |
 |---|---|
 | Kubernetes 部署 | 原生 SSH + kubeadm，单控制平面与可选工作节点、自动加入、Calico 安装及 Ready 检查 |
+| Pod / PVC 故障诊断 | 新增只读 `opskit k8s diagnose POD -n NS`，比对 Pod 节点、PVC、CSI VolumeAttachment 与 Longhorn 当前挂载位置；RBAC 不足明确报 warnings（main 开发中，尚未发布） |
 | 分步准备与诊断 | 按组件下载 Linux amd64／arm64 文件并复用校验通过的缓存、附带 kubelet systemd 配置；前置依赖自动补齐、SSH 只读预检、状态查询、Calico 独立安装 |
 | OpenEBS 存储 | 通过固定官方 3.x Operator YAML 安装 NDM 和 Local PV，校验摘要、保护已有资源、可显式设置默认 StorageClass |
 | 组件版本配套 | 按 Kubernetes 次版本选择固定运行时组合，支持显式覆盖与兼容校验 |
@@ -90,6 +92,7 @@ opskit --help
 opskit k8s create --help
 opskit k8s download --components kubeadm,kubelet,kubectl,crictl --dry-run
 opskit k8s check
+opskit k8s diagnose redis-cluster-5 -n uat --kubeconfig /path/to/kubeconfig
 opskit k8s create --dry-run
 opskit k8s create
 opskit kubectl install --version v1.24.7

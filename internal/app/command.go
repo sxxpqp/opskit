@@ -103,6 +103,7 @@ func newRootCommand(ctx context.Context, out, diag io.Writer, version string) (*
 		{"k8s", "只下载所选 Linux 组件，不安装或连接 SSH", func() (*cobra.Command, error) { return newK8sDownloadCommand(ctx, out) }},
 		{"k8s", "通过 SSH 只读检查部署目标", func() (*cobra.Command, error) { return newK8sCheckCommand(ctx, out) }},
 		{"k8s", "只读查看节点 Ready 与系统 Pod", func() (*cobra.Command, error) { return newK8sStatusCommand(ctx, out) }},
+		{"k8s", "只读诊断 Pod 容器及 PVC/Longhorn 挂载", func() (*cobra.Command, error) { return newK8sDiagnoseCommand(ctx, out) }},
 		{"calico", "在 kubeadm 集群独立安装 Calico", func() (*cobra.Command, error) { return newCalicoInstallCommand(ctx, out, diag) }},
 		{"openebs", "通过固定 Operator 清单安装 NDM 和 Local PV", func() (*cobra.Command, error) { return newOpenEBSInstallCommand(ctx, out, diag) }},
 		{"kubectl", "安装指定版本 kubectl", func() (*cobra.Command, error) { return newKubectlInstallCommand(ctx, out, diag) }},
