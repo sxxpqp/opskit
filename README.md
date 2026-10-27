@@ -23,6 +23,7 @@
   <a href="#镜像源与下载">镜像源</a> ·
   <a href="#检查与备份">检查与备份</a> ·
   <a href="docs/mysql-backup.md">MySQL 备份</a> ·
+  <a href="docs/linux-capability-migration.md">Linux 能力迁移计划</a> ·
   <a href="#下载">下载</a> ·
   <a href="docs/configuration.md">配置指南</a> ·
   <a href="#近期更新">近期更新</a>
