@@ -56,7 +56,11 @@ func TestKindInstallWithoutKubectlOrDockerStillSucceeds(t *testing.T) {
 	t.Setenv("PATH", dir)
 	var out strings.Builder
 	code, err := Run(context.Background(), []string{"kind", "install", "--version", "v0.17.0", "--bin-dir", binDir, "--link-dir", dir, "--download-dir", t.TempDir()}, &out, &out, "test")
-	if code != 0 || err != nil || !strings.Contains(out.String(), "opskit kubectl install") || !strings.Contains(out.String(), "sudo opskit docker install") {
+	dockerHint := "Docker Desktop"
+	if runtime.GOOS == "linux" {
+		dockerHint = "sudo opskit docker install"
+	}
+	if code != 0 || err != nil || !strings.Contains(out.String(), "opskit kubectl install") || !strings.Contains(out.String(), dockerHint) {
 		t.Fatal("kind installation blocked or dependency hints missing", code, err, out.String())
 	}
 }

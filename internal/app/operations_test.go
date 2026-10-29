@@ -18,6 +18,17 @@ import (
 	"time"
 )
 
+// macOS's os.TempDir traverses the system /var -> /private/var alias.
+// Use a physical fixture root so strict user-symlink checks test the intended path.
+func physicalTempDir(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestS3ReadIntegrityAndNoOverwrite(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
@@ -106,7 +117,7 @@ func createBackupFixture(t *testing.T, root, name string, created time.Time, sta
 
 func TestBackupPruneProtectsIncompleteAndLatest(t *testing.T) {
 	t.Chdir(t.TempDir())
-	root := t.TempDir()
+	root := physicalTempDir(t)
 	old := time.Now().Add(-90 * 24 * time.Hour)
 	removable := createBackupFixture(t, root, "old", old, "not-requested")
 	latest := createBackupFixture(t, root, "latest", time.Now(), "not-requested")
@@ -142,7 +153,7 @@ func TestBackupPruneProtectsIncompleteAndLatest(t *testing.T) {
 
 func TestBundleRoundTripAndRejectTraversal(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
+	root := physicalTempDir(t)
 	source := filepath.Join(root, "source")
 	os.Mkdir(source, 0700)
 	file := filepath.Join(source, "kubectl")
@@ -232,7 +243,7 @@ func TestDoctorNetworkAndRetentionConfiguration(t *testing.T) {
 	if code != 0 || err != nil || requests != 4 {
 		t.Fatal(code, err, requests, output)
 	}
-	backups := t.TempDir()
+	backups := physicalTempDir(t)
 	createBackupFixture(t, backups, "old", time.Now().Add(-72*time.Hour), "not-requested")
 	createBackupFixture(t, backups, "new", time.Now(), "not-requested")
 	code, err, output = workflowRun(t, "backup", "prune", "--config", config, "--directory", backups)
@@ -242,5 +253,29 @@ func TestDoctorNetworkAndRetentionConfiguration(t *testing.T) {
 	code, err, output = workflowRun(t, "backup", "prune", "--config", config, "--directory", backups, "--keep", "1")
 	if code != 0 || err != nil || !strings.Contains(output, `"selected":["old"]`) {
 		t.Fatal(code, err, output)
+	}
+}
+
+func TestOperationPathsRejectUserSymlinks(t *testing.T) {
+	t.Chdir(physicalTempDir(t))
+	root := physicalTempDir(t)
+	real := filepath.Join(root, "real")
+	if err := os.Mkdir(real, 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "alias")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("cannot create test symlink: %v", err)
+	}
+	task := createBackupFixture(t, real, "old", time.Now().Add(-72*time.Hour), "not-requested")
+	code, err, _ := workflowRun(t, "backup", "prune", "--directory", link, "--keep", "1", "--older-than", "24h", "--dry-run=false")
+	if code != 2 || err == nil || !strings.Contains(err.Error(), "符号链接") {
+		t.Fatal("symlink root was not rejected", code, err)
+	}
+	if _, err := os.Stat(filepath.Join(task, "snapshot.db")); err != nil {
+		t.Fatal("protected data changed", err)
+	}
+	if _, err := localBundlePath(link, "old/snapshot.db"); err == nil {
+		t.Fatal("bundle accepted a user symlink root")
 	}
 }
