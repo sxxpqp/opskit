@@ -143,8 +143,16 @@ Ubuntu/Debian:
 		if err != nil {
 			return 1, fmt.Errorf("部署锁已存在或不可写；确认没有部署运行后再处理: %w", err)
 		}
-		lock.Close()
+		lockErr := json.NewEncoder(lock).Encode(struct {
+			PID     int       `json:"pid"`
+			Created time.Time `json:"created_at"`
+			Cluster string    `json:"cluster"`
+		}{os.Getpid(), time.Now().UTC(), c.K8s.Name})
+		closeErr := lock.Close()
 		defer os.Remove(filepath.Join(output, "deploy.lock"))
+		if err := errors.Join(lockErr, closeErr); err != nil {
+			return 1, err
+		}
 		log, err := os.OpenFile(filepath.Join(output, "deploy.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return 1, err
@@ -477,6 +485,9 @@ func clusterPhase(ctx context.Context, n *connectedClusterNode, phase string, ou
 	raw, err := n.remote.Exec(ctx, true, command)
 	if len(raw) > 0 {
 		fmt.Fprintf(out, "[%s/%s] %s\n", n.host.Name, phase, redactClusterLog(string(raw)))
+	}
+	if err != nil {
+		return raw, fmt.Errorf("节点 %s，阶段 %s 失败；检查 deploy.log 和节点 systemctl/journalctl，修复后使用相同配置重跑 k8s create（不要 reset）: %w", n.host.Name, phase, err)
 	}
 	return raw, err
 }

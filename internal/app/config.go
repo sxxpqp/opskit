@@ -58,7 +58,15 @@ type fileConfig struct {
 	Timeout       string              `yaml:"timeout"`
 	MySQL         mysqlBackupSettings `yaml:"mysql"`
 	OpenEBS       openEBSSettings     `yaml:"openebs"`
-	Etcd          struct {
+	Middleware    middlewareSettings  `yaml:"middleware"`
+	KubeBlocks    kubeBlocksSettings  `yaml:"kubeblocks"`
+	Backup        struct {
+		Retention struct {
+			Keep      *int   `yaml:"keep"`
+			OlderThan string `yaml:"older_than"`
+		} `yaml:"retention"`
+	} `yaml:"backup"`
+	Etcd struct {
 		Endpoint  *string `yaml:"endpoint"`
 		Directory *string `yaml:"directory"`
 		Binary    *string `yaml:"etcdctl"`

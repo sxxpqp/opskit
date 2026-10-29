@@ -62,6 +62,10 @@ func commandConfig(f *pflag.FlagSet, path string) (fileConfig, error) {
 	}
 	c.Install.DownloadDir = resolve(c.Install.DownloadDir)
 	c.OpenEBS.Manifest = resolve(c.OpenEBS.Manifest)
+	c.Middleware.Directory = resolve(c.Middleware.Directory)
+	for i := range c.Middleware.Hosts {
+		c.Middleware.Hosts[i].PrivateKeyPath = resolve(c.Middleware.Hosts[i].PrivateKeyPath)
+	}
 	c.Kind.Kubeconfig = resolve(c.Kind.Kubeconfig)
 	resolveClusterPaths(&c.K8s, base)
 	c.projectComponents()
@@ -239,10 +243,16 @@ func newKindCommand(parent context.Context, action string, out, diag io.Writer) 
 				return 0, nil
 			}
 			if _, err = exec.LookPath("kubectl"); err != nil {
-				return 3, fmt.Errorf("kubectl dependency: %w", err)
+				return 3, fmt.Errorf("未找到 kubectl；请先执行 %s：%w", kindKubectlInstallHint(o.nodeVersion), err)
+			}
+			if _, err = exec.LookPath("docker"); err != nil {
+				return 3, fmt.Errorf("未找到 Docker；%s：%w", kindDockerInstallHint(runtime.GOOS), err)
+			}
+			if _, err = exec.LookPath(o.binary); err != nil {
+				return 3, fmt.Errorf("kind 命令 %s 不可用；请执行 opskit kind install 或用 --kind-bin 指定可执行文件：%w", o.binary, err)
 			}
 			if _, err = commandOutput(ctx, nil, "docker", "info"); err != nil {
-				return 3, err
+				return 3, fmt.Errorf("Docker 不可用；请启动 Docker 并确认当前用户可运行 docker info：%w", err)
 			}
 			if c.Versions.Kind != "" {
 				if err = verifyKind(ctx, o.binary, c.Versions.Kind); err != nil {

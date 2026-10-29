@@ -64,6 +64,7 @@ func newKindInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.
 			}
 			ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
 			defer cancel()
+			printKindDependencyHints(out, runtime.GOOS, c.Kind.Kubernetes.Version)
 			fmt.Fprintln(out, "下载目录:", *downloadDir)
 			if err := installKind(ctx, kindOptions{*version, *binDir, *base, runtime.GOOS, runtime.GOARCH, *downloadDir}, out); err != nil {
 				return err

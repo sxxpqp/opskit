@@ -209,6 +209,9 @@ func newDataCommand(ctx context.Context, command string, out, diag io.Writer) (*
 }
 
 func taskError(ctx context.Context, err error) (int, error) {
+	if err == nil {
+		return 0, nil
+	}
 	if ctx.Err() != nil {
 		return 4, ctx.Err()
 	}

@@ -164,6 +164,19 @@ func TestClusterSSHPasswordSudoWithoutHostKeyVerification(t *testing.T) {
 		}
 	}
 	bad := h
+	bad.HostKeySHA256 = ssh.FingerprintSHA256(wrong.PublicKey())
+	if client, err := dialClusterSSH(context.Background(), bad); err == nil {
+		client.Close()
+		t.Fatal("mismatched pinned host key accepted")
+	}
+	pinned := h
+	pinned.HostKeySHA256 = ssh.FingerprintSHA256(signer.PublicKey())
+	client, err := dialClusterSSH(context.Background(), pinned)
+	if err != nil {
+		t.Fatal("matching pinned host key rejected", err)
+	}
+	client.Close()
+	bad = h
 	bad.Password = "wrong-password"
 	if client, err := dialClusterSSH(context.Background(), bad); err == nil {
 		client.Close()

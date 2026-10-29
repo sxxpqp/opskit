@@ -1,0 +1,21 @@
+# Dedicated disposable validation nodes; never reuse a production machine.
+Vagrant.configure("2") do |config|
+  config.vm.box = ENV.fetch("OPSKIT_VAGRANT_BOX", "bento/ubuntu-24.04")
+  config.vm.box_version = ENV.fetch("OPSKIT_VAGRANT_BOX_VERSION", "202510.26.0")
+  config.vm.box_check_update = false
+  config.vm.box_architecture = "amd64"
+  config.vm.boot_timeout = 600
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  {"master1" => [2211, 3072], "worker1" => [2212, 4096]}.each do |name, values|
+    config.vm.define name do |node|
+      node.vm.hostname = name
+      node.vm.network "forwarded_port", guest: 22, host: values[0], id: "ssh", auto_correct: false
+      node.vm.provider "vmware_desktop" do |vmware|
+        vmware.gui = false
+        vmware.vmx["displayName"] = "opskit-e2e-" + name
+        vmware.vmx["memsize"] = values[1].to_s
+        vmware.vmx["numvcpus"] = "2"
+      end
+    end
+  end
+end

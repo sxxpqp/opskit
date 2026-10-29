@@ -35,6 +35,7 @@ func newKubeSphereCommand(parent context.Context, out, diag io.Writer) (*cobra.C
 	source := f.String("installer-source", "", "kind 安装器拉取源；清单 image 保持上游名称")
 	storageClass := f.String("storage-class", "", "指定现有 StorageClass；默认读取集群默认 SC")
 	password := f.String("password", templateDefaults.KubeSphere.Password, "初始 admin 密码；对应 k8s.kubesphere.password，不写入密码文件")
+	showPassword := f.Bool("show-password", false, "在成功摘要显示登录密码；默认隐藏")
 	dryRun := f.Bool("dry-run", false, "仅做只读预检；默认执行安装")
 	timeout := f.Duration("timeout", 45*time.Minute, "整个安装任务超时，安装器和核心服务就绪等待共用此期限")
 	bindCommand(cmd, func() (int, error) {
@@ -61,6 +62,13 @@ func newKubeSphereCommand(parent context.Context, out, diag io.Writer) (*cobra.C
 		setConfigFlag(f, "kind-bin", c.Kind.Binary)
 		setConfigFlag(f, "storage-class", c.KubeSphere.StorageClass)
 		setConfigFlag(f, "password", c.KubeSphere.Password)
+		if !explicitFlag(f, "show-password") {
+			if *kindName != "" {
+				*showPassword = c.Kind.KubeSphere.ShowPassword
+			} else {
+				*showPassword = c.K8s.KubeSphere.ShowPassword
+			}
+		}
 		if err := validateKSPassword(*password); err != nil {
 			return 2, err
 		}
@@ -258,7 +266,12 @@ func newKubeSphereCommand(parent context.Context, out, diag io.Writer) (*cobra.C
 				return 1, err
 			}
 		}
-		fmt.Fprintf(out, "KS %s 核心服务已就绪；控制台端口 30880\nAccount: admin\nPassword: %s\n", *version, *password)
+		fmt.Fprintf(out, "KS %s 核心服务已就绪；控制台端口 30880\nAccount: admin\n", *version)
+		if *showPassword {
+			fmt.Fprintf(out, "Password: %s\n", *password)
+		} else {
+			fmt.Fprintln(out, "Password: [隐藏，使用配置中的初始密码登录]")
+		}
 		return 0, kubeRun(nil, "-n", "kubesphere-system", "get", "service", "ks-console")
 	})
 	return cmd, nil

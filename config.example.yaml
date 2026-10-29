@@ -61,6 +61,54 @@ install:
   cri_dockerd:
     download_base: https://nexus.ihome.sxxpqp.top:8443/repository/raw-github
 
+# Kubernetes 中间件；需已有 Kubernetes、kubectl、Helm 3.10+ 和持久化存储。
+kubeblocks:
+  name: opskit-ha
+  namespace: middleware  # 先创建业务 namespace；不使用 default/kube-system/Operator namespace
+  operator_namespace: kb-system
+  engine: redis  # mysql / redis / minio
+  storage_class: openebs-hostpath  # 必须显式选择；Local PV 不提供跨节点卷副本
+  storage_size: 10Gi
+  allow_colocation: false  # 仅实验可设 true；默认每实例独占一个调度节点（MySQL 3、Redis 6、MinIO 4）
+  crds:
+    url: https://github.com/apecloud/kubeblocks/releases/download/v1.0.2/kubeblocks_crds.yaml
+    sha256: 95dab292d5e9c55547bae1eeddbc7ac66e9e823b36b9026f62860ef0be354885
+  chart:
+    url: https://github.com/apecloud/helm-charts/releases/download/kubeblocks-1.0.2/kubeblocks-1.0.2.tgz
+    sha256: c57e67cf832f6d771c98d090c94987ac1fbccb1143ff181fa14e9c35cf0b468e
+  minio_addon:
+    url: https://github.com/apecloud/helm-charts/releases/download/minio-1.0.2/minio-1.0.2.tgz
+    sha256: bc6b97b448b8b3fb49ce3f8cef7b8660bef1e3f5d085e01464d3e1c1cdd513ae
+  mysql: {component_def: mysql-8.0-1.0.2, version: "8.0.33", cpu: 500m, memory: 1Gi, limit_cpu: "2", limit_memory: 2Gi}
+  redis: {component_def: redis-cluster-7-1.0.2, version: "7.2.4", cpu: 100m, memory: 256Mi, limit_cpu: "1", limit_memory: 512Mi}
+  minio: {component_def: minio-1.0.2, version: "2025.10.15", cpu: 250m, memory: 512Mi, limit_cpu: "2", limit_memory: 1Gi}
+
+# 高可用中间件。docker 是单 Engine 容器验证；ssh 分发到不同 Linux 主机。
+middleware:
+  name: opskit-ha
+  engine: redis  # mysql / redis / minio
+  driver: docker  # ssh 需预先安装 Docker Engine + Compose
+  directory: ""  # 默认 ~/.opskit/middleware/<name>-<engine>
+  docker_context: ""  # Windows Docker Desktop 可填 desktop-linux
+  bind_address: 127.0.0.1
+  publish_port: 0  # 0 不发布；MySQL Router 映射到 6446，MinIO API 映射到 9000
+  hosts: []  # ssh：MySQL/Redis 填 3 台，MinIO 填 4 台；结构同 k8s.hosts，internalAddress 须互异 IPv4
+  mysql:
+    image: docker.io/library/mysql:8.4.13
+    # 固定摘要的 MySQL Shell 8.4.0 与 Router 8.4.0；operator 镜像仅运行 mysqlsh 工具，不安装 K8s Operator。
+    shell_image: container-registry.oracle.com/mysql/community-operator@sha256:45ab367f3b23e0cee4084b1ddd7300bb61051dd0d63c33b90a54d701f1e52c2d
+    router_image: container-registry.oracle.com/mysql/community-router@sha256:290d775128c84ad45d4b3158c0abd7b1244a8214d77c376b6ae959017cbd2b40
+    password_env: OPSKIT_MYSQL_CLUSTER_PASSWORD
+  redis:
+    image: docker.io/library/redis:7.2.4
+    password_env: OPSKIT_REDIS_CLUSTER_PASSWORD
+  minio:
+    # linux 归档镜像，实际版本 RELEASE.2025-02-18T16-25-55Z；入口 HAProxy 3.0.30。
+    image: registry.cn-hangzhou.aliyuncs.com/sxxpqp/minio@sha256:5c1e0c9ca1c34b1f2a0f66345f5e2acd2efe98b3aa91089b5cf8ff08b593cda7
+    frontend_image: docker.io/library/haproxy@sha256:a3cab19c5e90029af254785f8586ec4cc6635738cd3f38ef030b86ebe6be1f7c
+    username: opskitadmin
+    password_env: OPSKIT_MINIO_CLUSTER_PASSWORD
+
 # 独立 Go SDK 版本；安装后使用 mirrors.go 配置当前用户 GOPROXY。
 go:
   version: 1.26.2
@@ -111,9 +159,11 @@ k8s:
     enabled: false
     version: v3.4.1
     password: Sxxpqp.top1
+    showPassword: false  # 成功摘要默认隐藏密码；显式 true 或 --show-password 才显示
     storageClass: ""
     installerSource: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
   # SSH 与 KK 一样直接使用配置凭据连接，不校验主机指纹、不读取 known_hosts。
+  # 可在每个 hosts 条目设置 hostKeySHA256: "SHA256:..." 固定校验该节点指纹；留空保持直接连接。
   deploy:
     concurrency: 3
     timeout: 45m
@@ -129,6 +179,7 @@ kind:
     enabled: false
     version: v3.4.1
     password: Sxxpqp.top1
+    showPassword: false
     storageClass: ""
     installerSource: registry.cn-beijing.aliyuncs.com/kubesphereio/ks-installer:v3.4.1
   name: kubesphere-341  # kind create/delete 等命令共用，--name 可覆盖
@@ -194,6 +245,12 @@ mirrors:
 # 整个任务的总期限；备份包含快照 + 校验 + 上传。支持 30s、10m、1h 等。
 # 检查任务也会读取此值；建议运行 s3 check --timeout 15s / etcd check --timeout 30s。
 timeout: 1h
+
+# 独立清理命令 backup prune 读取此策略；备份任务本身不自动删除文件。
+backup:
+  retention:
+    keep: 7  # 至少保留最新完整备份；不允许少于 1
+    older_than: 720h  # 同时超过份数和此时长才进入清理计划，默认仅预览
 
 etcd:
   # 备份使用单个客户端 API 地址，端口通常为 2379；不要使用 peer 端口 2380。

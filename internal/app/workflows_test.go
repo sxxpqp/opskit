@@ -41,6 +41,14 @@ func fakeWorkflowTool() {
 		}
 	}
 	if name == "docker" {
+		if strings.HasSuffix(args, "opskit-middleware-env-probe") {
+			fmt.Print("internal=" + os.Getenv("OPSKIT_CLUSTER_PASSWORD"))
+			os.Exit(0)
+		}
+		if args == "info" && os.Getenv("OPSKIT_FAKE_DOCKER_UNAVAILABLE") == "1" {
+			fmt.Fprintln(os.Stderr, "Cannot connect to the Docker daemon")
+			os.Exit(1)
+		}
 		if os.Getenv("OPSKIT_FAKE_CRI_DELAY") == "yes" && strings.Contains(args, "crictl --timeout=5s") {
 			marker := filepath.Join(dir, "cri-first-check")
 			if _, err := os.Stat(marker); os.IsNotExist(err) {
@@ -328,8 +336,12 @@ func TestKubeSpherePreflightDefaultInstallAndProtection(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatal(code, err, text)
 	}
-	if !strings.Contains(text, "Account: admin\nPassword: ConfigPassword123!\n") {
-		t.Fatal("login summary missing configured password")
+	if !strings.Contains(text, "Account: admin") || strings.Contains(text, "ConfigPassword123!") {
+		t.Fatal("login summary did not hide configured password")
+	}
+	showCode, showErr, shown := workflowRun(t, append(args, "--show-password")...)
+	if showCode != 0 || showErr != nil || !strings.Contains(shown, "Password: ConfigPassword123!") {
+		t.Fatal(showCode, showErr, shown)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "applied.yaml"))
 	if !strings.Contains(string(raw), "openebs-hostpath") {

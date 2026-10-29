@@ -22,6 +22,20 @@ const commandHelpTemplate = `用法: {{if .HasAvailableSubCommands}}{{.CommandPa
 `
 
 var commandGroupHelp = map[string]string{
+	"kubeblocks": `用法: opskit kubeblocks install|render|deploy|status [参数]
+固定版 KubeBlocks Operator 与 MySQL/Redis/MinIO addon；下载源和摘要统一在 kubeblocks。
+install 仅首次安装，拒绝接管已有 CRD；需要 kubectl 和 Helm 3.10+。
+deploy 创建保护删除的 Cluster，要求 namespace 与显式 StorageClass 已存在，不自动升级或扩缩容。
+默认 required 反亲和；实验环境可显式 allow_colocation，但不代表主机故障隔离。
+Operator 生成 Secret，命令不输出凭据；status 检查控制器/Pod/PVC，业务验收另行执行。
+示例: opskit kubeblocks deploy --engine redis --dry-run`,
+	"middleware": `用法: opskit middleware render|deploy|status|recover [参数]
+首批组件: mysql（三节点 InnoDB Cluster + Router）、redis（三主三从）、minio（四节点 + HAProxy）。
+配置读取 middleware，镜像与各组件密码环境变量集中在模板。
+driver=docker 用于单宿主机容器故障验证；driver=ssh 分发到不同 Linux 主机。
+deploy 默认执行，--dry-run 不读取秘密或连接节点；render 只生成 Docker 资料。
+recover 仅用于 MySQL 完整停机，检查所有成员/GTID，不使用 force。
+示例: opskit middleware deploy --engine redis --dry-run`,
 	"openebs": `用法: opskit openebs install [参数]
 通过官方 3.x Operator YAML 安装 NDM 和 Local PV，固定 openebs namespace。
 为 KubeSphere v3.4.1 准备存储时，首次安装加 --set-default，之后执行 kubesphere install。
@@ -84,6 +98,7 @@ init 初始化单控制平面；join 加入工作节点。均拒绝覆盖已有�
   opskit kubectl install --dry-run
 使用 opskit kubectl install -h 或 --help 查看完整参数。`,
 	"kind": `用法: opskit kind <命令> [参数]
+install 发现缺少 kubectl 或 Docker 时会提示安装命令；创建集群前请完成配套工具安装。
 
 示例:
   opskit kind install --version v0.17.0
@@ -132,6 +147,17 @@ Docker 模式仅需可用的本机 Linux Docker 引擎；--docker-network 选择
 示例: opskit mysql backup --database app --dry-run
 详细参数: opskit mysql backup --help`,
 	"s3": `用法: opskit s3 <命令> [参数]
-命令: upload（上传文件） | check（连通性检查）
+命令: upload（上传） | check（只读 HEAD 检查） | list（列举） | download（下载并校验） | verify（完整回读校验）
+download / verify 需要 --key；download 还需 --file，拒绝覆盖。优先使用 --sha256，否则使用对象元数据摘要。
 示例: opskit s3 upload --help`,
+	"backup": `用法: opskit backup verify|prune [参数]
+verify --directory 指向单个备份任务，检查 manifest、大小和 SHA-256。
+prune --directory 指向备份根目录，读取 backup.retention；默认只预览。
+--dry-run=false 才清理；保留最新 keep 份，且仅选择超出 older-than 的完整任务。
+上传失败、损坏、含额外文件或链接的任务受保护；不删除远端对象。`,
+	"bundle": `用法: opskit bundle export|import|verify [参数]
+export --directory 指向 k8s download 完成目录，--file 指定 tar.gz；可附带 --image-archive 和 --package-file。
+import --file 指向归档，--directory 必须尚不存在；校验摘要后发布目录。
+verify 检查已导入目录中的文件是否缺失或损坏。
+不自动解析或安装系统包与镜像；离线使用须自行准备目标环境所需依赖。`,
 }

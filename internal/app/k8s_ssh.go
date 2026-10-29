@@ -92,7 +92,16 @@ func dialClusterSSH(ctx context.Context, h clusterHost) (clusterRemote, error) {
 	_ = conn.SetDeadline(deadline)
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	clientConn, channels, requests, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{User: h.User, Auth: methods, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second})
+	hostKey := ssh.InsecureIgnoreHostKey()
+	if h.HostKeySHA256 != "" {
+		hostKey = func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			if ssh.FingerprintSHA256(key) != h.HostKeySHA256 {
+				return fmt.Errorf("%s: SSH 主机指纹与 hostKeySHA256 不匹配", h.Name)
+			}
+			return nil
+		}
+	}
+	clientConn, channels, requests, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{User: h.User, Auth: methods, HostKeyCallback: hostKey, Timeout: 15 * time.Second})
 	if err != nil {
 		conn.Close()
 		if agentConn != nil {

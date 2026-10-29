@@ -17,3 +17,4 @@ __pycache__/
 
 /.opskit/
 .vscode/
+/scripts/e2e/.vagrant/

@@ -19,6 +19,7 @@ type sphereSettings struct {
 	StorageClass    string `yaml:"storageClass" json:"storageClass"`
 	InstallerSource string `yaml:"installerSource" json:"installerSource"`
 	Password        string `yaml:"password" json:"password"`
+	ShowPassword    bool   `yaml:"showPassword" json:"showPassword"`
 }
 type clusterHost struct {
 	Name                    string `yaml:"name" json:"name"`
@@ -29,6 +30,7 @@ type clusterHost struct {
 	Password                string `yaml:"password" json:"-"`
 	PasswordEnv             string `yaml:"passwordEnv" json:"-"`
 	PrivateKeyPath          string `yaml:"privateKeyPath" json:"-"`
+	HostKeySHA256           string `yaml:"hostKeySHA256" json:"-"`
 	PrivateKeyPassphraseEnv string `yaml:"privateKeyPassphraseEnv" json:"-"`
 	SudoPassword            string `yaml:"sudoPassword" json:"-"`
 	SudoPasswordEnv         string `yaml:"sudoPasswordEnv" json:"-"`
