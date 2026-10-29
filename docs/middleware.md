@@ -1,4 +1,4 @@
-# 高可用中间件部署（main，未发布）
+# 高可用中间件部署（v0.1.15）
 
 本轮接入 MySQL InnoDB Cluster、Redis Cluster 和分布式 MinIO，参考 linux 项目的对应 Docker/裸机方案，重新实现 YAML 配置、资料生成、部署和状态检查。不会下载执行 linux 仓库的交互脚本，不读取其生产凭据，也不沿用其中的真实服务器地址。
 

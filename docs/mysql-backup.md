@@ -1,6 +1,6 @@
 # MySQL 逻辑备份
 
-当前 main 提供 `opskit mysql backup`，尚未发布。保留本地官方 `mysql` 与 `mysqldump` 方式，也支持在 MySQL Docker 镜像内运行客户端，免装本地数据库客户端。以单库或多库为单位流式导出，不包含物理/增量备份、binlog 归档、复制拓扑恢复或自动清理。
+v0.1.15 提供 `opskit mysql backup`。保留本地官方 `mysql` 与 `mysqldump` 方式，也支持在 MySQL Docker 镜像内运行客户端，免装本地数据库客户端。以单库或多库为单位流式导出，不包含物理/增量备份、binlog 归档、复制拓扑恢复或自动清理。
 
 ## 快速使用
 

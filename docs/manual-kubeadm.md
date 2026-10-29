@@ -1,6 +1,6 @@
 # 组件下载与手动 kubeadm 部署
 
-当前 main 提供分步入口，可只准备组件，再自行运行 kubeadm；完整自动部署仍使用 `opskit k8s create`。这些新增入口尚未发布，版本与下载入口以 README 正式 Release 为准。
+v0.1.15 提供分步入口，可只准备组件，再自行运行 kubeadm；完整自动部署仍使用 `opskit k8s create`。版本与下载入口见 README 正式 Release。
 
 ## 命令分工
 

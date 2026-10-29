@@ -1,4 +1,4 @@
-# KubeBlocks 中间件（main，未发布）
+# KubeBlocks 中间件（v0.1.15）
 
 Kubernetes 路线参考 linux 项目的 KubeBlocks v1 资源，提供 MySQL 半同步三副本、Redis 三分片各两副本、MinIO 四副本。Docker／裸机路线另见[中间件指南](middleware.md)。此处不执行参考仓库脚本，不读取生产地址或凭据。
 

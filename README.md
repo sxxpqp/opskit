@@ -35,7 +35,7 @@
 <!-- LATEST_RELEASE_START -->
 **当前最新正式版：[v0.1.15](https://github.com/sxxpqp/opskit/releases/tag/v0.1.15)**
 
-新版本已发布，详细变化见对应 Release 说明。
+MySQL／Redis／MinIO 的 Docker/SSH 与 KubeBlocks 部署；环境诊断、统一 JSON、S3 内容校验、备份保留与离线归档；组件缓存、OpenEBS 和 MySQL 备份。
 
 → [选择系统与架构下载](#下载) · [使用 Nexus 备用入口](#下载) · [查看近期更新](#近期更新)
 <!-- LATEST_RELEASE_END -->
@@ -74,7 +74,7 @@ opskit version
 opskit config init
 ```
 
-`@latest` 安装 Go 模块解析到的最新可用版本，并非 main 分支。固定版本安装可使用 `@v0.1.13`。后续更新可再次执行安装命令。
+`@latest` 安装 Go 模块解析到的最新可用版本，并非 main 分支。固定版本安装可使用 `@v0.1.15`。后续更新可再次执行安装命令。
 
 命令安装到 `go env GOBIN` 指定目录；未设置时使用 `go env GOPATH` 下的 `bin`（通常为 `~/go/bin`，Windows 为 `%USERPROFILE%\go\bin`），请将其加入 PATH。Go 构建需能访问模块源及依赖。
 
@@ -191,7 +191,7 @@ Linux 同架构管理机可分发当前 opskit；macOS／Windows 或异构管理
 
 `opskit kubeadm install|prepare|init|join` 为本地维护入口，具体操作与参数见[部署指南](docs/configuration.md#k8s-ssh-集群部署)。K8s v1.24.7 + containerd v1.7.28 + Calico v3.26.5 已通过 Ubuntu 单节点自动部署、续跑、DNS、Service 和同节点网络策略测试，详见[验收记录](docs/k8s-validation-2026-10-24.md)；两节点同组合结果见[补充验收记录](docs/validation-2026-10-28.md)；其他版本组合与生产恢复仍需验收。
 
-### OpenEBS Operator 存储安装（main，未发布）
+### OpenEBS Operator 存储安装（v0.1.15）
 
 用于为 KubeSphere v3.4.1 准备存储时，首次安装 OpenEBS 加 `--set-default`，再执行 `opskit kubesphere install --version v3.4.1 --storage-class openebs-hostpath`。完整预检与已安装 OpenEBS 的处理步骤见[衔接指南](docs/openebs.md#为-kubesphere-3x-准备存储)。
 
@@ -272,7 +272,7 @@ opskit kubesphere install --version v3.4.1 --kind kubesphere-341
 
 安装 kind 时会检查 PATH 中的 kubectl 和 Docker，缺少时给出安装指引，kind 自身仍可先安装。kubectl 提示使用配置的 `kind.kubernetes.version`（有配置时）；例如 `opskit kubectl install --version v1.24.7`。Linux 的 Docker 可通过 `sudo opskit docker install` 安装（用 `--help` 查看版本等参数），Windows/macOS 可使用 Docker Desktop 的 Linux 容器。创建集群时缺少 kubectl、Docker 或 kind 会返回带安装指令的依赖错误；自定义 kind 路径不可用时会显示该路径，并提示通过 `--kind-bin` 修正。Docker 不可用时提示启动并用 `docker info` 检查，保留原始错误便于排查。`kind create --dry-run` 不要求已安装这些工具。
 
-## 高可用中间件（main，未发布）
+## 高可用中间件（v0.1.15）
 
 新增 `opskit middleware render/deploy/status/recover`，参考 linux 项目的 Docker／裸机集群方案，使用统一 `middleware` YAML 配置。`docker` 模式在单 Engine 内验证进程故障，`ssh` 模式分发到不同 Linux 主机；本轮实际 Docker 故障和恢复结果见[验收记录](docs/middleware-validation-2026-10-28.md)。镜像、各组件密码环境变量和多主机示例见[使用指南](docs/middleware.md)。
 
@@ -349,7 +349,7 @@ etcdutl snapshot restore ./snapshot.db --data-dir ./restore-test
 
 Vagrant 中已验证独立 etcd 的备份、S3 上传／下载后隔离恢复及两条合成数据的读回；该结果不等于生产 Kubernetes 的 etcd 灾难恢复验收。配置与凭据说明见[配置指南](docs/configuration.md)。SSH 部署日志不按密码内容全局替换，版本号和 IP 会正常显示；加入 token 仍脱敏，日志若包含命令自身输出的敏感内容需自行保护。
 
-当前 main 的 `doctor`、`backup verify/prune`、`bundle export/import/verify` 和 `s3 list/download/verify` 使用方法见[运维与离线交付指南](docs/operations.md)。`backup prune` 默认只预览，不随备份自动清理；离线归档不自动解析镜像和系统软件包依赖，也不自动安装。`--output json` 为各命令提供统一结果封装，原生 JSON 放入 `result`，文本日志放入 `log`，诊断仍写 stderr。
+v0.1.15 的 `doctor`、`backup verify/prune`、`bundle export/import/verify` 和 `s3 list/download/verify` 使用方法见[运维与离线交付指南](docs/operations.md)。`backup prune` 默认只预览，不随备份自动清理；离线归档不自动解析镜像和系统软件包依赖，也不自动安装。`--output json` 为各命令提供统一结果封装，原生 JSON 放入 `result`，文本日志放入 `log`，诊断仍写 stderr。
 
 ## 下载
 
@@ -382,7 +382,7 @@ Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首�
 
 自动化已覆盖版本解析、配置优先级、下载摘要、临时网关错误重试、Calico 备用源、SSH／sudo 和部署编排，CI 配置在 Ubuntu、Windows、macOS 执行 `go vet ./...` 与 `go test -race ./...`。单节点实际结果不等于完整生产验收，新运行时组合和多机部署仍需验证。
 
-main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安装及 MySQL 备份有自动化回归覆盖。Ubuntu 单节点已验证 9 个组件下载、自动部署与续跑、手动 kubeadm 初始化和独立 Calico 安装，以及 DNS／Service／同节点网络策略，详见[Kubernetes 验收记录](docs/k8s-validation-2026-10-24.md)。MySQL 镜像方式已在 Windows Docker Desktop + MySQL 8.4.13 验证 gzip／SQL、多库、文件摘要、真实 CA、错误 CA 拒绝和隔离恢复的数据及对象行为，详见[MySQL 验收记录](docs/mysql-validation-2026-10-22.md)；其他 MySQL 组合仍待验收。
+v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装及 MySQL 备份有自动化回归覆盖。Ubuntu 单节点已验证 9 个组件下载、自动部署与续跑、手动 kubeadm 初始化和独立 Calico 安装，以及 DNS／Service／同节点网络策略，详见[Kubernetes 验收记录](docs/k8s-validation-2026-10-24.md)。MySQL 镜像方式已在 Windows Docker Desktop + MySQL 8.4.13 验证 gzip／SQL、多库、文件摘要、真实 CA、错误 CA 拒绝和隔离恢复的数据及对象行为，详见[MySQL 验收记录](docs/mysql-validation-2026-10-22.md)；其他 MySQL 组合仍待验收。
 
 - [x] Ubuntu 单节点 Kubernetes v1.24.7 + containerd v1.7.28 自动部署、DNS、Service 和同节点网络策略验收
 - [x] 同组合的手动 kubeadm 初始化、Calico 独立安装及归属 / CIDR / 已有 CNI 保护
@@ -407,18 +407,10 @@ main 新增的组件独立下载、SSH 预检、状态查询、Calico 独立安�
 
 | 功能版本 | 变化 |
 |---|---|
-| [v0.1.15](https://github.com/sxxpqp/opskit/releases/tag/v0.1.15) | 新版本已发布，详细变化见对应 Release 说明 |
+| [v0.1.15](https://github.com/sxxpqp/opskit/releases/tag/v0.1.15) | MySQL／Redis／MinIO 的 Docker/SSH 与 KubeBlocks 部署；环境诊断、统一 JSON、S3 内容校验、备份保留与离线归档；组件缓存、OpenEBS 和 MySQL 备份 |
 | [v0.1.13](https://github.com/sxxpqp/opskit/releases/tag/v0.1.13) | Kubernetes 组件自动配套、前置依赖自动安装、sudo 复用 SSH 密码、同版本 kubectl 复用、CoreDNS 路径修复、Calico 备用源、502/503/504 重试及 Go 阿里云下载源 |
 | [v0.1.12](https://github.com/sxxpqp/opskit/releases/tag/v0.1.12) | 历史发布详情见 Release 说明 |
 | [v0.1.11](https://github.com/sxxpqp/opskit/releases/tag/v0.1.11) | 历史发布详情见 Release 说明 |
-| main（文档更新） | 补充 go install 安装方式，重整首页导航、配置与功能说明 |
-| main（未发布） | 新增 k8s download/check/status 与 calico install，提供组件下载和手动 kubeadm 部署指南 |
-| main（未发布） | kubeadm prepare 自动补齐 conntrack、socat 等系统依赖；下载与安装共用经本地摘要校验的完整文件缓存 |
-| main（未发布） | 新增 openebs install：通过固定官方 Operator YAML 安装 NDM 和 Local PV，支持 Nexus 超时回退 |
-| main（未发布） | kind 安装时提示缺少的 kubectl／Docker 及安装方式；创建集群时给出可操作的依赖错误 |
-| main（未发布） | 新增 doctor、统一 JSON 结果、S3 列举／下载／回读校验、本地备份校验与保留清理、离线归档；可选 SSH 指纹校验与 KS 摘要密码显示；完成 Vagrant 两节点与合成数据恢复验证 |
-| main（未发布） | 新增 MySQL／Redis／MinIO 的 Docker/SSH 部署、MySQL 显式完整停机恢复，以及 KubeBlocks Operator 安装和持久化 Cluster 管理；[指南](docs/kubeblocks.md) |
-| main（未发布，MySQL） | 新增 mysql backup：本地客户端或 Docker 镜像、SQL／gzip、SHA-256 清单与可选 S3 上传；修复 Windows 挂载凭据被 MySQL 忽略，已通过 MySQL 8.4.13 指定数据隔离恢复 |
 
 新标签只有在发布流水线通过后才作为正式 Release 提供下载。下载配置见 [downloads.json](downloads.json)，代理说明见[Nexus 下载指南](docs/downloads.md)。
 

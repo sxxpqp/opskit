@@ -1,6 +1,6 @@
 # OpenEBS Operator 安装
 
-main 提供 `opskit openebs install`，尚未发布。使用 kubectl 应用官方 3.x `openebs-operator.yaml`，不需要 Helm 或 OLM。
+v0.1.15 提供 `opskit openebs install`。使用 kubectl 应用官方 3.x `openebs-operator.yaml`，不需要 Helm 或 OLM。
 
 ## 安装范围
 

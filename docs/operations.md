@@ -1,6 +1,6 @@
 # 诊断、备份校验与离线交付
 
-本文对应 main 的未发布功能。正式下载版本以 README 的 Release 链接为准。真实验证范围见[2026-10-28 验收记录](validation-2026-10-28.md)。
+本文对应 [v0.1.15](https://github.com/sxxpqp/opskit/releases/tag/v0.1.15) 新增功能。正式下载版本以 README 的 Release 链接为准。真实验证范围见[2026-10-28 验收记录](validation-2026-10-28.md)。
 
 ## 环境诊断
 

@@ -1,6 +1,6 @@
 # 统一配置与生产模板
 
-main 分支默认读取 `config/config.yaml`，通过 `opskit config init` 创建；正式版 v0.1.5 仍使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
+v0.1.15 默认读取 `config/config.yaml`，通过 `opskit config init` 创建；历史版本 v0.1.5 使用 `opskit.yaml`。默认文件不存在时回退读取旧 `./opskit.yaml`，两份文件不会合并；显式 `--config FILE` 不回退。各相对路径始终基于实际配置文件所在目录，因此迁移旧配置时请核对相对路径。
 
 版本按安装类型隔离：Go SDK 使用 `go.version`，kind 使用 `kind.version` / `kind.kubernetes.version`，K8s 使用 `k8s.kubernetes.version` 自动选择固定组件版本，组件 version 为可选覆盖；镜像源集中在 `mirrors.docker` / `containerd` / `go` / `npm` / `pip` / `maven`。安装或创建命令的 `--version` 覆盖对应版本项。kind 名称、worker 数量、kubeconfig、工具路径和映射端口放在 `kind` 下；KS 存储和初始密码放在 `kind.kubesphere` / `k8s.kubesphere` 下。完整带注释模板见 `config.example.yaml`。
 
@@ -91,7 +91,7 @@ Docker 方式要求本机可用的 Linux Docker 引擎及可挂载的本地目�
 
 ```sh
 ./opskit config init
-# main：确认 config/config.yaml 中地址、证书路径正确，且 etcdctl 已安装：
+# v0.1.15：确认 config/config.yaml 中地址、证书路径正确，且 etcdctl 已安装：
 ./opskit etcd backup
 ```
 
@@ -230,7 +230,7 @@ s3:
 
 `kind.kubeconfig`、`kind.binary`、KS storageClass 留空属于自动定位行为，不是缺失默认值。生成对照模板可使用 `opskit config init --config config/config.new.yaml`，不会自动覆盖已有生产配置。
 
-## 运行时版本与安装源（main，未发布）
+## 运行时版本与安装源（v0.1.15）
 
 Docker 的 script/binary 安装均自动配置 inotify：备份后更新 `/etc/sysctl.d/99-inotify.conf`，保留其他配置，将 `fs.inotify.max_user_instances` 设置为至少 8192、`fs.inotify.max_user_watches` 至少 524288。已有运行值或该文件中更高的持久值不会降低。使用 `sysctl -p /etc/sysctl.d/99-inotify.conf` 应用并回读确认；失败返回错误，不继续启动安装。下载与包校验失败不会写此配置，`--dry-run` 也不修改内核参数。已有 Docker 的拒绝覆盖规则保持不变；此前安装的主机需手动应用，宿主机限制应在宿主机设置。
 
@@ -252,7 +252,7 @@ kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常
 
 `kind create` 默认执行创建，版本仍由 `kind.kubernetes.version` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群默认执行，集群名按 `--name` > `OPSKIT_KIND_NAME` > `kind.name` > 默认值解析，无需重复确认名称，`--dry-run` 仅预览。
 
-## kubectl 安装（main，未发布）
+## kubectl 安装（v0.1.15）
 
 OpenEBS 的 Operator 安装入口为 `opskit openebs install`。下载地址与摘要读取 `install.openebs.operator_url`／`sha256`，统一缓存读取 `install.download_dir`；`openebs.manifest` 可指定本地文件，`openebs.set_default` 控制是否显式设置默认存储类。参数、优先级和安装边界见[OpenEBS 指南](openebs.md)。
 
@@ -633,11 +633,11 @@ v1.24.7 + containerd v1.7.28 + runc v1.3.3 已完成 Ubuntu 单节点和 Vagrant
 安装文件下载遇到 HTTP 502/503/504 时自动重试，最多共 3 次，间隔 2 秒、4 秒，受命令总超时约束；404、认证失败、文件传输中断和摘要不匹配不自动重试，避免拼接损坏文件。持续 504 仍需检查 Nexus 回源与反向代理超时；安装器不会绕过 SHA-256 校验或擅自换版本。
 
 
-## 诊断、备份保留与离线归档（main，未发布）
+## 诊断、备份保留与离线归档（v0.1.15）
 
 新增命令、backup.retention 配置、hostKeySHA256 与 showPassword 开关见[运维与离线交付指南](operations.md)。S3 下载沿用本指南的 s3.provider／endpoint，不新增散落下载地址。
 
-## 高可用中间件（main，未发布）
+## 高可用中间件（v0.1.15）
 
 `middleware` 统一管理中间件名称、引擎、Docker/SSH 驱动、主机、镜像、密码环境变量与发布入口。支持 MySQL、Redis、MinIO；CLI `--engine`／`--driver`／`--directory`／`--docker-context` 覆盖 YAML。`hosts` 私钥相对路径按本配置文件目录解析，SSH 凭据不复用 k8s.hosts，密码变量仅影响所选组件。
 
