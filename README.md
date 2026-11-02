@@ -302,6 +302,8 @@ opskit mirror maven
 
 镜像源统一读取顶层 `mirrors`。containerd 保留各 registry 的 endpoint、路径和 TLS 设置；Docker 使用 `mirrors.docker`／`docker_insecure_registries`。`k8s.registry.imageRepository` 仅指定 kubeadm 系统镜像仓库，不替代运行时代理配置。
 
+默认 Docker Hub 代理为 `https://hub.sxxpqp.top`；containerd 的 Docker Hub／GHCR／Quay／registry.k8s.io 分别使用该域名下的 `/v2/dockerhub`、`/v2/ghcr`、`/v2/quay`、`/v2/k8s`，开启证书校验。用户已在 kind worker 完成四个源的拉取验证；旧 `k8s.gcr.io` 映射保留，未单独验收。模板更新不会覆盖已有 `config/config.yaml`，现有用户需按模板更新 `mirrors` 后执行 mirror。
+
 mirror 默认备份后写入。标准 Linux Docker 配置写入后自动重启并检查服务；宿主机 containerd 单独执行 mirror 后需安排重启，`k8s create` 会自动重启选定运行时。kind 节点逐台重启并检查 CRI。Go／npm／pip／Maven 配置不会改写当前终端的环境变量。
 
 安装文件源统一由 `install.<组件>` 配置，CLI 或组件环境变量可覆盖。模板的 Go SDK 包使用阿里云源、校验元数据使用 Go 官方地址；Kubernetes 二进制和 GitHub 发布包使用现有 Nexus 代理。内网地址需当前环境可达，Nexus 是上游代理缓存，首次请求可能回源。

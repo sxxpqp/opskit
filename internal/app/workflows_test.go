@@ -577,11 +577,16 @@ func TestProjectTemplateDefaultsAreUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Mirrors.Docker) != 2 || len(c.Mirrors.Containerd) != 6 || len(c.Mirrors.DockerInsecure) != 4 {
+	if len(c.Mirrors.Docker) != 1 || c.Mirrors.Docker[0] != "https://hub.sxxpqp.top" || len(c.Mirrors.Containerd) != 6 || len(c.Mirrors.DockerInsecure) != 0 {
 		t.Fatal("project runtime defaults missing")
 	}
-	if c.Mirrors.Containerd["docker.io"].Endpoint != "https://huball.ihome.sxxpqp.top:8443/v2/dockerhub" {
-		t.Fatal("wrong dockerhub endpoint")
+	for registry, path := range map[string]string{
+		"docker.io": "dockerhub", "registry.k8s.io": "k8s", "k8s.gcr.io": "k8s", "quay.io": "quay", "ghcr.io": "ghcr",
+	} {
+		mirror := c.Mirrors.Containerd[registry]
+		if mirror.Endpoint != "https://hub.sxxpqp.top/v2/"+path || mirror.SkipVerify || !mirror.OverridePath {
+			t.Fatalf("wrong proxy path or TLS settings for %s: %+v", registry, mirror)
+		}
 	}
 	if c.Mirrors.Containerd["registry.cn-hangzhou.aliyuncs.com"].Endpoint != "" {
 		t.Fatal("ACR should stay direct")
@@ -621,7 +626,8 @@ func TestDockerInsecureMerge(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "config.yaml")
 	target := filepath.Join(dir, "daemon.json")
-	if err := os.WriteFile(config, templates.ConfigTemplate, 0600); err != nil {
+	body := []byte("schema_version: 1\nmirrors:\n  docker: [\"https://docker.example\"]\n  docker_insecure_registries: [\"dockerhub.ihome.sxxpqp.top:8443\", \"custom.internal:5000\"]\n")
+	if err := os.WriteFile(config, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	old := []byte(`{"log-driver":"local","insecure-registries":["existing.internal:5000","dockerhub.ihome.sxxpqp.top:8443"]}`)
@@ -638,7 +644,7 @@ func TestDockerInsecureMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := data["insecure-registries"].([]any)
-	if len(items) != 5 || data["log-driver"] != "local" {
+	if len(items) != 3 || data["log-driver"] != "local" {
 		t.Fatal(string(raw))
 	}
 }

@@ -194,45 +194,39 @@ kind:
   http_port: 80
   https_port: 443
 
-# 项目镜像源基线：迁移自 linux/docker/containerd/mirrors.sh、docker/docker-mirror.sh
-# 以及 docs/infra-reference.md、aliyun-mirrors.md；内网地址需要运行环境可达。
-# k8s create 也直接读取此处：Docker 用 docker/docker_insecure_registries，containerd 用 containerd；没有第二套 registryMirrors。
-# 默认备份并写入，--dry-run 仅预览；标准 Docker 配置写入后自动重启服务；容器清单保持上游 image。
+# 镜像代理统一使用 opskit-mirror；容器清单保持上游 image。
+# k8s create 也直接读取此处：Docker 用 docker/docker_insecure_registries，containerd 用 containerd。
+# 默认备份并写入，--dry-run 仅预览；标准 Docker 配置写入后自动重启服务。
 mirrors:
   docker:
-    - https://index.dockerhub.sxxpqp.top
-    - https://dockerhub.ihome.sxxpqp.top:8443
-  # 沿用原 Docker 脚本的内网证书兼容设置；有可信证书时可删除相应项。
-  docker_insecure_registries:
-    - dockerhub.ihome.sxxpqp.top:8443
-    - ghcr.ihome.sxxpqp.top:8443
-    - quay.ihome.sxxpqp.top:8443
-    - k8s.ihome.sxxpqp.top:8443
+    - https://hub.sxxpqp.top
+  docker_insecure_registries: []
   containerd:
     docker.io:
       server: https://registry-1.docker.io
-      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/dockerhub
-      skip_verify: true
+      endpoint: https://hub.sxxpqp.top/v2/dockerhub
+      skip_verify: false
       override_path: true
     registry.k8s.io:
       server: https://registry.k8s.io
-      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/google_containers
-      skip_verify: true
+      endpoint: https://hub.sxxpqp.top/v2/k8s
+      skip_verify: false
       override_path: true
+    # 保留旧仓库名的代理入口；新镜像请使用 registry.k8s.io。
     k8s.gcr.io:
       server: https://k8s.gcr.io
-      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/google_containers
-      skip_verify: true
+      endpoint: https://hub.sxxpqp.top/v2/k8s
+      skip_verify: false
       override_path: true
     quay.io:
       server: https://quay.io
-      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/quay
-      skip_verify: true
+      endpoint: https://hub.sxxpqp.top/v2/quay
+      skip_verify: false
       override_path: true
     ghcr.io:
       server: https://ghcr.io
-      endpoint: https://huball.ihome.sxxpqp.top:8443/v2/ghcr
-      skip_verify: true
+      endpoint: https://hub.sxxpqp.top/v2/ghcr
+      skip_verify: false
       override_path: true
     registry.cn-hangzhou.aliyuncs.com:
       server: https://registry.cn-hangzhou.aliyuncs.com

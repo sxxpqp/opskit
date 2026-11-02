@@ -6,7 +6,7 @@ v0.1.15 默认读取 `config/config.yaml`，通过 `opskit config init` 创建�
 
 这些命令写入持久配置文件，不修改当前终端的环境变量；Go/pip/npm 等工具自身的 GOPROXY、PIP_INDEX_URL、NPM_CONFIG_REGISTRY 环境变量仍可能优先于文件，使用前请核对。
 
-`mirror` 命令默认写入并保留备份，`--dry-run` 仅预览；Linux 标准 `/etc/docker/daemon.json` 写入后自动重启并检查 Docker 服务，自定义文件和宿主机 containerd 仍需手动重启。模板镜像源已按 linux 项目原配置填充：Docker 多前端、containerd huball 和现有公共语言源。部署到其他环境时需替换地址；模板更新不会覆盖本地已生成配置。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
+`mirror` 命令默认写入并保留备份，`--dry-run` 仅预览；Linux 标准 `/etc/docker/daemon.json` 写入后自动重启并检查 Docker 服务，自定义文件和宿主机 containerd 仍需手动重启。模板容器镜像源统一使用 opskit-mirror 的 https://hub.sxxpqp.top，默认校验证书，docker_insecure_registries 为空；语言工具保留现有公共源。部署到其他环境时需替换地址；模板更新不会覆盖本地已生成配置。containerd 主机配置识别 1.x 的 CRI registry 与 2.x 的 images registry，未知结构或旧认证/TLS 配置会停止；Go/npm/pip/Maven 只修改本用户对应配置文件，支持 `--file`。保留已有 Maven 自定义 mirrors，需人工合并；不自动关闭证书校验。
 
 kind、mirror、KS 的显式参数优先于对应环境变量，其次 YAML 和固定默认值；etcd/S3 保留已有参数及 AWS 默认凭据链语义。非空 YAML 账号信息仍按原规则优先于 AWS 环境凭据。请勿把全局的配置优先级理解成秘密管理机制。
 
@@ -382,7 +382,16 @@ opskit kubectl install --version v1.24.7 --kubectl-download-base https://your-mi
 
 现有用户配置不会自动改写；请编辑 `install.kubectl.download_base`，或用环境变量 `KUBECTL_DOWNLOAD_BASE` / CLI 覆盖。Nexus 未缓存文件需先回源，受其上游网络和缓存状态影响。此前探测曾出现校验文件可读、完整二进制回源返回 504；本次环境无法解析 Nexus 域名，未验证真实下载或安装。默认值已改为 Nexus，使用前应确认目标版本的二进制及校验文件均可访问。
 
-Docker 默认镜像源按顺序为 `https://index.dockerhub.sxxpqp.top`、`https://dockerhub.ihome.sxxpqp.top:8443`。已有配置不会自动增加源，请在本地 YAML 的 `mirrors.docker` 列表中加入新地址，再执行 `opskit mirror docker`。旧 `--apply` 已移除，预览使用 `--dry-run`。
+Docker 默认镜像源为 `https://hub.sxxpqp.top`（域名根地址，仅加速 Docker Hub）。containerd 的 endpoint 对应如下，均设置 `skip_verify: false`、`override_path: true`；阿里云 ACR 保持直连。已有配置不会自动更新，请按下表修改本地 YAML 的 `mirrors.containerd`，将 `mirrors.docker` 改为新根地址；不再需要的旧内网 insecure 项可删除。
+
+| containerd 仓库 | endpoint |
+| --- | --- |
+| docker.io | https://hub.sxxpqp.top/v2/dockerhub |
+| registry.k8s.io | https://hub.sxxpqp.top/v2/k8s |
+| ghcr.io | https://hub.sxxpqp.top/v2/ghcr |
+| quay.io | https://hub.sxxpqp.top/v2/quay |
+
+旧 `k8s.gcr.io` 沿用 `/v2/k8s` 映射，未单独验收；新镜像使用 `registry.k8s.io`。更新后执行 `opskit mirror docker` 或 `opskit mirror containerd`；kind 使用 `opskit mirror containerd --kind kubesphere-341`，宿主机 containerd 按维护窗口重启。用户已在 kind worker 验证上述四个源拉取通过，缓存镜像层可能不再产生 blob 请求。旧 `--apply` 已移除，预览使用 `--dry-run`。
 
 `kubesphere install` 未指定 `--context` 时读取 kubeconfig 的 `current-context`。路径优先级为 `--kubeconfig` > `KUBECONFIG` > `kind.kubeconfig` > kubectl 默认的 `~/.kube/config`；`KUBECONFIG` 多文件列表由 kubectl 按其规则合并。指定 `--kind NAME` 时仍推导 `kind-NAME` context，无路径配置时使用对应专用 kubeconfig。执行前输出目标 context，默认直接安装，`--dry-run` 仅做只读预检，不提交清单；旧 `--apply` 已移除。
 
