@@ -28,7 +28,28 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Validate release configuration
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'opskit' }}
+          UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Only stable vX.Y.Z tags are supported by the update channel" >&2; exit 1
+          fi
+          for name in MINIO_ENDPOINT MINIO_ACCESS_KEY MINIO_SECRET_KEY UPDATE_SIGNING_PRIVATE_KEY UPDATE_PUBLIC_KEY; do
+            if [ -z "${!name}" ]; then echo "Missing GitHub Actions configuration: $name" >&2; exit 1; fi
+          done
+          go run ./cmd/release-publish --validate-config
       - name: Build binaries
+        env:
+          UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -38,7 +59,7 @@ jobs:
               name="opskit_${os}_${arch}"
               suffix=""
               if [ "$os" = windows ]; then suffix=.exe; fi
-              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}" -o "dist/$name$suffix" ./cmd/opskit
+              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}-${GITHUB_SHA:0:7} -X github.com/sxxpqp/opskit/internal/app.updatePublicKey=${UPDATE_PUBLIC_KEY}" -o "dist/$name$suffix" ./cmd/opskit
             done
           done
           cp config.example.yaml dist/config.example.yaml
@@ -69,6 +90,38 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: gh release create "$TAG" dist/* --verify-tag --generate-notes --notes-file /tmp/opskit-download-links.md --title "$TAG"
+
+  publish-minio:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: minio-stable-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: opskit-packages
+          path: dist
+      - name: Upload, verify and publish signed stable index
+        env:
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'opskit' }}
+          MINIO_REGION: ${{ vars.MINIO_REGION || 'us-east-1' }}
+          UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BUILD_VERSION="${RELEASE_TAG}-${GITHUB_SHA:0:7}"
+          go run ./cmd/release-publish --dist dist
 
   update-downloads:
     needs: release

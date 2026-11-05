@@ -13,6 +13,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if version := os.Getenv("OPSKIT_FAKE_SELFUPDATE_VERSION"); version != "" && len(os.Args) == 2 && os.Args[1] == "version" {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 	if os.Getenv("OPSKIT_FAKE_MYSQL_DOCKER") == "1" {
 		fakeMySQLDocker()
 		os.Exit(0)

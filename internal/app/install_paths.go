@@ -146,7 +146,7 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 	}
 	dest := filepath.Join(dir, filepath.Base(target))
 	if dest == target {
-		if e = os.Chmod(dest, 0777); e != nil {
+		if e = os.Chmod(dest, 0755); e != nil {
 			return e
 		}
 		return finishToolPath(dir, tool, out)
@@ -160,7 +160,7 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 				a, ea := os.ReadFile(dest)
 				b, eb := os.ReadFile(target)
 				if ea == nil && eb == nil && bytes.Equal(a, b) {
-					if e = os.Chmod(dest, 0777); e != nil {
+					if e = os.Chmod(dest, 0755); e != nil {
 						return e
 					}
 					if e = os.Remove(target); e != nil {
@@ -212,7 +212,7 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	if err = os.Chmod(temp, 0777); err != nil {
+	if err = os.Chmod(temp, 0755); err != nil {
 		return err
 	}
 	if err = os.Rename(temp, dest); err != nil {

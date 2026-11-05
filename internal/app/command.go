@@ -89,6 +89,11 @@ func newRootCommand(ctx context.Context, out, diag io.Writer, version string) (*
 		return nil, err
 	}
 	root.AddCommand(doctor)
+	update, err := newUpdateCommand(ctx, out, version)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(update)
 	groups := map[string]*cobra.Command{}
 	for _, item := range []struct{ name, short string }{
 		{"openebs", "通过 Operator 安装 OpenEBS"},

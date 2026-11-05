@@ -53,3 +53,10 @@ macOS 可用 `shasum -a 256`，Windows PowerShell 可用 `Get-FileHash -Algorith
 最新指 GitHub 标记的最新正式 Release，构建通过并成功发布后才切换，不包括 PR 或 main 的临时构建。链接中的明确版本保证不因 Nexus 的 latest 路径缓存而下载到上一版本；相同版本仍可由 Nexus 缓存提供，这不会变成旧版本。不要覆盖已有版本的资产，修改后发布新 tag。
 
 此方案不修改 Nexus 缓存设置，不宣称每次下载都绕过缓存，也不依赖 `?timestamp=` 等查询参数。GitHub、Nexus、网络不可用时仍可能下载失败。
+
+
+## MinIO 独立分发与更新
+
+当前代码增加 MinIO 独立发布作业，GitHub 和既有 Nexus 主/备用入口继续保留。MinIO 下载地址从 `config.example.yaml` 的 `update.download_base` 读取，默认桶域名对应 `opskit` 桶，固定对象路径为 `/releases/<tag>/<文件名>`，签名 stable 清单为 `/channels/stable.json`。
+
+此流程需要先设置 GitHub Secrets（包括 S3 API 地址）和签名公钥 Variable；不代表历史版本已上传或当前域名已验收。安装到公共 PATH 的实体文件使用 `0755`，所有用户可执行。配置及客户端命令见 [MinIO 发布与自更新指南](self-update.md)。

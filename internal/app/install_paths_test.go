@@ -94,7 +94,7 @@ func TestExposeKind(t *testing.T) {
 		t.Fatalf("repeated install: %v", e)
 	}
 	info, e := os.Lstat(filepath.Join(dir, "kind"))
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
 		t.Fatalf("%v %v", info, e)
 	}
 	if _, e := os.Lstat(target); !os.IsNotExist(e) {

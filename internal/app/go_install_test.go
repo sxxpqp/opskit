@@ -144,7 +144,7 @@ func TestGoInstallSDKAndProxy(t *testing.T) {
 	}
 	for _, name := range []string{"go", "gofmt"} {
 		info, err := os.Lstat(filepath.Join(links, name))
-		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
 			t.Fatalf("entry %s %v %v", name, info, err)
 		}
 

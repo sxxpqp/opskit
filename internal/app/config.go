@@ -13,12 +13,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/sxxpqp/opskit"
+	"github.com/sxxpqp/opskit/internal/selfupdate"
 	"gopkg.in/yaml.v3"
 )
 
 const defaultConfigPath = "config/config.yaml"
 
 type fileConfig struct {
+	Update   selfupdate.Settings    `yaml:"update"`
 	Install  runtimeInstallSettings `yaml:"install"`
 	Go       versionSetting         `yaml:"go"`
 	Versions struct {

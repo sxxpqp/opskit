@@ -9,6 +9,13 @@
 
 schema_version: 1
 
+# opskit 自身更新：MinIO 桶域名已对应 opskit 桶，路径不再重复桶名。
+# 默认仅显式执行 update 时访问，不影响其他命令；签名验证失败拒绝升级。
+update:
+  download_base: https://opskit.sxxpqp.top  # --update-download-base / OPSKIT_UPDATE_DOWNLOAD_BASE
+  public_key: ""  # base64 Ed25519 公钥；留空使用发布构建嵌入公钥，开发构建需显式填写
+
+
 openebs:
   manifest: ""  # 可选，本地 Operator 清单；不改写，仅支持 openebs namespace 的 NDM + Local PV 配置
   set_default: false  # 为 KubeSphere 3.4.1 准备存储时设为 true，或 install 加 --set-default；有其他默认类时拒绝
@@ -111,7 +118,7 @@ middleware:
 
 # 独立 Go SDK 版本；安装后使用 mirrors.go 配置当前用户 GOPROXY。
 # 完整 SDK：root 默认 /usr/local/lib/opskit/go/go<版本>，普通用户默认 ~/.local/share/opskit/go/go<版本>。
-# --install-dir 可覆盖；直接把 SDK/bin 加入 PATH，go/gofmt 为实体文件、权限 0777，不创建软链接。
+# --install-dir 可覆盖；直接把 SDK/bin 加入 PATH，go/gofmt 为实体文件、权限 0755，不创建软链接。
 go:
   version: 1.26.2
 

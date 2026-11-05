@@ -20,6 +20,7 @@
   <a href="docs/manual-kubeadm.md">组件下载与手动部署</a> ·
   <a href="docs/openebs.md">OpenEBS Operator</a> ·
   <a href="#工具与运行时安装">工具安装</a> ·
+  <a href="docs/self-update.md">自更新与 MinIO 发布</a> ·
   <a href="#镜像源与下载">镜像源</a> ·
   <a href="#检查与备份">检查与备份</a> ·
   <a href="docs/mysql-backup.md">MySQL 备份</a> ·
@@ -89,12 +90,13 @@ chmod +x opskit
 ./opskit config init
 ```
 
-按对应 Release 的 `checksums.txt` 核对 SHA-256。生成配置后编辑 `config/config.yaml`，再执行所需命令；模板中的节点、私有代理地址、证书路径和凭据需要按环境填写。
+按对应 Release 的 `checksums.txt` 核对 SHA-256。需要所有用户使用时，校验后执行 `sudo install -m 0755 ./opskit /usr/local/bin/opskit`，将实体文件放入公共 PATH，父目录保持可遍历。生成配置后编辑 `config/config.yaml`，再执行所需命令；模板中的节点、私有代理地址、证书路径和凭据需要按环境填写。
 
 ### 常用命令
 
 ```sh
 opskit --help
+opskit update --check
 opskit doctor --profile kind
 opskit middleware deploy --engine redis --dry-run
 opskit kubeblocks deploy --engine redis --dry-run
@@ -238,11 +240,17 @@ opskit cri-dockerd install --version v0.4.7
 ```
 
 - Go 安装完整 SDK，校验发布 SHA-256 和实际版本，将 SDK 的 bin 加入 PATH，go／gofmt 使用实体文件，并设置 `mirrors.go` 中的 GOPROXY。
-- kind／kubectl 支持校验暂存目录、实体命令目录和 PATH 检查；所有平台均移动实体文件，Unix 权限为 `0777`。Go／kubectl／kind 各自支持的平台以命令帮助为准；kind 不支持 Windows ARM64。
+- kind／kubectl 支持校验暂存目录、实体命令目录和 PATH 检查；所有平台均移动实体文件，Unix 权限为 `0755`。Go／kubectl／kind 各自支持的平台以命令帮助为准；kind 不支持 Windows ARM64。
 - 运行时安装要求 Linux + systemd，拒绝覆盖已有运行时；Docker 支持官方脚本和静态包。Docker 安装会配置 inotify 最低限额，保留更高值。
 - 独立运行时安装与 `k8s create` 的职责不同：主机网络准备、Calico 和集群初始化由部署流程处理。
 
 安装参数、校验限制与入口路径见[配置指南](docs/configuration.md)。
+
+## opskit 自更新
+
+当前代码新增 `opskit update --check`、`opskit update`、`--version` 和 `--download-only`，从 MinIO 桶域名读取签名清单并下载固定版本。Linux/macOS 支持实体文件替换、备份和失败恢复，权限 `0755`；Windows 支持检查与校验下载，退出后手动替换 exe。不会在部署或备份过程中自动升级，也不修改现有配置。
+
+发布 CI 使用 GitHub Secrets 保存 MinIO API 地址、上传凭据和签名私钥，上传并公开回读校验成功后才更新 stable 清单。默认桶 `opskit`、下载域名 `https://opskit.sxxpqp.top`；尚需配置凭据并完成真实 MinIO 发布验收，不能据此宣称已有版本已同步。配置项、Secrets 清单和权限设置见 [MinIO 发布与自更新指南](docs/self-update.md)。
 
 ## kind 与 KubeSphere
 
@@ -270,7 +278,7 @@ opskit kubesphere install --version v3.4.1 --kind kubesphere-341
 
 初始密码通过 `k8s.kubesphere.password` 或 kind 对应配置设置，要求大小写字母和数字；成功摘要默认隐藏密码，显式 `--show-password` 或对应 `showPassword: true` 才显示。不会生成密码文件。详细说明见[配置指南](docs/configuration.md)。
 
-kind、kubectl 校验成功后将实体文件移入 PATH 命令目录（Linux root 通常为 `/usr/local/bin`），设置 `0777` 权限，不创建软链接。`--bin-dir` 为校验暂存目录，`--link-dir` 指定最终目录；重新安装可替换 opskit 管理的旧软链接。Go 保留完整 SDK 并将其 `bin` 加入 PATH，go/gofmt 设置 `0777`；root 默认安装到 `/usr/local/lib/opskit/go/go<版本>`，Go 的 `--link-dir` 已移除，使用 `--install-dir` 指定完整 SDK 位置。
+kind、kubectl 校验成功后将实体文件移入 PATH 命令目录（Linux root 通常为 `/usr/local/bin`），设置 `0755` 权限，不创建软链接。`--bin-dir` 为校验暂存目录，`--link-dir` 指定最终目录；重新安装可替换 opskit 管理的旧软链接。Go 保留完整 SDK 并将其 `bin` 加入 PATH，go/gofmt 设置 `0755`；root 默认安装到 `/usr/local/lib/opskit/go/go<版本>`，Go 的 `--link-dir` 已移除，使用 `--install-dir` 指定完整 SDK 位置。
 
 安装 kind 时会检查 PATH 中的 kubectl 和 Docker，缺少时给出安装指引，kind 自身仍可先安装。kubectl 提示使用配置的 `kind.kubernetes.version`（有配置时）；例如 `opskit kubectl install --version v1.24.7`。Linux 的 Docker 可通过 `sudo opskit docker install` 安装（用 `--help` 查看版本等参数），Windows/macOS 可使用 Docker Desktop 的 Linux 容器。创建集群时缺少 kubectl、Docker 或 kind 会返回带安装指令的依赖错误；自定义 kind 路径不可用时会显示该路径，并提示通过 `--kind-bin` 修正。Docker 不可用时提示启动并用 `docker info` 检查，保留原始错误便于排查。`kind create --dry-run` 不要求已安装这些工具。
 
@@ -398,7 +406,8 @@ v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装�
 - [x] KubeBlocks 固定版安装、MySQL／Redis／MinIO Cluster 渲染、部署和状态命令
 - [x] Vagrant 上 KubeBlocks 三类集群持久卷与 Pod 替换读写验收（允许同节点实验，非宿主机失效验收；[记录](docs/middleware-validation-2026-10-28.md)）
 - [ ] 中间件跨物理主机故障验收、其他引擎与 Kubernetes 生产容量验收
-- [ ] 启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
+- [x] 显式 update 检查、签名清单与校验下载；MinIO 发布流程仍待真实环境验收
+- [ ] Windows 自动替换、beta 渠道、启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
 - [x] 独立 etcd／现有 MinIO 的上传下载、内容校验与合成数据隔离恢复；本地备份保留策略命令
 - [ ] 生产 Kubernetes etcd 灾难恢复与远端保留策略
 - [x] Windows Docker Desktop + MySQL 8.4.13 的镜像备份、CA 校验及指定测试数据的隔离恢复
@@ -408,6 +417,8 @@ v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装�
 长期方向见[设计文档](go-opskit-design.md)和[M0 技术设计基线](docs/m0-design-baseline.md)，设计内容不代表已实现功能。
 
 ## 近期更新
+
+当前未发布改动：MinIO 签名版本清单、CI 发布作业、显式自更新，以及公共 PATH 程序权限统一为 `0755`。正式版本以下方实际 Release 为准。
 
 | 功能版本 | 变化 |
 |---|---|

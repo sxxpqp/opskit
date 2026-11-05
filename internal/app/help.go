@@ -48,7 +48,7 @@ recover 仅用于 MySQL 完整停机，检查所有成员/GTID，不使用 force
 示例: opskit openebs install --kubeconfig /etc/kubernetes/admin.conf --dry-run`,
 	"go": `用法: opskit go install [参数]
 安装完整 Go SDK，校验 SHA-256、实际版本并将 SDK 的 bin 加入 PATH。
-go/gofmt 使用实体文件并设置 0777；--install-dir 指定完整 SDK，已移除 --link-dir。
+go/gofmt 使用实体文件并设置 0755；--install-dir 指定完整 SDK，已移除 --link-dir。
 支持 Linux/macOS amd64、arm64；版本读取 go.version，--version 可覆盖。
 安装后根据 mirrors.go 设置当前用户的持久 GOPROXY；默认执行，--dry-run 仅预览。
 示例: opskit go install --version 1.26.2

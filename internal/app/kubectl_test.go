@@ -62,7 +62,7 @@ func TestToolsReplaceManagedSymlink(t *testing.T) {
 				t.Fatal(err)
 			}
 			info, err := os.Lstat(entry)
-			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
 				t.Fatalf("entry: %v %v", info, err)
 			}
 			if err := os.RemoveAll(filepath.Join(home, ".local")); err != nil {
@@ -198,7 +198,7 @@ func TestKubectlInstallVerifiedAndFailurePreservesOriginal(t *testing.T) {
 	if err != nil || !info.Mode().IsRegular() {
 		t.Fatalf("PATH entry is not a regular file: %v %v", info, err)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0777 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0755 {
 		t.Fatalf("mode: %v", info.Mode())
 	}
 	if _, err := os.Lstat(filepath.Join(targetDir, binary)); !os.IsNotExist(err) {

@@ -106,7 +106,7 @@ func newGoInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 		}
 		bin := filepath.Join(*dir, "bin")
 		for _, tool := range []string{"go", "gofmt"} {
-			if err = os.Chmod(filepath.Join(bin, tool), 0777); err != nil {
+			if err = os.Chmod(filepath.Join(bin, tool), 0755); err != nil {
 				return 1, err
 			}
 		}
