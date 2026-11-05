@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,7 +93,11 @@ func publish(ctx context.Context, dist string) error {
 	if err != nil {
 		return err
 	}
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) { o.BaseEndpoint = aws.String(os.Getenv("MINIO_ENDPOINT")); o.UsePathStyle = true })
+	pathStyle, err := minioPathStyle()
+	if err != nil {
+		return err
+	}
+	client := newMinioClient(cfg, os.Getenv("MINIO_ENDPOINT"), pathStyle)
 	bucket := os.Getenv("MINIO_BUCKET")
 	httpClient := selfupdate.NewHTTPClient()
 	for _, name := range files {
@@ -245,6 +250,9 @@ func putImmutable(ctx context.Context, client *s3.Client, bucket, key string, da
 }
 
 func validateConfiguration() (ed25519.PrivateKey, error) {
+	if _, err := minioPathStyle(); err != nil {
+		return nil, err
+	}
 	for _, name := range []string{"MINIO_ENDPOINT", "MINIO_BUCKET", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "UPDATE_SIGNING_PRIVATE_KEY", "UPDATE_PUBLIC_KEY"} {
 		if os.Getenv(name) == "" {
 			return nil, fmt.Errorf("缺少 CI 配置: %s", name)
@@ -269,4 +277,23 @@ func validateConfiguration() (ed25519.PrivateKey, error) {
 	}
 
 	return key, nil
+}
+
+func minioPathStyle() (bool, error) {
+	value := os.Getenv("MINIO_PATH_STYLE")
+	if value == "" {
+		return false, nil
+	}
+	style, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, errors.New("MINIO_PATH_STYLE 必须为 true 或 false")
+	}
+	return style, nil
+}
+
+func newMinioClient(cfg aws.Config, endpoint string, pathStyle bool) *s3.Client {
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(endpoint)
+		o.UsePathStyle = pathStyle
+	})
 }

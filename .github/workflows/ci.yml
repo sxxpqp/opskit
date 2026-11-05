@@ -35,6 +35,7 @@ jobs:
           MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'opskit' }}
+          MINIO_PATH_STYLE: ${{ vars.MINIO_PATH_STYLE || 'false' }}
           UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
           UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
         shell: bash
@@ -113,6 +114,7 @@ jobs:
           MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'opskit' }}
+          MINIO_PATH_STYLE: ${{ vars.MINIO_PATH_STYLE || 'false' }}
           MINIO_REGION: ${{ vars.MINIO_REGION || 'us-east-1' }}
           UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
           UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}

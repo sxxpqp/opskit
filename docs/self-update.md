@@ -9,13 +9,14 @@ GitHub 保存源码、标签及正式 Release，MinIO 保存相同构建产物�
 
 | 类型 | 名称 | 内容 |
 |---|---|---|
-| Secret | `MINIO_ENDPOINT` | HTTPS S3 API 根地址，包含所需端口，不含桶名或 Console 路径 |
+| Secret | `MINIO_ENDPOINT` | HTTPS S3 基地址，不含桶名或 Console 路径；当前桶域名模式填写 `https://sxxpqp.top` |
 | Secret | `MINIO_ACCESS_KEY` | 仅用于发布的访问密钥 |
 | Secret | `MINIO_SECRET_KEY` | 对应私钥 |
 | Secret | `UPDATE_SIGNING_PRIVATE_KEY` | base64 Ed25519 私钥，解码后 64 字节 |
 | Variable | `UPDATE_PUBLIC_KEY` | 对应 base64 Ed25519 公钥，解码后 32 字节，构建时嵌入客户端 |
 | Variable，可选 | `MINIO_BUCKET` | 默认 `opskit` |
 | Variable，可选 | `MINIO_REGION` | 默认 `us-east-1`，与服务端设置保持一致 |
+| Variable，可选 | `MINIO_PATH_STYLE` | 默认 `false`，虚拟主机桶域名；独立 API 使用路径式寻址时设为 `true` |
 
 在可信本地终端执行下面命令生成签名密钥。输出含私钥，不要在 CI、共享日志或聊天中运行，不要提交输出：
 
@@ -26,6 +27,10 @@ go run ./cmd/release-publish --generate-key
 将输出的两个值分别保存到同名 Secret / Variable。公钥是客户端信任根，不从下载桶自动获取；私钥泄露需要更换密钥并通过可信途径分发新公钥。更换公钥后，已有 stable 清单会因旧签名而阻止发布，需要管理员安排迁移，不能直接覆盖绕过。
 
 标签发布构建会先检查必要配置；缺少配置则失败，不会默默跳过 MinIO。普通 main/PR 构建和测试无需上传凭据。首次启用时需发布包含 `update` 命令的新客户端，历史客户端不会自动获得新命令。
+
+默认桶域名寻址：`MINIO_ENDPOINT=https://sxxpqp.top`、`MINIO_BUCKET=opskit`、`MINIO_PATH_STYLE=false`，SDK 将签名上传请求直接发送到 `https://opskit.sxxpqp.top/releases/...`，不会访问站点根域名或经过网站重定向。证书必须覆盖桶域名。
+
+如果使用独立 S3 API（含端口）并需要 `/opskit/releases/...` 路径，设置 `MINIO_PATH_STYLE=true`，并保证 API 入口不重定向到站点或 Console。不能把桶域名本身填入虚拟主机模式的 MINIO_ENDPOINT，否则会重复添加桶名。
 
 ## MinIO 权限和路径
 

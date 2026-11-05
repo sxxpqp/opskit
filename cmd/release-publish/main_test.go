@@ -23,6 +23,7 @@ import (
 )
 
 func TestPublicationConfigurationFailsBeforeNetwork(t *testing.T) {
+	t.Setenv("MINIO_PATH_STYLE", "")
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -50,6 +51,48 @@ func TestPublicationConfigurationFailsBeforeNetwork(t *testing.T) {
 	t.Setenv("MINIO_SECRET_KEY", "")
 	if _, err := validateConfiguration(); err == nil {
 		t.Fatal("missing upload secret accepted")
+	}
+}
+
+type requestTransport func(*http.Request) (*http.Response, error)
+
+func (f requestTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestMinioBucketDomainAddressing(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		pathStyle  bool
+		host, path string
+	}{
+		{"bucket-domain", false, "opskit.sxxpqp.top", "/releases/v1.2.3/file"},
+		{"path-style", true, "sxxpqp.top", "/opskit/releases/v1.2.3/file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := aws.Config{Region: "us-east-1", Credentials: credentials.NewStaticCredentialsProvider("test", "test", ""), HTTPClient: &http.Client{Transport: requestTransport(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host != tc.host || req.URL.Path != tc.path {
+					t.Errorf("unexpected S3 address: %s", req.URL)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Etag": []string{`"test"`}}, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+			})}}
+			client := newMinioClient(cfg, "https://sxxpqp.top", tc.pathStyle)
+			if err := putImmutable(context.Background(), client, "opskit", "releases/v1.2.3/file", []byte("binary"), "application/octet-stream"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestMinioAddressingConfiguration(t *testing.T) {
+	for _, value := range []string{"", "false", "true"} {
+		t.Setenv("MINIO_PATH_STYLE", value)
+		got, err := minioPathStyle()
+		if err != nil || got != (value == "true") {
+			t.Fatalf("%q: %t %v", value, got, err)
+		}
+	}
+	t.Setenv("MINIO_PATH_STYLE", "invalid")
+	if _, err := minioPathStyle(); err == nil {
+		t.Fatal("invalid addressing accepted")
 	}
 }
 
