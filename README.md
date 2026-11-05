@@ -34,7 +34,7 @@
 </p>
 
 <!-- LATEST_RELEASE_START -->
-**当前最新正式版：[v0.1.17](https://github.com/sxxpqp/opskit/releases/tag/v0.1.17)**
+**当前最新正式版：[v0.1.18](https://github.com/sxxpqp/opskit/releases/tag/v0.1.18)**
 
 新版本已发布，详细变化见对应 Release 说明。
 
@@ -370,22 +370,22 @@ v0.1.15 的 `doctor`、`backup verify/prune`、`bundle export/import/verify` 和
 按系统和架构下载单个可执行文件，无需解压。Linux／macOS 需 `chmod +x opskit`；Windows 文件名为 `opskit.exe`。x86_64 指 64 位，不提供 32 位 x86 包。下载表和顶部版本摘要由正式发布工作流维护。
 
 <!-- DOWNLOAD_LINKS_START -->
-### v0.1.17 下载：GitHub / Nexus 备用
+### v0.1.18 下载：GitHub / Nexus 备用
 
 同一行的主链接与备用链接指向同一版本。按系统和 CPU 架构下载，无需解压。
 
 | 系统 | CPU 架构 | GitHub | Nexus 备用 |
 |---|---|---|---|
-| Windows | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_windows_amd64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_windows_amd64.exe) |
-| Windows | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_windows_arm64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_windows_arm64.exe) |
-| Linux | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_linux_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_linux_amd64) |
-| Linux | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_linux_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_linux_arm64) |
-| macOS | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_darwin_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_darwin_amd64) |
-| macOS | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/opskit_darwin_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/opskit_darwin_arm64) |
+| Windows | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_windows_amd64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_windows_amd64.exe) |
+| Windows | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_windows_arm64.exe) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_windows_arm64.exe) |
+| Linux | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_linux_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_linux_amd64) |
+| Linux | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_linux_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_linux_arm64) |
+| macOS | x86_64 / amd64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_darwin_amd64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_darwin_amd64) |
+| macOS | ARM64 / aarch64 | [下载](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/opskit_darwin_arm64) | [备用下载](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/opskit_darwin_arm64) |
 
-校验文件：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/checksums.txt) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/checksums.txt)
+校验文件：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/checksums.txt) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/checksums.txt)
 
-配置模板：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.17/config.example.yaml) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.17/config.example.yaml)
+配置模板：[GitHub](https://github.com/sxxpqp/opskit/releases/download/v0.1.18/config.example.yaml) · [Nexus](https://nexus.ihome.sxxpqp.top:8443/repository/raw-github/sxxpqp/opskit/releases/download/v0.1.18/config.example.yaml)
 
 Nexus 为上游代理缓存，首次请求需回源；不是独立备份。首页链接随正式发布自动更新为最新版本的固定路径，避免 latest 缓存造成版本混淆。
 <!-- DOWNLOAD_LINKS_END -->
@@ -422,6 +422,7 @@ v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装�
 
 | 功能版本 | 变化 |
 |---|---|
+| [v0.1.18](https://github.com/sxxpqp/opskit/releases/tag/v0.1.18) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.17](https://github.com/sxxpqp/opskit/releases/tag/v0.1.17) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.16](https://github.com/sxxpqp/opskit/releases/tag/v0.1.16) | 新版本已发布，详细变化见对应 Release 说明 |
 | [v0.1.15](https://github.com/sxxpqp/opskit/releases/tag/v0.1.15) | MySQL／Redis／MinIO 的 Docker/SSH 与 KubeBlocks 部署；环境诊断、统一 JSON、S3 内容校验、备份保留与离线归档；组件缓存、OpenEBS 和 MySQL 备份 |
