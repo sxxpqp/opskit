@@ -70,7 +70,9 @@ releases/<tag>/config.example.yaml
 
 发布作业在 GitHub Release 成功后运行：先检查全部构建文件和摘要，条件写入固定版本对象，再从公开桶域名逐个回读验证，发布签名 manifest，最后更新 stable。已有固定版本只允许复用内容完全相同的对象；不同内容必须使用新标签。渠道指针带条件写入，旧版本作业晚完成也不会将 stable 降级。
 
-`releases/` 使用长期缓存；`channels/stable.json` 使用 `no-cache, max-age=0, must-revalidate`。反向代理/CDN 必须保留这些规则，不缓存渠道 404；首次发布前渠道文件不存在时，客户端报错，不会将其解释为“已是最新”。作业失败可在修复配置后重跑 `publish-minio`，不要重复创建 GitHub Release。GitHub Release 成功而 MinIO 作业失败时，stable 不会提前切换。
+上传使用已知长度的普通请求体，关闭 AWS SDK 可选的 aws-chunked 校验 trailer，兼容 MinIO 的 16 MiB 单块限制；固定文件的 SHA-256、签名清单和公开回读验证仍保留。
+
+`releases/` 使用长期缓存；`channels/stable.json` 使用 `no-cache, max-age=0, must-revalidate`。反向代理/CDN 必须保留这些规则，不缓存渠道 404；首次发布前渠道文件不存在时，客户端报错，不会将其解释为“已是最新”。作业失败可在修复配置后重跑 `publish-minio`，不要重复创建 GitHub Release。发布工具代码修复后，可使用独立的 `Sync published release to MinIO` 工作流同步已有 Release：推送发布工具改动到 main 会自动同步最新正式版，也可手动指定已发布标签；从 GitHub 下载原始构建产物，不重新编译或覆盖标签。GitHub Release 成功而 MinIO 作业失败时，stable 不会提前切换。
 
 ## 客户端使用
 

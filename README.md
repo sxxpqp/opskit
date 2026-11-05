@@ -250,7 +250,7 @@ opskit cri-dockerd install --version v0.4.7
 
 当前代码新增 `opskit update --check`、`opskit update`、`--version` 和 `--download-only`，从 MinIO 桶域名读取签名清单并下载固定版本。Linux/macOS 支持实体文件替换、备份和失败恢复，权限 `0755`；Windows 支持检查与校验下载，退出后手动替换 exe。不会在部署或备份过程中自动升级，也不修改现有配置。
 
-发布 CI 使用 GitHub Secrets 保存 MinIO API 地址、上传凭据和签名私钥，上传并公开回读校验成功后才更新 stable 清单。默认桶 `opskit`、下载域名 `https://opskit.sxxpqp.top`，CI 默认使用桶域名寻址（`MINIO_PATH_STYLE=false`），避免根域名的网站跳转；尚需配置凭据并完成真实 MinIO 发布验收，不能据此宣称已有版本已同步。配置项、Secrets 清单和权限设置见 [MinIO 发布与自更新指南](docs/self-update.md)。
+发布 CI 使用 GitHub Secrets 保存 MinIO API 地址、上传凭据和签名私钥，上传并公开回读校验成功后才更新 stable 清单。默认桶 `opskit`、下载域名 `https://opskit.sxxpqp.top`，CI 默认使用桶域名寻址（`MINIO_PATH_STYLE=false`），避免根域名的网站跳转；发布工具支持普通请求体上传，兼容 MinIO 单块限制，并提供独立同步工作流重传已有 Release；尚需配置凭据并完成真实 MinIO 发布验收，不能据此宣称已有版本已同步。配置项、Secrets 清单和权限设置见 [MinIO 发布与自更新指南](docs/self-update.md)。
 
 ## kind 与 KubeSphere
 
@@ -418,7 +418,7 @@ v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装�
 
 ## 近期更新
 
-当前未发布改动：MinIO 签名版本清单、CI 发布作业、显式自更新，以及公共 PATH 程序权限统一为 `0755`。正式版本以下方实际 Release 为准。
+当前代码包含 MinIO 签名版本清单、CI 发布作业、显式自更新，以及公共 PATH 程序权限统一为 `0755`；发布工具修复和真实 MinIO 同步状态见自更新指南，正式版本以下方实际 Release 为准。
 
 | 功能版本 | 变化 |
 |---|---|

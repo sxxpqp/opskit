@@ -1,0 +1,59 @@
+name: Sync published release to MinIO
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/release-publish/**'
+      - 'internal/selfupdate/**'
+      - '.github/workflows/sync-minio.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable Release tag; empty selects the latest published Release'
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: minio-stable-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify publisher
+        run: |
+          go vet ./cmd/release-publish ./internal/selfupdate
+          go test ./cmd/release-publish ./internal/selfupdate
+      - name: Sync existing Release assets and signed index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'opskit' }}
+          MINIO_PATH_STYLE: ${{ vars.MINIO_PATH_STYLE || 'false' }}
+          MINIO_REGION: ${{ vars.MINIO_REGION || 'us-east-1' }}
+          UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./cmd/release-publish --validate-config
+          export RELEASE_TAG="${REQUESTED_TAG:-$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')}"
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Only stable vX.Y.Z releases can be synced" >&2; exit 1
+          fi
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq 'if .isDraft or .isPrerelease then error("Release is not stable") else "Verified stable Release" end'
+          release_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          export BUILD_VERSION="${RELEASE_TAG}-${release_commit:0:7}"
+          gh release download "$RELEASE_TAG" --dir dist --pattern 'opskit_*' --pattern checksums.txt --pattern config.example.yaml
+          go run ./cmd/release-publish --dist dist

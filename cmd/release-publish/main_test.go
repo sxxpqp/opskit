@@ -96,6 +96,27 @@ func TestMinioAddressingConfiguration(t *testing.T) {
 	}
 }
 
+func TestMinioLargeUploadUsesPlainBody(t *testing.T) {
+	data := []byte(strings.Repeat("x", 17<<20))
+	cfg := aws.Config{Region: "us-east-1", Credentials: credentials.NewStaticCredentialsProvider("test", "test", ""), HTTPClient: &http.Client{Transport: requestTransport(func(req *http.Request) (*http.Response, error) {
+		if strings.Contains(req.Header.Get("Content-Encoding"), "aws-chunked") || req.Header.Get("X-Amz-Trailer") != "" {
+			t.Error("optional streaming checksum framing still enabled")
+		}
+		if req.ContentLength != int64(len(data)) {
+			t.Errorf("Content-Length: %d", req.ContentLength)
+		}
+		n, err := io.Copy(io.Discard, req.Body)
+		if err != nil || n != int64(len(data)) {
+			t.Errorf("unexpected upload body: %d %v", n, err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+	})}}
+	client := newMinioClient(cfg, "https://sxxpqp.top", false)
+	if err := putImmutable(context.Background(), client, "opskit", "releases/v1.2.3/file", data, "application/octet-stream"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReleaseRequiresCompleteMatchingArtifacts(t *testing.T) {
 	dir := t.TempDir()
 	var checksums strings.Builder

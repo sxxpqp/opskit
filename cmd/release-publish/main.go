@@ -295,5 +295,8 @@ func newMinioClient(cfg aws.Config, endpoint string, pathStyle bool) *s3.Client 
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(endpoint)
 		o.UsePathStyle = pathStyle
+		// Optional SDK trailer checksums use aws-chunked framing. Some MinIO
+		// versions reject its large chunks; artifacts are already SHA-256 verified.
+		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	})
 }
