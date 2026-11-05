@@ -98,10 +98,7 @@ func TestGoInstallSDKAndProxy(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	t.Setenv("HOME", root)
-	links := filepath.Join(root, "bin")
-	if err := os.Mkdir(links, 0755); err != nil {
-		t.Fatal(err)
-	}
+	links := filepath.Join(root, "sdk", "bin")
 	t.Setenv("PATH", links+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GOROOT", "/wrong/sdk")
 	t.Setenv("GOTOOLCHAIN", "go0.0.0")
@@ -132,7 +129,7 @@ func TestGoInstallSDKAndProxy(t *testing.T) {
 	}))
 	defer server.Close()
 	install := filepath.Join(root, "sdk")
-	args := []string{"go", "install", "--version", "1.26.2", "--go-download-base", server.URL, "--checksum-url", server.URL + "/metadata", "--proxy", "https://proxy.example,direct", "--install-dir", install, "--link-dir", links, "--download-dir", filepath.Join(root, "downloads")}
+	args := []string{"go", "install", "--version", "1.26.2", "--go-download-base", server.URL, "--checksum-url", server.URL + "/metadata", "--proxy", "https://proxy.example,direct", "--install-dir", install, "--download-dir", filepath.Join(root, "downloads")}
 	var out, diag bytes.Buffer
 	if code, err := Run(context.Background(), args, &out, &diag, "test"); code != 0 || err != nil {
 		t.Fatalf("%d %v\n%s\n%s", code, err, &out, &diag)
@@ -146,10 +143,11 @@ func TestGoInstallSDKAndProxy(t *testing.T) {
 		t.Fatalf("backups: %v %v", backups, err)
 	}
 	for _, name := range []string{"go", "gofmt"} {
-		target, err := filepath.EvalSymlinks(filepath.Join(links, name))
-		if err != nil || !sameGoTestPath(target, filepath.Join(install, "bin", name)) {
-			t.Fatalf("entry %s %s %v", name, target, err)
+		info, err := os.Lstat(filepath.Join(links, name))
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+			t.Fatalf("entry %s %v %v", name, info, err)
 		}
+
 	}
 	if _, err := os.Stat(filepath.Join(install, "src", "runtime", "runtime.go")); err != nil {
 		t.Fatal("full tree missing", err)
@@ -186,11 +184,6 @@ func TestGoMetadataRequiresExactVersionAndAsset(t *testing.T) {
 	}
 }
 
-func sameGoTestPath(actual, expected string) bool {
-	resolved, err := filepath.EvalSymlinks(expected)
-	return err == nil && actual == resolved
-}
-
 func TestGoProxyDisabledDoesNotWrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX fixture")
@@ -206,5 +199,22 @@ func TestGoProxyDisabledDoesNotWrite(t *testing.T) {
 	entries, err := os.ReadDir(root)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("unexpected files %v %v", entries, err)
+	}
+}
+
+func TestGoInstallRejectsLinkDir(t *testing.T) {
+	var out bytes.Buffer
+	code, err := Run(context.Background(), []string{"go", "install", "--link-dir", t.TempDir()}, &out, &out, "test")
+	if code == 0 || err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("removed flag accepted: %d %v", code, err)
+	}
+}
+func TestDefaultGoInstallDir(t *testing.T) {
+	home := t.TempDir()
+	if got := defaultGoInstallDir(home, "1.26.2", true); got != filepath.Join("/usr/local/lib/opskit/go", "go1.26.2") {
+		t.Fatal(got)
+	}
+	if got := defaultGoInstallDir(home, "1.26.2", false); got != filepath.Join(home, ".local", "share", "opskit", "go", "go1.26.2") {
+		t.Fatal(got)
 	}
 }

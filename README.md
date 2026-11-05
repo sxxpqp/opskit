@@ -237,8 +237,8 @@ opskit docker install --version v28.5.2 --method binary
 opskit cri-dockerd install --version v0.4.7
 ```
 
-- Go 安装完整 SDK，校验发布 SHA-256 和实际版本，创建 go／gofmt 入口，并设置 `mirrors.go` 中的 GOPROXY。
-- kind／kubectl 支持版本目录、命令入口和 PATH 检查；Windows 复制 exe，Unix 创建链接。Go／kubectl／kind 各自支持的平台以命令帮助为准；kind 不支持 Windows ARM64。
+- Go 安装完整 SDK，校验发布 SHA-256 和实际版本，将 SDK 的 bin 加入 PATH，go／gofmt 使用实体文件，并设置 `mirrors.go` 中的 GOPROXY。
+- kind／kubectl 支持校验暂存目录、实体命令目录和 PATH 检查；所有平台均移动实体文件，Unix 权限为 `0777`。Go／kubectl／kind 各自支持的平台以命令帮助为准；kind 不支持 Windows ARM64。
 - 运行时安装要求 Linux + systemd，拒绝覆盖已有运行时；Docker 支持官方脚本和静态包。Docker 安装会配置 inotify 最低限额，保留更高值。
 - 独立运行时安装与 `k8s create` 的职责不同：主机网络准备、Calico 和集群初始化由部署流程处理。
 
@@ -269,6 +269,8 @@ opskit kubesphere install --version v3.4.1 --kind kubesphere-341
 自建集群不传 `--kind`，默认读取 `KUBECONFIG` 或 `~/.kube/config` 的 current-context，支持显式 `--kubeconfig`／`--context`。KS 当前使用内嵌 v3.4.1 清单，要求 Kubernetes 1.20～1.26、节点 Ready、cluster-admin 以及可用 StorageClass；不自动安装存储。已有实例不覆盖，安装器、core 状态和核心 Deployment 共用总超时（默认 45 分钟）。
 
 初始密码通过 `k8s.kubesphere.password` 或 kind 对应配置设置，要求大小写字母和数字；成功摘要默认隐藏密码，显式 `--show-password` 或对应 `showPassword: true` 才显示。不会生成密码文件。详细说明见[配置指南](docs/configuration.md)。
+
+kind、kubectl 校验成功后将实体文件移入 PATH 命令目录（Linux root 通常为 `/usr/local/bin`），设置 `0777` 权限，不创建软链接。`--bin-dir` 为校验暂存目录，`--link-dir` 指定最终目录；重新安装可替换 opskit 管理的旧软链接。Go 保留完整 SDK 并将其 `bin` 加入 PATH，go/gofmt 设置 `0777`；root 默认安装到 `/usr/local/lib/opskit/go/go<版本>`，Go 的 `--link-dir` 已移除，使用 `--install-dir` 指定完整 SDK 位置。
 
 安装 kind 时会检查 PATH 中的 kubectl 和 Docker，缺少时给出安装指引，kind 自身仍可先安装。kubectl 提示使用配置的 `kind.kubernetes.version`（有配置时）；例如 `opskit kubectl install --version v1.24.7`。Linux 的 Docker 可通过 `sudo opskit docker install` 安装（用 `--help` 查看版本等参数），Windows/macOS 可使用 Docker Desktop 的 Linux 容器。创建集群时缺少 kubectl、Docker 或 kind 会返回带安装指令的依赖错误；自定义 kind 路径不可用时会显示该路径，并提示通过 `--kind-bin` 修正。Docker 不可用时提示启动并用 `docker info` 检查，保留原始错误便于排查。`kind create --dry-run` 不要求已安装这些工具。
 

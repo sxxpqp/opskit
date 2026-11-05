@@ -36,6 +36,46 @@ func TestKubectlAssets(t *testing.T) {
 		t.Fatal("386 accepted")
 	}
 }
+
+func TestToolsReplaceManagedSymlink(t *testing.T) {
+	for _, tool := range []string{"kubectl", "kind"} {
+		t.Run(tool, func(t *testing.T) {
+			if runtime.GOOS == "windows" {
+				t.Skip("Unix symlink and permissions")
+			}
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			dir := t.TempDir()
+			t.Setenv("PATH", dir)
+			target := filepath.Join(home, ".local", "share", "opskit", tool, "v1.24.7", tool)
+			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, []byte("client"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			entry := filepath.Join(dir, tool)
+			if err := os.Symlink(target, entry); err != nil {
+				t.Fatal(err)
+			}
+			if err := exposeTool(target, dir, tool, &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(entry)
+			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+				t.Fatalf("entry: %v %v", info, err)
+			}
+			if err := os.RemoveAll(filepath.Join(home, ".local")); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(entry)
+			if err != nil || string(b) != "client" {
+				t.Fatalf("PATH binary depends on private directory: %q %v", b, err)
+			}
+		})
+	}
+}
+
 func TestKubectlHelpAndPlan(t *testing.T) {
 	t.Setenv("KUBECTL_DOWNLOAD_BASE", "")
 	t.Chdir(t.TempDir())
@@ -153,7 +193,17 @@ func TestKubectlInstallVerifiedAndFailurePreservesOriginal(t *testing.T) {
 	if count.Load() != 2 {
 		t.Fatalf("reinstalled same version: %d requests", count.Load())
 	}
-	target := filepath.Join(targetDir, binary)
+	target := filepath.Join(entry, binary)
+	info, err := os.Lstat(target)
+	if err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("PATH entry is not a regular file: %v %v", info, err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0777 {
+		t.Fatalf("mode: %v", info.Mode())
+	}
+	if _, err := os.Lstat(filepath.Join(targetDir, binary)); !os.IsNotExist(err) {
+		t.Fatalf("staged binary was not moved: %v", err)
+	}
 	original, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatal(err)

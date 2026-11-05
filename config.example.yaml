@@ -110,6 +110,8 @@ middleware:
     password_env: OPSKIT_MINIO_CLUSTER_PASSWORD
 
 # 独立 Go SDK 版本；安装后使用 mirrors.go 配置当前用户 GOPROXY。
+# 完整 SDK：root 默认 /usr/local/lib/opskit/go/go<版本>，普通用户默认 ~/.local/share/opskit/go/go<版本>。
+# --install-dir 可覆盖；直接把 SDK/bin 加入 PATH，go/gofmt 为实体文件、权限 0777，不创建软链接。
 go:
   version: 1.26.2
 

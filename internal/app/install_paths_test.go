@@ -87,13 +87,23 @@ func TestExposeKind(t *testing.T) {
 	if e := exposeKind(target, dir, &out); e != nil {
 		t.Fatal(e)
 	}
+	if e := os.WriteFile(target, []byte("kind"), 0755); e != nil {
+		t.Fatal(e)
+	}
 	if e := exposeKind(target, dir, &out); e != nil {
 		t.Fatalf("repeated install: %v", e)
 	}
-	link, e := os.Readlink(filepath.Join(dir, "kind"))
-	if e != nil || link != target {
-		t.Fatalf("%s %v", link, e)
+	info, e := os.Lstat(filepath.Join(dir, "kind"))
+	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0777 {
+		t.Fatalf("%v %v", info, e)
 	}
+	if _, e := os.Lstat(target); !os.IsNotExist(e) {
+		t.Fatalf("source not moved: %v", e)
+	}
+	if e := os.WriteFile(target, []byte("kind"), 0755); e != nil {
+		t.Fatal(e)
+	}
+
 	if !strings.Contains(out.String(), "export PATH=") {
 		t.Fatal(out.String())
 	}

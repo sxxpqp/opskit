@@ -37,8 +37,7 @@ func newGoInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 	base := f.String("go-download-base", defaults.Install.Go.DownloadBase, "SDK 下载根地址；GO_DOWNLOAD_BASE / install.go.download_base")
 	metadata := f.String("checksum-url", defaults.Install.Go.ChecksumURL, "Go 发布元数据 JSON 地址；install.go.checksum_url")
 	proxy := f.String("proxy", defaults.Mirrors.Go, "安装后写入 GOPROXY；配置 mirrors.go")
-	dir := f.String("install-dir", "", "完整 SDK 目录；默认 ~/.local/share/opskit/go/go<版本>")
-	links := f.String("link-dir", "", "go/gofmt 入口目录；优先复用 PATH 中可写目录")
+	dir := f.String("install-dir", "", "完整 SDK 目录；root 默认 /usr/local/lib/opskit/go/go<版本>，其他用户默认 ~/.local/share/opskit/go/go<版本>")
 	downloads := f.String("download-dir", "", "统一下载目录；默认 ~/.opskit/downloads")
 	dry := f.Bool("dry-run", false, "仅预览，不下载、安装或修改配置")
 	timeout := f.Duration("timeout", 15*time.Minute, "安装总超时")
@@ -77,7 +76,7 @@ func newGoInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 			if e != nil {
 				return 1, e
 			}
-			*dir = filepath.Join(home, ".local", "share", "opskit", "go", "go"+*version)
+			*dir = defaultGoInstallDir(home, *version, os.Geteuid() == 0)
 		}
 		*dir, err = filepath.Abs(*dir)
 		if err != nil {
@@ -98,12 +97,6 @@ func newGoInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 		}
 		ctx, cancel := context.WithTimeout(parent, *timeout)
 		defer cancel()
-		if *links == "" {
-			*links, err = defaultKindLinkDir()
-			if err != nil {
-				return 1, err
-			}
-		}
 		if err = installGoSDK(ctx, source, *metadata, asset, *version, *dir, *downloads); err != nil {
 			return 1, err
 		}
@@ -111,13 +104,16 @@ func newGoInstallCommand(parent context.Context, out, diag io.Writer) (*cobra.Co
 		if err = configureGoProxy(ctx, goBin, *proxy, out); err != nil {
 			return 1, fmt.Errorf("Go SDK 已安装，但代理设置失败: %w", err)
 		}
+		bin := filepath.Join(*dir, "bin")
 		for _, tool := range []string{"go", "gofmt"} {
-			// Both entries belong to the same managed Go SDK tree.
-			if err = exposeTool(filepath.Join(*dir, "bin", tool), *links, "go", out); err != nil {
+			if err = os.Chmod(filepath.Join(bin, tool), 0777); err != nil {
 				return 1, err
 			}
 		}
-		if err = verifyToolCommand(ctx, *links, "go", "go", *version, verifyGo, out); err != nil {
+		if err = finishToolPath(bin, "go", out); err != nil {
+			return 1, err
+		}
+		if err = verifyToolCommand(ctx, bin, "go", "go", *version, verifyGo, out); err != nil {
 			return 1, err
 		}
 		fmt.Fprintf(out, "Go go%s 安装完成；GOPROXY=%s\n", *version, *proxy)
@@ -314,4 +310,11 @@ func configureGoProxy(ctx context.Context, binary, proxy string, out io.Writer) 
 		fmt.Fprintln(out, "检测到 GOROOT 环境变量，请移除或调整为新 SDK 目录。")
 	}
 	return nil
+}
+
+func defaultGoInstallDir(home, version string, root bool) string {
+	if root {
+		return filepath.Join("/usr/local/lib/opskit/go", "go"+version)
+	}
+	return filepath.Join(home, ".local", "share", "opskit", "go", "go"+version)
 }

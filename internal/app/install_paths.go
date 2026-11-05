@@ -146,6 +146,9 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 	}
 	dest := filepath.Join(dir, filepath.Base(target))
 	if dest == target {
+		if e = os.Chmod(dest, 0777); e != nil {
+			return e
+		}
 		return finishToolPath(dir, tool, out)
 	}
 	if e = os.MkdirAll(dir, 0755); e != nil {
@@ -153,10 +156,16 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 	}
 	if info, e := os.Lstat(dest); e == nil {
 		if info.Mode()&os.ModeSymlink == 0 {
-			if runtime.GOOS == "windows" && info.Mode().IsRegular() {
+			if info.Mode().IsRegular() {
 				a, ea := os.ReadFile(dest)
 				b, eb := os.ReadFile(target)
 				if ea == nil && eb == nil && bytes.Equal(a, b) {
+					if e = os.Chmod(dest, 0777); e != nil {
+						return e
+					}
+					if e = os.Remove(target); e != nil {
+						return e
+					}
 					fmt.Fprintln(out, "命令入口:", dest)
 					return finishToolPath(dir, tool, out)
 				}
@@ -184,34 +193,35 @@ func exposeTool(target, dir, tool string, out io.Writer) error {
 	} else if !os.IsNotExist(e) {
 		return e
 	}
-	if runtime.GOOS == "windows" {
-		b, e := os.ReadFile(target)
-		if e != nil {
-			return e
-		}
-		if e = writeRuntimeNew(dest, b, 0755); e != nil {
-			return e
-		}
-	} else {
-		f, e := os.CreateTemp(dir, ".opskit-"+tool+"-*")
-		if e != nil {
-			return e
-		}
-		temp := f.Name()
-		if e = f.Close(); e != nil {
-			return e
-		}
-		if e = os.Remove(temp); e != nil {
-			return e
-		}
-		if e = os.Symlink(target, temp); e != nil {
-			return e
-		}
-		defer os.Remove(temp)
-		if e = os.Rename(temp, dest); e != nil {
-			return e
-		}
+	// Stage on the destination filesystem before replacing the managed link.
+	b, err := os.ReadFile(target)
+	if err != nil {
+		return err
 	}
+	f, err := os.CreateTemp(dir, ".opskit-"+tool+"-*")
+	if err != nil {
+		return err
+	}
+	temp := f.Name()
+	defer os.Remove(temp)
+	_, writeErr := f.Write(b)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err = os.Chmod(temp, 0777); err != nil {
+		return err
+	}
+	if err = os.Rename(temp, dest); err != nil {
+		return err
+	}
+	if err = os.Remove(target); err != nil {
+		return err
+	}
+
 	fmt.Fprintln(out, "命令入口:", dest)
 	return finishToolPath(dir, tool, out)
 }

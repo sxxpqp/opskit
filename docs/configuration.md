@@ -248,7 +248,7 @@ Docker、cri-dockerd、containerd 的 install 命令默认直接执行，不接�
 
 同一下载根目录下的组件下载、安装和 `k8s create` 共用按完整 URL 区分的文件缓存，索引位于 `.cache`。复用前重新计算本地 SHA-256，文件或索引缺失、损坏时重新下载；原有的上游摘要和版本验证照常执行。版本、架构或下载源改变会使用不同 URL，不复用其他资源。JSON 发布元数据与安装脚本每次重新获取。缓存只在完整传输后登记，失败任务仍保留已完成文件；旧版没有索引的文件首次运行会重新获取。若上游修正了相同 URL 的内容，可删除该下载根目录的 `.cache` 索引强制重新获取。使用 sudo 或切换用户时应配置相同的绝对下载目录，才能跨入口共享缓存。
 
-kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。Unix 使用 symlink，Windows 复制 exe。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
+kind 安装优先复用 PATH 中已有且可写的目录：先检查各平台常用目录，再按 PATH 顺序检查其他目录；不采用空项、相对路径、文件、不存在或不可写的目录。复用成功不修改 shell 配置或 Windows 用户 PATH。没有可用目录才使用平台默认入口并设置用户 PATH。`--link-dir` 可显式指定入口目录。平台默认目录：Linux root /usr/local/bin、普通用户 ~/.local/bin；macOS 普通用户优先 PATH 中可写的 /opt/homebrew/bin 或 /usr/local/bin；Windows 为 LOCALAPPDATA/opskit/bin，未设置 LOCALAPPDATA 时使用用户目录 AppData/Local/opskit/bin。所有平台均将校验后的实体文件移入命令目录，设置 `0777`（Windows 按系统权限模型处理），不再创建软链接；`--bin-dir` 为校验暂存目录，重新安装可替换 opskit 管理的旧软链接。Bash 维护 ~/.bashrc 及已有优先登录配置（.bash_profile > .bash_login > .profile），Zsh 维护 ZDOTDIR/.zshrc 或 ~/.zshrc，sh/dash/ksh 维护 ~/.profile；已在当前 PATH 中则不写启动配置。追加前备份，不改已有行。Windows 写入 User 范围的 PATH，不修改 Machine 范围。需要新终端读取；安装日志同时给出当前终端立即生效命令。其他 shell 报错提示自行配置，已有其他来源的 kind 入口不覆盖。安装后会运行入口 version，并检查当前 PATH 是否实际命中此入口；旧命令遮挡返回错误，未加载新 PATH 时输出待生效。Windows 保存用户 PATH 后回读确认；用户 shell 的 alias/function 及完整新终端启动结果仍须在该终端验收。
 
 `kind create` 默认执行创建，版本仍由 `kind.kubernetes.version` 或 CLI `--version` 指定；`--dry-run` 仅输出配置，不检查外部工具、不调用 Docker/kind/kubectl。实际创建前继续检查依赖、Docker、kind 工具版本及同名集群；已有集群不会删除或覆盖。创建命令不接受旧 `--apply`，删除集群默认执行，集群名按 `--name` > `OPSKIT_KIND_NAME` > `kind.name` > 默认值解析，无需重复确认名称，`--dry-run` 仅预览。
 
@@ -272,7 +272,7 @@ install:
 
 优先级为 CLI `--version` > k8s.kubernetes.version；缺少完整版本时报错，不隐式选择 latest。下载源优先级为 `--kubectl-download-base` > 环境变量 `KUBECTL_DOWNLOAD_BASE` > install.kubectl.download_base > 模板默认 Nexus 代理；空环境变量不覆盖 YAML。默认使用 Nexus `kubernetes-binaries` 代理。官方直连可选择 `https://dl.k8s.io/release` 或 `https://storage.googleapis.com/kubernetes-release/release`。URL 格式为 `<base>/<version>/bin/<os>/<arch>/kubectl[.exe]`，校验文件追加 `.sha256`；不跳过 TLS、摘要或安装后的版本检查。
 
-默认直接安装；`--dry-run` 只输出计划。安装目录按版本隔离，支持 `--bin-dir`，命令目录支持 `--link-dir`；下载及 PATH 沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
+默认直接安装；`--dry-run` 只输出计划。`--bin-dir` 为按版本隔离的校验暂存目录，校验后将实体文件移入 `--link-dir` 指定的 PATH 命令目录，设置 `0777` 权限，不创建软链接；重新安装可替换 opskit 管理的旧软链接。下载及 PATH 注册沿用 kind 的共用实现。验证客户端 JSON 版本，不读取或连接 kubeconfig。SHA/HTTP/客户端版本校验失败时保留已有版本文件；已有其他来源的 PATH 入口不覆盖。测试覆盖原生测试程序的完整下载安装、重复安装、失败保护和帮助入口，真实集群访问仍需实际验收。
 
 ## kind Ingress 入口端口
 
@@ -539,7 +539,7 @@ opskit mirror go  # 后续仅修改代理
 
 SDK 默认源为阿里云 `https://mirrors.aliyun.com/golang/`，已有配置不会自动改写；SHA-256 元数据默认仍从 Go 官方读取。下载地址为 `<download_base>/go<version>.<os>-<arch>.tar.gz`。下载根地址优先级为 `--go-download-base` > `GO_DOWNLOAD_BASE` > `install.go.download_base` > 模板默认值；此环境变量只影响 Go SDK。发布元数据由 `--checksum-url` > `install.go.checksum_url` > 模板默认值提供，格式与 Go 官方下载 JSON 相同，必须包含目标版本、精确文件名和有效 SHA-256。镜像仅提供压缩包时可以保留官方元数据地址；离线/内网部署需同时提供可访问的元数据源。校验或版本不匹配会失败，不静默换源或换版本。
 
-`--download-dir` 或 `install.download_dir` 控制保留下载位置，默认 `~/.opskit/downloads`。完整 SDK 从暂存目录解压并校验后移动到 `~/.local/share/opskit/go/go<version>`，`--install-dir` 可覆盖；不会向已有目录叠加文件，同版本重装请使用新目录。`--link-dir` 覆盖 go/gofmt 入口目录，默认复用 PATH 中可写目录；其他来源的入口不会覆盖，PATH 遮挡会报错。新版本安装可切换默认版本目录下的 opskit 托管入口；自定义目录的旧入口需要自行处理。没有修改调用进程的 PATH，配置待生效时按输出更新当前 shell 或重开终端。
+`--download-dir` 或 `install.download_dir` 控制保留下载位置，默认 `~/.opskit/downloads`。完整 SDK 从暂存目录解压并校验后移动到最终目录：root 默认为 `/usr/local/lib/opskit/go/go<version>`，普通用户为 `~/.local/share/opskit/go/go<version>`，`--install-dir` 可覆盖。完整保留标准库和工具链，go/gofmt 实体文件设置 `0777`，直接将 SDK 的 `bin` 加入 PATH，不再创建软链接。Go 的 `--link-dir` 已移除，使用 `--install-dir` 指定 SDK；不会向已有目录叠加文件，同版本重装请使用新目录。PATH 遮挡会报错，已有旧入口需自行移除。没有修改调用进程的 PATH，配置待生效时按输出更新当前 shell 或重开终端。自定义目录应确保使用者可遍历所有父目录；其他用户使用同一 SDK 时也需将其 bin 加入自己的 PATH。
 
 安装后读取新 SDK 的 `go env GOENV`，备份后只更新该文件的 `GOPROXY`，保留其余设置。代理优先级为 `--proxy` > `mirrors.go` > 模板默认代理。配置作用于执行命令的用户，sudo/root 执行不会替其他用户配置。`GOENV=off` 或文件写入失败会返回错误，SDK 可能已经安装，应根据错误处理代理及入口。`GOPROXY` 环境变量仍会覆盖文件配置；检测到冲突会提示。继承的 `GOROOT` / `GOTOOLCHAIN` 不参与安装版本验证，已有 GOROOT 应由用户移除或调整；不修改 GOSUMDB。`--dry-run` 不下载、不调用 Go、不写 SDK、代理或 PATH。
 
