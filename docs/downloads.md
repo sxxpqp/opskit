@@ -59,4 +59,4 @@ macOS 可用 `shasum -a 256`，Windows PowerShell 可用 `Get-FileHash -Algorith
 
 当前代码增加 MinIO 独立发布作业，GitHub 和既有 Nexus 主/备用入口继续保留。MinIO 下载地址从 `config.example.yaml` 的 `update.download_base` 读取，默认桶域名对应 `opskit` 桶，固定对象路径为 `/releases/<tag>/<文件名>`，签名 stable 清单为 `/channels/stable.json`。
 
-此流程需要先设置 GitHub Secrets（包括 S3 API 地址）和签名公钥 Variable；不代表历史版本已上传或当前域名已验收。安装到公共 PATH 的实体文件使用 `0755`，所有用户可执行。配置及客户端命令见 [MinIO 发布与自更新指南](self-update.md)。
+此流程使用 GitHub Secrets（包括 S3 API 地址）和签名公钥 Variable。已通过独立同步工作流验证 v0.1.19 的八个发布文件、签名清单和客户端版本检查；其他历史版本不代表已上传。安装到公共 PATH 的实体文件使用 `0755`，所有用户可执行。配置及客户端命令见 [MinIO 发布与自更新指南](self-update.md)。

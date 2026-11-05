@@ -250,7 +250,7 @@ opskit cri-dockerd install --version v0.4.7
 
 当前代码新增 `opskit update --check`、`opskit update`、`--version` 和 `--download-only`，从 MinIO 桶域名读取签名清单并下载固定版本。Linux/macOS 支持实体文件替换、备份和失败恢复，权限 `0755`；Windows 支持检查与校验下载，退出后手动替换 exe。不会在部署或备份过程中自动升级，也不修改现有配置。
 
-发布 CI 使用 GitHub Secrets 保存 MinIO API 地址、上传凭据和签名私钥，上传并公开回读校验成功后才更新 stable 清单。默认桶 `opskit`、下载域名 `https://opskit.sxxpqp.top`，CI 默认使用桶域名寻址（`MINIO_PATH_STYLE=false`），避免根域名的网站跳转；发布工具支持普通请求体上传，兼容 MinIO 单块限制，并提供独立同步工作流重传已有 Release；尚需配置凭据并完成真实 MinIO 发布验收，不能据此宣称已有版本已同步。配置项、Secrets 清单和权限设置见 [MinIO 发布与自更新指南](docs/self-update.md)。
+发布 CI 使用 GitHub Secrets 保存 MinIO API 地址、上传凭据和签名私钥，上传并公开回读校验成功后才更新 stable 清单。默认桶 `opskit`、下载域名 `https://opskit.sxxpqp.top`，CI 默认使用桶域名寻址（`MINIO_PATH_STYLE=false`），避免根域名的网站跳转；发布工具支持普通请求体上传，兼容 MinIO 单块限制，并提供独立同步工作流重传已有 Release；已通过独立同步工作流完成 v0.1.19 的真实 MinIO 上传、八个发布文件回读和客户端签名检查。配置项、Secrets 清单和权限设置见 [MinIO 发布与自更新指南](docs/self-update.md)。
 
 ## kind 与 KubeSphere
 
@@ -406,7 +406,7 @@ v0.1.15 的组件独立下载、SSH 预检、状态查询、Calico 独立安装�
 - [x] KubeBlocks 固定版安装、MySQL／Redis／MinIO Cluster 渲染、部署和状态命令
 - [x] Vagrant 上 KubeBlocks 三类集群持久卷与 Pod 替换读写验收（允许同节点实验，非宿主机失效验收；[记录](docs/middleware-validation-2026-10-28.md)）
 - [ ] 中间件跨物理主机故障验收、其他引擎与 Kubernetes 生产容量验收
-- [x] 显式 update 检查、签名清单与校验下载；MinIO 发布流程仍待真实环境验收
+- [x] 显式 update 检查、签名清单与校验下载；MinIO v0.1.19 真实上传、公开回读与客户端签名检查通过
 - [ ] Windows 自动替换、beta 渠道、启动检查新版本并交互确认更新（[设计计划](go-opskit-design.md#14-2026-10-18-启动更新提示计划尚未实现)）
 - [x] 独立 etcd／现有 MinIO 的上传下载、内容校验与合成数据隔离恢复；本地备份保留策略命令
 - [ ] 生产 Kubernetes etcd 灾难恢复与远端保留策略
